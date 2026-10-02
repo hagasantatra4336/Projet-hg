@@ -1,0 +1,68 @@
+<?php
+
+use App\Http\Controllers\Api\AuthController;
+use App\Http\Controllers\Api\CentreController;
+use App\Http\Controllers\Api\FonctionController;
+use App\Http\Controllers\Api\ProfileController;
+use App\Http\Controllers\Api\UserController;
+use App\Http\Middleware\EnsureRole;
+use Illuminate\Support\Facades\Route;
+
+// ---------------------------------------------------------------------
+//  Inscription publique (3 étapes) et connexion
+// ---------------------------------------------------------------------
+
+// Listes du formulaire d'inscription : centres + fonctions de rôle "agent"
+Route::get('/signup-options', [AuthController::class, 'signupOptions'])->middleware('throttle:30,1');
+
+// Étape 1 : nom, email, IM, téléphone, adresse, centre, fonction → envoie l'OTP par e-mail
+Route::post('/register', [AuthController::class, 'register'])->middleware('throttle:10,1');
+
+// Étape 2 : vérification du code OTP (valable 10 minutes) → renvoie un setup_token
+Route::post('/register/verify-otp', [AuthController::class, 'verifyOtp'])->middleware('throttle:6,1');
+Route::post('/register/resend-otp', [AuthController::class, 'resendOtp'])->middleware('throttle:3,1');
+
+// Étape 3 : définition du mot de passe (+ confirmation), uniquement avec le setup_token
+Route::post('/register/set-password', [AuthController::class, 'setPassword'])->middleware('throttle:10,1');
+
+// Connexion en 2 étapes : 1) e-mail + mot de passe → envoie un OTP ; 2) OTP → renvoie le jeton
+// Espace utilisateur : lien de confirmation reçu par e-mail (public, jeton à usage unique)
+Route::post('/profile/confirm', [ProfileController::class, 'confirm'])->middleware('throttle:10,1');
+
+Route::post('/login', [AuthController::class, 'login'])->middleware('throttle:10,1');
+Route::post('/login/verify-otp', [AuthController::class, 'verifyLoginOtp'])->middleware('throttle:6,1');
+Route::post('/login/resend-otp', [AuthController::class, 'resendLoginOtp'])->middleware('throttle:3,1');
+
+// Espace utilisateur : confirmation par le lien reçu par e-mail (publique : le lien peut s'ouvrir sur un autre appareil)
+Route::post('/profile/confirm', [ProfileController::class, 'confirm'])->middleware('throttle:10,1');
+
+// ---------------------------------------------------------------------
+//  Routes protégées (jeton Sanctum)
+// ---------------------------------------------------------------------
+Route::middleware('auth:sanctum')->group(function () {
+    Route::post('/logout', [AuthController::class, 'logout']);
+    Route::get('/me', [AuthController::class, 'me']);
+
+    // Espace utilisateur : demande de modification de son profil / mot de passe (confirmée ensuite par e-mail)
+    Route::post('/profile/request-change', [ProfileController::class, 'requestChange'])->middleware('throttle:5,1');
+
+    // Espace utilisateur : demande de modification de ses infos / mot de passe (→ e-mail de confirmation)
+    Route::post('/profile/request-change', [ProfileController::class, 'requestChange'])->middleware('throttle:5,1');
+
+    // Section Administration — gestion des utilisateurs : superadmin, central, admin
+    // (l'admin est limité à son propre centre : voir UserController)
+    Route::middleware(EnsureRole::class . ':superadmin,central,admin')->group(function () {
+        Route::get('/users/options', [UserController::class, 'options']);
+        Route::apiResource('users', UserController::class)->except('show');
+    });
+
+    // Gestion des centres : superadmin, central
+    Route::middleware(EnsureRole::class . ':superadmin,central')->group(function () {
+        Route::apiResource('centres', CentreController::class)->except('show');
+    });
+
+    // Gestion des fonctions et de leur rôle : superadmin uniquement
+    Route::middleware(EnsureRole::class . ':superadmin')->group(function () {
+        Route::apiResource('fonctions', FonctionController::class)->except('show');
+    });
+});
