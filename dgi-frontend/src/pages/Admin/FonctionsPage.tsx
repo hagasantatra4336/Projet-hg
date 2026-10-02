@@ -3,6 +3,8 @@ import api, { getErrorMessage } from "../../services/api";
 import { ROLES, ROLE_LABELS, type Fonction, type Role } from "../../types";
 import {
   ConfirmDialog,
+  DeleteButton,
+  EditButton,
   ErrorBox,
   Field,
   Modal,
@@ -147,12 +149,8 @@ export default function FonctionsPage() {
                 </td>
                 <td className="px-4 py-3 text-gray-600">{f.users_count ?? 0}</td>
                 <td className="px-4 py-3 text-right whitespace-nowrap">
-                  <button type="button" className="text-brand-blue hover:underline mr-4" onClick={() => openEdit(f)}>
-                    Modifier
-                  </button>
-                  <button type="button" className="text-red-600 hover:underline" onClick={() => setToDelete(f)}>
-                    Supprimer
-                  </button>
+                  <EditButton onClick={() => openEdit(f)} />
+                  <DeleteButton onClick={() => setToDelete(f)} />
                 </td>
               </tr>
             ))}

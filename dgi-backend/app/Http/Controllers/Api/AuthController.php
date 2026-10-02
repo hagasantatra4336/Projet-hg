@@ -271,7 +271,7 @@ class AuthController extends Controller
     public function signupOptions(): JsonResponse
     {
         return response()->json([
-            'centres' => Centre::orderBy('nom')->get(['id', 'nom']),
+            'centres' => Centre::orderBy('nom')->get(['id', 'nom', 'adresse']),
             'fonctions' => Fonction::where('role', Role::Agent->value)->orderBy('nom')->get(['id', 'nom']),
         ]);
     }

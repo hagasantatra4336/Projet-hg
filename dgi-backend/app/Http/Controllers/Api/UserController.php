@@ -58,7 +58,7 @@ class UserController extends Controller
     {
         $me = $request->user();
 
-        $centres = Centre::orderBy('nom')->get(['id', 'nom']);
+        $centres = Centre::orderBy('nom')->get(['id', 'nom', 'adresse']);
         if ($me->role === Role::Admin) {
             $ownId = $this->ownCentreId($me);
             $centres = $centres->where('id', $ownId)->values();

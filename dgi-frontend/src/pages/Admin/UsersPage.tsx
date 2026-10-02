@@ -4,6 +4,8 @@ import { useAuth } from "../../context/AuthContext";
 import { ROLE_LABELS, ROLE_RANK, type AppUser, type Paginated, type Role } from "../../types";
 import {
   ConfirmDialog,
+  DeleteButton,
+  EditButton,
   ErrorBox,
   Field,
   Modal,
@@ -274,21 +276,9 @@ export default function UsersPage() {
                   <td className="px-4 py-3 text-right whitespace-nowrap">
                     {canManage(me, u) && (
                       <>
-                        <button
-                          type="button"
-                          className="text-brand-blue hover:underline mr-4"
-                          onClick={() => openEdit(u)}
-                        >
-                          Modifier
-                        </button>
+                        <EditButton onClick={() => openEdit(u)} />
                         {u.id !== me.id && (
-                          <button
-                            type="button"
-                            className="text-red-600 hover:underline"
-                            onClick={() => setToDelete(u)}
-                          >
-                            Supprimer
-                          </button>
+                          <DeleteButton onClick={() => setToDelete(u)} />
                         )}
                       </>
                     )}

@@ -2,7 +2,9 @@
 
 namespace App\Http\Controllers\Api;
 
+use App\Enums\Role;
 use App\Http\Controllers\Controller;
+use App\Models\Centre;
 use App\Models\User;
 use App\Notifications\ProfileChangeNotification;
 use Illuminate\Http\JsonResponse;
@@ -15,16 +17,6 @@ use Illuminate\Validation\Rules\Password;
 use Illuminate\Validation\ValidationException;
 use Throwable;
 
-/**
- * Espace utilisateur : modification de SES informations (nom, téléphone, adresse) et de son mot de passe.
- *
- * Rien n'est appliqué tout de suite : la demande est gardée dans le cache (30 min) et un lien de
- * confirmation à usage unique est envoyé à l'adresse e-mail du compte. Les modifications ne sont
- * écrites en base qu'au clic de confirmation. Pas de code OTP ici.
- *
- * L'e-mail, l'IM, le centre et la fonction ne sont PAS modifiables par l'utilisateur lui-même
- * (ils se changent depuis Administration > Utilisateurs).
- */
 class ProfileController extends Controller
 {
     private const TTL_MINUTES = 30;
@@ -33,6 +25,7 @@ class ProfileController extends Controller
         'nom' => 'nom',
         'telephone' => 'téléphone',
         'adresse' => 'adresse',
+        'centre_id' => 'centre',
         'password' => 'mot de passe',
     ];
 
@@ -45,6 +38,7 @@ class ProfileController extends Controller
             'nom' => ['required', 'string', 'max:255'],
             'telephone' => ['nullable', 'string', 'max:30'],
             'adresse' => ['nullable', 'string', 'max:255'],
+            'centre_id' => ['nullable', 'integer', 'exists:centres,id'],
             'current_password' => ['nullable', 'string'],
             'password' => ['nullable', 'confirmed', Password::min(8)],
         ]);
@@ -56,6 +50,30 @@ class ProfileController extends Controller
 
             if ($value !== $user->{$field}) {
                 $changes[$field] = $value;
+            }
+        }
+
+        if ($request->has('centre_id')) {
+            $centreId = isset($data['centre_id']) ? (int) $data['centre_id'] : null;
+            $currentCentreId = $user->centre_id !== null ? (int) $user->centre_id : null;
+
+            if ($centreId !== $currentCentreId) {
+                $role = $user->role;
+
+                if ($role === Role::Admin) {
+                    throw ValidationException::withMessages([
+                        'centre_id' => "Un admin ne peut pas changer de centre lui-même : contactez un responsable central ou un super admin.",
+                    ]);
+                }
+
+                // Seuls central et superadmin peuvent n'avoir aucun centre.
+                if ($centreId === null && ! in_array($role, [Role::Central, Role::Superadmin], true)) {
+                    throw ValidationException::withMessages([
+                        'centre_id' => 'Le centre est obligatoire.',
+                    ]);
+                }
+
+                $changes['centre_id'] = $centreId;
             }
         }
 
@@ -128,7 +146,7 @@ class ProfileController extends Controller
     {
         $data = $request->validate(['token' => ['required', 'string', 'max:128']]);
 
-        // pull() lit ET supprime : le lien ne peut servir qu'une fois
+        // utilisation du lien qu'une seule fois
         $pending = Cache::pull($this->changeKey(hash('sha256', $data['token'])));
         $user = is_array($pending) ? User::find($pending['user_id']) : null;
 
@@ -139,6 +157,19 @@ class ProfileController extends Controller
         Cache::forget('profile-pending:' . $user->id);
 
         $changes = $pending['changes'];
+
+        if (array_key_exists('centre_id', $changes)) {
+            if ($user->role === Role::Admin) {
+                return response()->json(['message' => "Un admin ne peut pas changer de centre lui-même."], 422);
+            }
+
+            if ($changes['centre_id'] !== null && ! Centre::whereKey($changes['centre_id'])->exists()) {
+                return response()->json([
+                    'message' => "Le centre choisi n'existe plus. Refaites une demande depuis votre profil.",
+                ], 422);
+            }
+        }
+
         $passwordChanged = array_key_exists('password', $changes);
 
         // Mise à jour via le query builder : le mot de passe est déjà haché, on évite tout double hachage.

@@ -1,6 +1,7 @@
 import { useState, type InputHTMLAttributes, type ReactNode } from "react";
 import type { Role } from "../types";
 import { ROLE_LABELS } from "../types";
+import { IconEdit, IconTrash } from "./icons";
 
 export const inputClass =
   "w-full rounded-lg border border-gray-300 px-3 py-2 text-gray-800 placeholder-gray-400 " +
@@ -156,5 +157,35 @@ export function ConfirmDialog({
         </button>
       </div>
     </Modal>
+  );
+}
+
+/** Bouton icône « Modifier » (crayon). */
+export function EditButton({ onClick, label = "Modifier" }: { onClick: () => void; label?: string }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      title={label}
+      aria-label={label}
+      className="inline-flex h-9 w-9 items-center justify-center rounded-lg text-brand-blue transition hover:bg-brand-green/30 focus:outline-none focus:ring-2 focus:ring-brand-green"
+    >
+      <IconEdit className="h-[18px] w-[18px]" />
+    </button>
+  );
+}
+
+/** Bouton icône « Supprimer » (corbeille). */
+export function DeleteButton({ onClick, label = "Supprimer" }: { onClick: () => void; label?: string }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      title={label}
+      aria-label={label}
+      className="inline-flex h-9 w-9 items-center justify-center rounded-lg text-red-600 transition hover:bg-red-50 focus:outline-none focus:ring-2 focus:ring-red-300"
+    >
+      <IconTrash className="h-[18px] w-[18px]" />
+    </button>
   );
 }

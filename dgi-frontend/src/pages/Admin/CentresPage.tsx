@@ -3,6 +3,8 @@ import api, { getErrorMessage } from "../../services/api";
 import type { Centre } from "../../types";
 import {
   ConfirmDialog,
+  DeleteButton,
+  EditButton,
   ErrorBox,
   Field,
   Modal,
@@ -135,12 +137,8 @@ export default function CentresPage() {
                 <td className="px-4 py-3 text-gray-600">{c.adresse ?? "—"}</td>
                 <td className="px-4 py-3 text-gray-600">{c.users_count ?? 0}</td>
                 <td className="px-4 py-3 text-right whitespace-nowrap">
-                  <button type="button" className="text-brand-blue hover:underline mr-4" onClick={() => openEdit(c)}>
-                    Modifier
-                  </button>
-                  <button type="button" className="text-red-600 hover:underline" onClick={() => setToDelete(c)}>
-                    Supprimer
-                  </button>
+                  <EditButton onClick={() => openEdit(c)} />
+                  <DeleteButton onClick={() => setToDelete(c)} />
                 </td>
               </tr>
             ))}

@@ -3,6 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import api, { getErrorMessage } from "../../services/api";
 import { useAuth } from "../../context/AuthContext";
 import { PasswordInput } from "../../components/ui";
+import CentreSelect, { type CentreOption } from "../../components/CentreSelect";
 import type { AppUser } from "../../types";
 
 const STEP_INFOS = 1;
@@ -20,7 +21,7 @@ interface InfosForm {
 }
 
 interface SignupOptions {
-  centres: { id: number; nom: string }[];
+  centres: CentreOption[];
   fonctions: { id: number; nom: string }[];
 }
 
@@ -228,19 +229,14 @@ export default function SignupPage() {
               value={form.im}
               onChange={(e) => setForm({ ...form, im: e.target.value })}
             />
-            <select
-              className={inputClass}
+            <CentreSelect
+              centres={options.centres}
               value={form.centre_id}
-              onChange={(e) => setForm({ ...form, centre_id: e.target.value })}
+              onChange={(v) => setForm({ ...form, centre_id: v })}
+              className={inputClass}
+              placeholder="Centre (rechercher par nom ou adresse)"
               required
-            >
-              <option value="">Centre</option>
-              {options.centres.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.nom}
-                </option>
-              ))}
-            </select>
+            />
             <select
               className={inputClass}
               value={form.fonction_id}
