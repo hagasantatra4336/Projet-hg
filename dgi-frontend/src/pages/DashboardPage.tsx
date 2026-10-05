@@ -4,6 +4,7 @@ import api, { getErrorMessage } from "../services/api";
 import { useAuth } from "../context/AuthContext";
 import { ROLE_LABELS, type AppUser, type Centre, type Fonction, type Paginated } from "../types";
 import { ErrorBox, RoleBadge, primaryButtonClass } from "../components/ui";
+import AgentAlertes from "../components/AgentAlertes";
 import { IconBriefcase, IconBuilding, IconChevron, IconSearch, IconUsers } from "../components/icons";
 
 interface Stat {
@@ -121,7 +122,9 @@ export default function DashboardPage() {
       </p>
 
       {!canUsers ? (
-        // Agent : pas d'accès à l'administration → résumé de son compte
+        // Agent : alertes de son centre + résumé de son compte
+        <>
+        <AgentAlertes />
         <div className="rounded-2xl bg-white p-6 shadow-sm">
           <h2 className="mb-4 text-lg font-bold text-brand-blue">Mon compte</h2>
           <dl className="grid gap-4 text-sm sm:grid-cols-2">
@@ -141,6 +144,7 @@ export default function DashboardPage() {
             Modifier mon profil <IconChevron className="h-4 w-4" />
           </Link>
         </div>
+        </>
       ) : (
         <>
           <StatsCard stats={stats} />

@@ -2,6 +2,9 @@
 
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\CentreController;
+use App\Http\Controllers\Api\ContribuableController;
+use App\Http\Controllers\Api\DeclarationImportController;
+use App\Http\Controllers\Api\DefaillanceController;
 use App\Http\Controllers\Api\FonctionController;
 use App\Http\Controllers\Api\ProfileController;
 use App\Http\Controllers\Api\UserController;
@@ -26,14 +29,12 @@ Route::post('/register/resend-otp', [AuthController::class, 'resendOtp'])->middl
 Route::post('/register/set-password', [AuthController::class, 'setPassword'])->middleware('throttle:10,1');
 
 // Connexion en 2 étapes : 1) e-mail + mot de passe → envoie un OTP ; 2) OTP → renvoie le jeton
-// Espace utilisateur : lien de confirmation reçu par e-mail (public, jeton à usage unique)
-Route::post('/profile/confirm', [ProfileController::class, 'confirm'])->middleware('throttle:10,1');
-
 Route::post('/login', [AuthController::class, 'login'])->middleware('throttle:10,1');
 Route::post('/login/verify-otp', [AuthController::class, 'verifyLoginOtp'])->middleware('throttle:6,1');
 Route::post('/login/resend-otp', [AuthController::class, 'resendLoginOtp'])->middleware('throttle:3,1');
 
-// Espace utilisateur : confirmation par le lien reçu par e-mail (publique : le lien peut s'ouvrir sur un autre appareil)
+// Espace utilisateur : confirmation par le lien reçu par e-mail
+// (publique : le lien peut s'ouvrir sur un autre appareil ; jeton à usage unique)
 Route::post('/profile/confirm', [ProfileController::class, 'confirm'])->middleware('throttle:10,1');
 
 // ---------------------------------------------------------------------
@@ -43,11 +44,23 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/logout', [AuthController::class, 'logout']);
     Route::get('/me', [AuthController::class, 'me']);
 
-    // Espace utilisateur : demande de modification de son profil / mot de passe (confirmée ensuite par e-mail)
-    Route::post('/profile/request-change', [ProfileController::class, 'requestChange'])->middleware('throttle:5,1');
-
     // Espace utilisateur : demande de modification de ses infos / mot de passe (→ e-mail de confirmation)
     Route::post('/profile/request-change', [ProfileController::class, 'requestChange'])->middleware('throttle:5,1');
+
+    // Défaillances de déclaration : consultation et traitement des alertes par tous les rôles
+    // (agent et admin ne voient que leur centre : voir DefaillanceController)
+    Route::get('/defaillances', [DefaillanceController::class, 'index']);
+    Route::get('/defaillances/summary', [DefaillanceController::class, 'summary']);
+    Route::patch('/defaillances/{alerte}', [DefaillanceController::class, 'update']);
+
+    // Fiche d'un contribuable (informations, alertes, historique des déclarations) : même filtrage par centre
+    Route::get('/contribuables/{contribuable}', [ContribuableController::class, 'show']);
+
+    // Lancer l'analyse et importer des déclarations (CSV) : superadmin, central, admin (admin = son centre)
+    Route::middleware(EnsureRole::class . ':superadmin,central,admin')->group(function () {
+        Route::post('/defaillances/analyser', [DefaillanceController::class, 'analyser'])->middleware('throttle:10,1');
+        Route::post('/declarations/import', [DeclarationImportController::class, 'store'])->middleware('throttle:10,1');
+    });
 
     // Section Administration — gestion des utilisateurs : superadmin, central, admin
     // (l'admin est limité à son propre centre : voir UserController)

@@ -114,3 +114,24 @@ export const IconTrash = (p: IconProps) => (
     <path d="M10 11v6M14 11v6" />
   </Svg>
 );
+
+export const IconAlert = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M10.3 3.9L1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z" />
+    <path d="M12 9v4M12 17h.01" />
+  </Svg>
+);
+
+export const IconUpload = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+    <path d="M17 8l-5-5-5 5M12 3v12" />
+  </Svg>
+);
+
+export const IconRefresh = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M21 12a9 9 0 1 1-3-6.7L21 8" />
+    <path d="M21 3v5h-5" />
+  </Svg>
+);

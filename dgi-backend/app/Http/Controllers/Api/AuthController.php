@@ -271,7 +271,7 @@ class AuthController extends Controller
     public function signupOptions(): JsonResponse
     {
         return response()->json([
-            'centres' => Centre::orderBy('nom')->get(['id', 'nom', 'adresse']),
+            'centres' => Centre::orderBy('nom')->get(['id', 'nom']),
             'fonctions' => Fonction::where('role', Role::Agent->value)->orderBy('nom')->get(['id', 'nom']),
         ]);
     }
@@ -293,7 +293,7 @@ class AuthController extends Controller
             'expires_at' => now()->addMinutes(self::OTP_TTL_MINUTES)->timestamp,
         ]);
 
-        return $this->deliverOtp($email, $profile['nom'] ?? '', $code, $this->key($email), 'inscription', $successMessage);
+        return $this->deliverOtp($email, $profile['nom'] ?? '', $code, 'inscription', $successMessage);
     }
 
     /** Connexion : même principe, avec un état séparé (clé "login:...") lié à l'utilisateur. */
@@ -309,7 +309,7 @@ class AuthController extends Controller
             'expires_at' => $expiresAt->timestamp,
         ], $expiresAt);
 
-        return $this->deliverOtp($user->email, (string) $user->nom, $code, $this->loginKey($user->email), 'connexion', $successMessage);
+        return $this->deliverOtp($user->email, (string) $user->nom, $code, 'connexion', $successMessage);
     }
 
     private function generateCode(): string
@@ -317,12 +317,19 @@ class AuthController extends Controller
         return str_pad((string) random_int(0, 999999), 6, '0', STR_PAD_LEFT);
     }
 
-    /** Envoie l'e-mail ; en cas d'échec, supprime l'état mémorisé et renvoie une erreur 500. */
+    /**
+     * Envoie l'e-mail APRÈS avoir répondu au navigateur.
+     *
+     * Avant, l'envoi SMTP (connexion TLS + authentification + remise du message, souvent 3 à 15 s)
+     * bloquait la requête : l'utilisateur attendait la fin de l'envoi pour voir l'écran du code.
+     * Maintenant la réponse part tout de suite et l'e-mail est envoyé juste après, dans la même
+     * requête PHP (aucun "queue:work" à lancer). Si l'envoi échoue, l'erreur est écrite dans
+     * storage/logs/laravel.log et l'utilisateur peut cliquer sur « Renvoyer le code ».
+     */
     private function deliverOtp(
         string $email,
         string $nom,
         string $code,
-        string $cacheKey,
         string $contexte,
         string $successMessage,
     ): JsonResponse {
@@ -330,30 +337,31 @@ class AuthController extends Controller
             Log::warning('MAIL_MAILER=' . config('mail.default') . " : l'e-mail OTP n'est PAS réellement envoyé (voir storage/logs/laravel.log).");
         }
 
-        try {
-            // Destinataire = e-mail de l'utilisateur ; expéditeur = MAIL_FROM_ADDRESS du .env
-            Notification::route('mail', $email)
-                ->notify(new OtpNotification($nom, $code, self::OTP_TTL_MINUTES, $contexte));
-        } catch (Throwable $e) {
-            Cache::forget($cacheKey);
-            Log::error('Envoi OTP impossible : ' . $e->getMessage());
+        app()->terminating(function () use ($email, $nom, $code, $contexte): void {
+            try {
+                // Destinataire = e-mail de l'utilisateur ; expéditeur = MAIL_FROM_ADDRESS du .env
+                Notification::route('mail', $email)
+                    ->notify(new OtpNotification($nom, $code, self::OTP_TTL_MINUTES, $contexte));
+            } catch (Throwable $e) {
+                Log::error('Envoi OTP impossible : ' . $e->getMessage());
+            }
+        });
 
-            return response()->json([
-                'message' => config('app.debug')
-                    ? "Envoi de l'e-mail impossible : " . $e->getMessage()
-                    : "Impossible d'envoyer l'e-mail pour le moment.",
-            ], 500);
-        }
-
-        $response = ['message' => $successMessage, 'otp_required' => true];
+        $payload = ['message' => $successMessage, 'otp_required' => true];
 
         // MODE DÉVELOPPEMENT UNIQUEMENT (APP_DEBUG=true ET APP_ENV=local) :
         // le code est aussi renvoyé dans la réponse. En production, ce champ n'est JAMAIS envoyé.
         if (config('app.debug') && app()->environment('local')) {
-            $response['debug_otp'] = $code;
+            $payload['debug_otp'] = $code;
         }
 
-        return response()->json($response);
+        $response = response()->json($payload);
+
+        // Content-Length explicite : le navigateur considère la réponse terminée sans attendre
+        // la fin du script (utile avec « php artisan serve », qui n'a pas de fastcgi_finish_request).
+        $response->headers->set('Content-Length', (string) strlen((string) $response->getContent()));
+
+        return $response;
     }
 
     private function loginKey(string $email): string

@@ -8,6 +8,7 @@ import UsersPage from "./pages/Admin/UsersPage";
 import CentresPage from "./pages/Admin/CentresPage";
 import FonctionsPage from "./pages/Admin/FonctionsPage";
 import DashboardPage from "./pages/DashboardPage";
+import DefaillancesPage from "./pages/DefaillancesPage";
 import ProfilePage from "./pages/ProfilePage";
 import ConfirmChangePage from "./pages/ConfirmChangePage";
 
@@ -25,6 +26,8 @@ export default function App() {
         <Route element={<AppLayout />}>
           <Route path="/dashboard" element={<DashboardPage />} />
           <Route path="/profile" element={<ProfilePage />} />
+          {/* Défaillances de déclaration : tous les rôles (filtrées par centre côté API) */}
+          <Route path="/defaillances" element={<DefaillancesPage />} />
 
           {/* Section Administration : utilisateurs + centres + fonctions */}
           <Route element={<ProtectedRoute roles={["superadmin", "central", "admin"]} />}>

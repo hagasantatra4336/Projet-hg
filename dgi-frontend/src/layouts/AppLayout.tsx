@@ -3,6 +3,7 @@ import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { ROLE_LABELS, type Role } from "../types";
 import {
+  IconAlert,
   IconBriefcase,
   IconBuilding,
   IconChevron,
@@ -110,6 +111,11 @@ export default function AppLayout() {
           <NavLink to="/dashboard" className={linkClass}>
             <IconDashboard />
             <span>Tableau de bord</span>
+          </NavLink>
+
+          <NavLink to="/defaillances" className={linkClass}>
+            <IconAlert />
+            <span>Défaillances</span>
           </NavLink>
 
           {adminItems.length > 0 && (

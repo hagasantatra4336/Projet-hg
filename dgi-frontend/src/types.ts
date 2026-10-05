@@ -50,3 +50,64 @@ export interface Paginated<T> {
   last_page: number;
   total: number;
 }
+
+// ---- Défaillances de déclaration ----
+
+export type NiveauRisque = "faible" | "moyen" | "eleve";
+export type StatutAlerte = "a_traiter" | "traitee" | "regularisee";
+
+export const TYPES_IMPOT = ["TVA", "IR", "IS", "IRSA"] as const;
+
+export const NIVEAU_LABELS: Record<NiveauRisque, string> = {
+  faible: "Faible",
+  moyen: "Moyen",
+  eleve: "Élevé",
+};
+
+export const STATUT_LABELS: Record<StatutAlerte, string> = {
+  a_traiter: "À traiter",
+  traitee: "Traitée",
+  regularisee: "Régularisée",
+};
+
+export interface Defaillance {
+  id: number;
+  contribuable: { id: number; nif: string; nom: string; centre: string | null };
+  type_impot: string;
+  periode: string; // première période manquante, "AAAA-MM"
+  mois_manques: number;
+  serie_precedente: number;
+  niveau: NiveauRisque;
+  motif: string;
+  statut: StatutAlerte;
+  commentaire: string | null;
+  traite_par: string | null;
+  traite_le: string | null;
+}
+
+export interface DefaillanceSummary {
+  a_traiter: number;
+  eleve: number;
+  moyen: number;
+  faible: number;
+  traitees: number;
+  regularisees: number;
+  derniere_analyse: { at: string; periode: string } | null;
+}
+
+export type AlerteContribuable = Omit<Defaillance, "contribuable">;
+
+/** Fiche d'un contribuable : identité, alertes et historique des 12 derniers mois. */
+export interface ContribuableFiche {
+  contribuable: { id: number; nif: string; nom: string; centre: string | null };
+  stats: { nb_declarations: number; premiere_periode: string | null; derniere_periode: string | null };
+  alertes: AlerteContribuable[];
+  historique: {
+    periodes: string[];
+    impots: {
+      type_impot: string;
+      premiere_periode: string | null;
+      cellules: { periode: string; declare: boolean; montant: number | null; date_depot: string | null }[];
+    }[];
+  };
+}
