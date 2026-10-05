@@ -7,6 +7,7 @@ use App\Http\Controllers\Api\DeclarationImportController;
 use App\Http\Controllers\Api\DefaillanceController;
 use App\Http\Controllers\Api\FonctionController;
 use App\Http\Controllers\Api\ProfileController;
+use App\Http\Controllers\Api\SourceImportController;
 use App\Http\Controllers\Api\UserController;
 use App\Http\Middleware\EnsureRole;
 use Illuminate\Support\Facades\Route;
@@ -60,6 +61,10 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::middleware(EnsureRole::class . ':superadmin,central,admin')->group(function () {
         Route::post('/defaillances/analyser', [DefaillanceController::class, 'analyser'])->middleware('throttle:10,1');
         Route::post('/declarations/import', [DeclarationImportController::class, 'store'])->middleware('throttle:10,1');
+
+        // Récupérer les déclarations depuis la base PostgreSQL source (lecture seule) ; l'admin = son centre
+        Route::get('/declarations/source/test', [SourceImportController::class, 'tester'])->middleware('throttle:10,1');
+        Route::post('/declarations/import-source', [SourceImportController::class, 'store'])->middleware('throttle:10,1');
     });
 
     // Section Administration — gestion des utilisateurs : superadmin, central, admin

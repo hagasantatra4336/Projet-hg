@@ -11,5 +11,5 @@ Artisan::command('inspire', function () {
 // Détection automatique des défaillances de déclaration, toutes les 5 minutes (tous les centres,
 // période de référence = mois précédent). Voir « schedule:work » / cron dans le LISEZ-MOI.
 Schedule::command('dgi:detecter-defaillances')
-    ->everyFiveMinutes()
-    ->withoutOverlapping(10);
+    ->everyMinute()
+    ->withoutOverlapping(5);

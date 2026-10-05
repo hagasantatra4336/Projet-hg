@@ -99,6 +99,24 @@ return [
             'sslmode' => env('DB_SSLMODE', 'prefer'),
         ],
 
+        // Base PostgreSQL SOURCE : base externe (lecture) d'où l'on récupère les déclarations à analyser.
+        // Distincte de la base de l'application. En test : SOURCE_DB_DATABASE=dgi_source_test
+        // (créée par « php artisan dgi:source-test-db »). En production : idéalement un compte en lecture seule.
+        'source' => [
+            'driver' => 'pgsql',
+            'url' => env('SOURCE_DB_URL'),
+            'host' => env('SOURCE_DB_HOST', '127.0.0.1'),
+            'port' => env('SOURCE_DB_PORT', '5432'),
+            'database' => env('SOURCE_DB_DATABASE', 'dgi_source_test'),
+            'username' => env('SOURCE_DB_USERNAME', 'postgres'),
+            'password' => env('SOURCE_DB_PASSWORD', ''),
+            'charset' => env('SOURCE_DB_CHARSET', 'utf8'),
+            'prefix' => '',
+            'prefix_indexes' => true,
+            'search_path' => env('SOURCE_DB_SCHEMA', 'public'),
+            'sslmode' => env('SOURCE_DB_SSLMODE', 'prefer'),
+        ],
+
         'sqlsrv' => [
             'driver' => 'sqlsrv',
             'url' => env('DB_URL'),
