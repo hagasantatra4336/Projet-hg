@@ -53,10 +53,24 @@ export interface Paginated<T> {
 
 // ---- Défaillances de déclaration ----
 
+export type Regle = "defaillance" | "baisse_ca";
 export type NiveauRisque = "faible" | "moyen" | "eleve";
 export type StatutAlerte = "a_traiter" | "traitee" | "regularisee";
 
 export const TYPES_IMPOT = ["TVA", "IR", "IS", "IRSA"] as const;
+
+export const REGLE_LABELS: Record<Regle, string> = {
+  defaillance: "Défaillance de déclaration",
+  baisse_ca: "Baisse du chiffre d'affaires",
+};
+
+/** Détails d'une alerte « baisse du chiffre d'affaires ». */
+export interface DetailsBaisseCa {
+  ca_precedent: number;
+  ca_actuel: number;
+  baisse_pct: number;
+  periode_precedente: string;
+}
 
 export const NIVEAU_LABELS: Record<NiveauRisque, string> = {
   faible: "Faible",
@@ -73,12 +87,14 @@ export const STATUT_LABELS: Record<StatutAlerte, string> = {
 export interface Defaillance {
   id: number;
   contribuable: { id: number; nif: string; nom: string; centre: string | null };
+  regle: Regle;
   type_impot: string;
   periode: string; // première période manquante, "AAAA-MM"
   mois_manques: number;
   serie_precedente: number;
   niveau: NiveauRisque;
   motif: string;
+  details: DetailsBaisseCa | null;
   statut: StatutAlerte;
   commentaire: string | null;
   traite_par: string | null;
@@ -107,7 +123,13 @@ export interface ContribuableFiche {
     impots: {
       type_impot: string;
       premiere_periode: string | null;
-      cellules: { periode: string; declare: boolean; montant: number | null; date_depot: string | null }[];
+      cellules: {
+        periode: string;
+        declare: boolean;
+        montant: number | null;
+        chiffre_affaires: number | null;
+        date_depot: string | null;
+      }[];
     }[];
   };
 }

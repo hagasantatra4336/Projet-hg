@@ -2,9 +2,12 @@ import { useEffect, useState } from "react";
 import api, { getErrorMessage } from "../services/api";
 import {
   NIVEAU_LABELS,
+  REGLE_LABELS,
   STATUT_LABELS,
   type ContribuableFiche,
+  type Defaillance,
   type NiveauRisque,
+  type Regle,
   type StatutAlerte,
 } from "../types";
 import { ErrorBox } from "./ui";
@@ -87,6 +90,43 @@ export function StatutBadge({ statut }: { statut: StatutAlerte }) {
   );
 }
 
+const REGLE_BADGE: Record<Regle, string> = {
+  defaillance: "bg-brand-blue/10 text-brand-blue",
+  baisse_ca: "bg-orange-100 text-orange-800",
+};
+
+/** Type d'anomalie : défaillance de déclaration / baisse du chiffre d'affaires. */
+export function RegleBadge({ regle }: { regle: Regle }) {
+  return (
+    <span className={`inline-block rounded-full px-2.5 py-0.5 text-xs font-semibold ${REGLE_BADGE[regle]}`}>
+      {REGLE_LABELS[regle]}
+    </span>
+  );
+}
+
+/** Période d'une alerte avec sa précision : « depuis juillet 2026 · 2 mois manqués » ou « juillet 2026 · CA -42,5 % ». */
+export function PeriodeAnomalie({ a }: { a: Pick<Defaillance, "regle" | "periode" | "mois_manques" | "details"> }) {
+  if (a.regle === "baisse_ca") {
+    return (
+      <>
+        {labelPeriode(a.periode)}
+        <p className="text-xs text-gray-500">
+          {a.details ? `CA -${a.details.baisse_pct.toLocaleString("fr-FR")} %` : "Baisse du CA"}
+        </p>
+      </>
+    );
+  }
+
+  return (
+    <>
+      depuis {labelPeriode(a.periode)}
+      <p className="text-xs text-gray-500">
+        {a.mois_manques} mois manqué{a.mois_manques > 1 ? "s" : ""}
+      </p>
+    </>
+  );
+}
+
 // ---------------------------------------------------------------------
 //  Fiche contribuable (fenêtre)
 // ---------------------------------------------------------------------
@@ -113,6 +153,11 @@ export function ContribuableModal({ id, onClose }: { id: number; onClose: () => 
       cancelled = true;
     };
   }, [id]);
+
+  // Périodes (par impôt) signalées pour une baisse du chiffre d'affaires
+  const baisses = new Set(
+    (fiche?.alertes ?? []).filter((a) => a.regle === "baisse_ca").map((a) => `${a.type_impot}|${a.periode}`)
+  );
 
   return (
     <div
@@ -176,10 +221,13 @@ export function ContribuableModal({ id, onClose }: { id: number; onClose: () => 
                   {fiche.alertes.map((a) => (
                     <li key={a.id} className="rounded-xl border border-gray-100 p-3 text-sm">
                       <div className="flex flex-wrap items-center gap-2">
+                        <RegleBadge regle={a.regle} />
                         <NiveauBadge niveau={a.niveau} />
                         <StatutBadge statut={a.statut} />
                         <span className="font-medium text-gray-700">{a.type_impot}</span>
-                        <span className="text-gray-500">· depuis {labelPeriode(a.periode)}</span>
+                        <span className="text-gray-500">
+                          · {a.regle === "baisse_ca" ? labelPeriode(a.periode) : `depuis ${labelPeriode(a.periode)}`}
+                        </span>
                       </div>
                       <p className="mt-2 text-xs leading-relaxed text-gray-700">{a.motif}</p>
                       {a.commentaire && <p className="mt-1 text-xs italic text-gray-500">Commentaire : {a.commentaire}</p>}
@@ -199,7 +247,8 @@ export function ContribuableModal({ id, onClose }: { id: number; onClose: () => 
             <section>
               <h3 className="mb-1 text-sm font-bold text-brand-blue">Historique des déclarations (12 derniers mois)</h3>
               <p className="mb-2 text-xs text-gray-500">
-                ✔ déclaré (survolez pour le montant) · ✘ aucune déclaration · · avant la première déclaration
+                ✔ déclaré (survolez pour le montant et le chiffre d'affaires) · ▼ baisse du chiffre d'affaires · ✘ aucune
+                déclaration · · avant la première déclaration
               </p>
               {fiche.historique.impots.length === 0 ? (
                 <p className="rounded-xl bg-brand-white p-3 text-sm text-gray-500">Aucune déclaration enregistrée.</p>
@@ -224,16 +273,23 @@ export function ContribuableModal({ id, onClose }: { id: number; onClose: () => 
                             const avant = ligne.premiere_periode !== null && c.periode < ligne.premiere_periode;
 
                             if (c.declare) {
-                              const detail = `${c.montant !== null ? c.montant.toLocaleString("fr-FR") + " Ar" : ""}${
-                                c.date_depot ? ` · déposé le ${formatDate(c.date_depot)}` : ""
-                              }`;
+                              const detail = [
+                                c.chiffre_affaires !== null ? `CA ${c.chiffre_affaires.toLocaleString("fr-FR")} Ar` : "",
+                                c.montant !== null ? `montant ${c.montant.toLocaleString("fr-FR")} Ar` : "",
+                                c.date_depot ? `déposé le ${formatDate(c.date_depot)}` : "",
+                              ]
+                                .filter(Boolean)
+                                .join(" · ");
+                              const baisse = baisses.has(`${ligne.type_impot}|${c.periode}`);
                               return (
                                 <td
                                   key={c.periode}
-                                  title={`${labelPeriode(c.periode)} : ${detail || "déclaré"}`}
-                                  className="rounded bg-brand-green/30 py-1.5 font-semibold text-brand-blue"
+                                  title={`${labelPeriode(c.periode)} : ${detail || "déclaré"}${baisse ? " · baisse du CA" : ""}`}
+                                  className={`rounded py-1.5 font-semibold ${
+                                    baisse ? "bg-orange-100 text-orange-700" : "bg-brand-green/30 text-brand-blue"
+                                  }`}
                                 >
-                                  ✔
+                                  {baisse ? "▼" : "✔"}
                                 </td>
                               );
                             }

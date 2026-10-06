@@ -22,4 +22,21 @@ return [
         // le niveau monte d'un cran (la rupture est plus suspecte).
         'serie_longue' => (int) env('ANOMALIES_DEFAILLANCE_SERIE_LONGUE', 12),
     ],
+
+    // Baisse du chiffre d'affaires déclaré par rapport à la déclaration PRÉCÉDENTE du même impôt
+    'baisse_ca' => [
+        // Impôts dont la déclaration comporte un chiffre d'affaires
+        'impots' => array_values(array_filter(array_map('trim', explode(',', (string) env('ANOMALIES_CA_IMPOTS', 'TVA,IR,IS'))))),
+
+        // Seuil de déclenchement : baisse d'au moins X % (niveau « faible »)
+        'seuil_pourcentage' => (float) env('ANOMALIES_CA_SEUIL_BAISSE', 30),
+
+        // Niveaux de risque selon l'ampleur de la baisse : >= seuil_moyen → moyen ; >= seuil_eleve → élevé
+        'seuil_moyen' => (float) env('ANOMALIES_CA_SEUIL_MOYEN', 50),
+        'seuil_eleve' => (float) env('ANOMALIES_CA_SEUIL_ELEVE', 70),
+
+        // Nombre de derniers mois (jusqu'à la période de référence) dont les déclarations sont analysées :
+        // permet de détecter aussi les déclarations déposées en retard ou corrigées.
+        'fenetre_mois' => (int) env('ANOMALIES_CA_FENETRE_MOIS', 3),
+    ],
 ];

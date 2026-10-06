@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Enums\Role;
 use App\Http\Controllers\Controller;
+use App\Services\AnomalieAnalyseur;
 use App\Services\DefaillanceDetector;
 use App\Services\SourceDeclarationImporter;
 use Illuminate\Http\JsonResponse;
@@ -52,7 +53,10 @@ class SourceImportController extends Controller
 
         $analyse = null;
         if ($request->boolean('analyser')) {
-            $analyse = (new DefaillanceDetector())->analyser($data['jusqua'] ?? DefaillanceDetector::periodePrecedente(), $centreId);
+            // Toutes les règles : défaillance de déclaration + baisse du chiffre d'affaires
+            $analyse = app(AnomalieAnalyseur::class)->analyser($data['jusqua'] ?? DefaillanceDetector::periodePrecedente(), $centreId);
+            // Compatibilité : nombre total d'éléments analysés (clé « analyses » d'avant)
+            $analyse['analyses'] = $analyse['defaillance']['analyses'] + $analyse['baisse_ca']['analyses'];
         }
 
         return response()->json($stats + ['analyse' => $analyse, 'message' => sprintf(
@@ -60,7 +64,14 @@ class SourceImportController extends Controller
             $stats['lues'],
             $stats['importees'],
             $stats['rejetees'],
-            $analyse ? sprintf(' Analyse : %d nouvelle(s) alerte(s), %d mise(s) à jour, %d régularisée(s).', $analyse['crees'], $analyse['mis_a_jour'], $analyse['regularisees']) : ''
+            $analyse ? sprintf(
+                " Analyse : %d nouvelle(s) alerte(s) (%d défaillance(s), %d baisse(s) du chiffre d'affaires), %d mise(s) à jour, %d régularisée(s).",
+                $analyse['crees'],
+                $analyse['defaillance']['crees'],
+                $analyse['baisse_ca']['crees'],
+                $analyse['mis_a_jour'],
+                $analyse['regularisees']
+            ) : ''
         )]);
     }
 

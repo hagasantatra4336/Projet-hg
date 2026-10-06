@@ -3,6 +3,7 @@ import api, { getErrorMessage } from "../services/api";
 import { useAuth } from "../context/AuthContext";
 import {
   NIVEAU_LABELS,
+  REGLE_LABELS,
   STATUT_LABELS,
   TYPES_IMPOT,
   type Centre,
@@ -10,6 +11,7 @@ import {
   type DefaillanceSummary,
   type NiveauRisque,
   type Paginated,
+  type Regle,
   type StatutAlerte,
 } from "../types";
 import {
@@ -25,6 +27,8 @@ import { IconRefresh, IconSearch, IconUpload } from "../components/icons";
 import {
   ContribuableModal,
   NiveauBadge,
+  PeriodeAnomalie,
+  RegleBadge,
   StatutBadge,
   formatDate,
   formatDateHeure,
@@ -46,6 +50,7 @@ function pageWindow(current: number, last: number): number[] {
 }
 
 interface Filters {
+  regle: "" | Regle;
   niveau: "" | NiveauRisque;
   type_impot: string;
   statut: "" | StatutAlerte;
@@ -82,6 +87,7 @@ export default function DefaillancesPage() {
   const [ficheId, setFicheId] = useState<number | null>(null);
 
   const [filters, setFilters] = useState<Filters>({
+    regle: "",
     niveau: "",
     type_impot: "",
     statut: "a_traiter",
@@ -146,6 +152,7 @@ export default function DefaillancesPage() {
           sort,
           dir,
           search: search || undefined,
+          regle: filters.regle || undefined,
           niveau: filters.niveau || undefined,
           type_impot: filters.type_impot || undefined,
           statut: filters.statut || undefined,
@@ -260,7 +267,7 @@ export default function DefaillancesPage() {
     try {
       const res = await api.post<{ message: string }>("/defaillances/analyser", { periode: analysePeriode });
       setAnalyseMessage(res.data.message);
-      setFilters((f) => ({ ...f, statut: "a_traiter", niveau: "", type_impot: "", periode: "" }));
+      setFilters((f) => ({ ...f, statut: "a_traiter", regle: "", niveau: "", type_impot: "", periode: "" }));
       setPage(1);
       reload();
     } catch (err) {
@@ -307,10 +314,11 @@ export default function DefaillancesPage() {
   function downloadTemplate() {
     const centre = user?.centre?.nom ?? "Nom du centre";
     const lignes = [
-      "nif;nom;centre;type_impot;periode;montant;date_depot",
-      `NIF-0001;Contribuable exemple;${centre};TVA;2026-01;1500000;2026-02-10`,
-      `NIF-0001;Contribuable exemple;${centre};TVA;2026-02;1620000;2026-03-12`,
-      `NIF-0001;Contribuable exemple;${centre};IRSA;2026-01;400000;2026-02-15`,
+      "nif;nom;centre;type_impot;periode;montant;chiffre_affaires;date_depot",
+      `NIF-0001;Contribuable exemple;${centre};TVA;2026-01;1500000;7500000;2026-02-10`,
+      `NIF-0001;Contribuable exemple;${centre};TVA;2026-02;1620000;8100000;2026-03-12`,
+      `NIF-0001;Contribuable exemple;${centre};TVA;2026-03;900000;4500000;2026-04-09`,
+      `NIF-0001;Contribuable exemple;${centre};IRSA;2026-01;400000;;2026-02-15`,
     ];
     const blob = new Blob(["\uFEFF" + lignes.join("\n")], { type: "text/csv;charset=utf-8" });
     const url = URL.createObjectURL(blob);
@@ -334,9 +342,9 @@ export default function DefaillancesPage() {
     <div>
       <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-brand-blue">Défaillances de déclaration</h1>
+          <h1 className="text-2xl font-bold text-brand-blue">Anomalies de déclaration</h1>
           <p className="text-sm text-gray-500">
-            Contribuables habituellement déclarants qui ont cessé de déposer
+            Défaillances de déclaration et baisses du chiffre d'affaires
             {role === "agent" || role === "admin" ? ` · ${user?.centre?.nom ?? "votre centre"}` : ""}
           </p>
           <p className="mt-1 text-xs text-gray-400">
@@ -411,6 +419,20 @@ export default function DefaillancesPage() {
           </div>
 
           <select
+            aria-label="Type d'anomalie"
+            className={selectClass}
+            value={filters.regle}
+            onChange={(e) => changeFilter("regle", e.target.value as Filters["regle"])}
+          >
+            <option value="">Toutes les anomalies</option>
+            {(Object.keys(REGLE_LABELS) as Regle[]).map((r) => (
+              <option key={r} value={r}>
+                {REGLE_LABELS[r]}
+              </option>
+            ))}
+          </select>
+
+          <select
             aria-label="Niveau de risque"
             className={selectClass}
             value={filters.niveau}
@@ -454,8 +476,8 @@ export default function DefaillancesPage() {
 
           <input
             type="month"
-            aria-label="Défaillant depuis"
-            title="Défaillant depuis (première période manquante)"
+            aria-label="Période"
+            title="Période de l'anomalie (pour une défaillance : première période manquante)"
             className={selectClass}
             value={filters.periode}
             onChange={(e) => changeFilter("periode", e.target.value)}
@@ -481,11 +503,12 @@ export default function DefaillancesPage() {
         <ErrorBox message={error} />
 
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[960px] text-left text-sm">
+          <table className="w-full min-w-[1080px] text-left text-sm">
             <thead>
               <tr className="text-xs font-medium text-gray-400">
                 <th className="px-3 py-3">Contribuable</th>
                 <th className="px-3 py-3">Centre</th>
+                <th className="px-3 py-3">Anomalie</th>
                 <th className="px-3 py-3">
                   <button type="button" onClick={() => toggleSort("type_impot")} className="hover:text-brand-blue">
                     Impôt{sortMark("type_impot")}
@@ -493,7 +516,7 @@ export default function DefaillancesPage() {
                 </th>
                 <th className="px-3 py-3">
                   <button type="button" onClick={() => toggleSort("periode")} className="hover:text-brand-blue">
-                    Défaillant depuis{sortMark("periode")}
+                    Période{sortMark("periode")}
                   </button>
                 </th>
                 <th className="px-3 py-3">
@@ -521,12 +544,12 @@ export default function DefaillancesPage() {
                     <p className="text-xs text-gray-500">{d.contribuable.nif}</p>
                   </td>
                   <td className="px-3 py-4 text-gray-700">{d.contribuable.centre ?? "—"}</td>
+                  <td className="px-3 py-4">
+                    <RegleBadge regle={d.regle} />
+                  </td>
                   <td className="px-3 py-4 font-medium text-gray-700">{d.type_impot}</td>
                   <td className="px-3 py-4 text-gray-700">
-                    {labelPeriode(d.periode)}
-                    <p className="text-xs text-gray-500">
-                      {d.mois_manques} mois manqué{d.mois_manques > 1 ? "s" : ""}
-                    </p>
+                    <PeriodeAnomalie a={d} />
                   </td>
                   <td className="px-3 py-4">
                     <NiveauBadge niveau={d.niveau} />
@@ -549,16 +572,16 @@ export default function DefaillancesPage() {
               ))}
               {data && data.data.length === 0 && (
                 <tr>
-                  <td colSpan={8} className="px-3 py-10 text-center text-gray-500">
+                  <td colSpan={9} className="px-3 py-10 text-center text-gray-500">
                     {canManage
                       ? "Aucune alerte. Importez des déclarations puis lancez l'analyse."
-                      : "Aucune alerte de défaillance pour votre centre."}
+                      : "Aucune anomalie pour votre centre."}
                   </td>
                 </tr>
               )}
               {!data && loading && (
                 <tr>
-                  <td colSpan={8} className="px-3 py-10 text-center text-gray-500">
+                  <td colSpan={9} className="px-3 py-10 text-center text-gray-500">
                     Chargement...
                   </td>
                 </tr>
@@ -631,7 +654,7 @@ export default function DefaillancesPage() {
 
             {selected.statut === "regularisee" ? (
               <p className="text-sm text-gray-600">
-                Le contribuable a déposé depuis : l'alerte est régularisée. Vous pouvez tout de même ajouter un commentaire.
+                L'anomalie n'est plus constatée (déclaration déposée ou corrigée) : l'alerte est régularisée. Vous pouvez tout de même ajouter un commentaire.
               </p>
             ) : (
               <Field label="Statut">
@@ -674,8 +697,10 @@ export default function DefaillancesPage() {
         <Modal title="Lancer l'analyse" onClose={() => setAnalyseOpen(false)}>
           <form onSubmit={handleAnalyse} className="space-y-4">
             <p className="text-sm text-gray-600">
-              Un contribuable est signalé s'il a déclaré au moins 6 mois consécutifs, puis n'a plus rien déposé jusqu'à la
-              période de référence choisie.
+              Deux règles sont appliquées : (1) <strong>défaillance</strong> : un contribuable qui a déclaré au moins 6 mois
+              consécutifs puis n'a plus rien déposé jusqu'à la période de référence ; (2) <strong>baisse du chiffre
+              d'affaires</strong> : une déclaration récente dont le chiffre d'affaires baisse de 30 % ou plus par rapport à la
+              déclaration précédente du même impôt. L'analyse tourne aussi automatiquement toutes les 5 minutes.
               {role === "admin" ? " L'analyse porte sur votre centre." : " L'analyse porte sur tous les centres."}
             </p>
 
@@ -713,9 +738,10 @@ export default function DefaillancesPage() {
         <Modal title="Importer des déclarations (CSV)" onClose={() => setImportOpen(false)}>
           <form onSubmit={handleImport} className="space-y-4">
             <p className="text-sm text-gray-600">
-              Colonnes : <code className="text-xs">nif ; nom ; centre ; type_impot ; periode ; montant ; date_depot</code>.
-              Périodes au format <code className="text-xs">AAAA-MM</code>, impôts : TVA, IR, IS, IRSA. Une déclaration déjà
-              présente est mise à jour.
+              Colonnes :{" "}
+              <code className="text-xs">nif ; nom ; centre ; type_impot ; periode ; montant ; chiffre_affaires ; date_depot</code>
+              . Le <strong>chiffre_affaires</strong> (facultatif) sert à détecter les baisses. Périodes au format{" "}
+              <code className="text-xs">AAAA-MM</code>, impôts : TVA, IR, IS, IRSA. Une déclaration déjà présente est mise à jour.
             </p>
             <button type="button" onClick={downloadTemplate} className="text-sm font-medium text-brand-blue underline">
               Télécharger un modèle CSV

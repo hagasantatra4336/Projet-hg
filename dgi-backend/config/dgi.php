@@ -19,6 +19,9 @@ return [
             'periode' => env('DGI_SOURCE_COL_PERIODE', 'periode'),   // texte « AAAA-MM »
             'montant' => env('DGI_SOURCE_COL_MONTANT', 'montant'),
             'date_depot' => env('DGI_SOURCE_COL_DATE_DEPOT', 'date_depot'),
+            // Facultatif : colonne du chiffre d'affaires dans la table source (règle « baisse du chiffre d'affaires »).
+            // Sans valeur (défaut), le CA n'est pas importé. Ex. dans .env : DGI_SOURCE_COL_CHIFFRE_AFFAIRES=chiffre_affaires
+            'chiffre_affaires' => env('DGI_SOURCE_COL_CHIFFRE_AFFAIRES'),
         ],
     ],
 ];

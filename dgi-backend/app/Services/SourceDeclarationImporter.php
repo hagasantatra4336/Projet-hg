@@ -12,10 +12,12 @@ use InvalidArgumentException;
 /**
  * Récupère les déclarations depuis une base PostgreSQL SOURCE (connexion « source », voir config/dgi.php)
  * et les recopie dans les tables de l'application (contribuables + declarations), prêtes pour l'analyse
- * (DefaillanceDetector). Mêmes règles que l'import CSV (EXF-001) :
+ * (AnomalieAnalyseur : défaillance de déclaration + baisse du chiffre d'affaires). Mêmes règles que l'import CSV (EXF-001) :
  *   - type_impot ∈ config('anomalies.defaillance.impots') ; periode « AAAA-MM » ; montant >= 0 ;
  *   - le centre doit exister (comparaison sans tenir compte de la casse) ;
- *   - une déclaration déjà présente (même contribuable + impôt + période) est mise à jour (pas de doublon).
+ *   - une déclaration déjà présente (même contribuable + impôt + période) est mise à jour (pas de doublon) ;
+ *   - le chiffre d'affaires est FACULTATIF : il n'est lu que si la colonne est déclarée dans
+ *     config('dgi.source.colonnes.chiffre_affaires') ; sinon le CA déjà enregistré n'est pas touché.
  *
  * La base source n'est JAMAIS modifiée : uniquement des SELECT.
  */
@@ -69,10 +71,15 @@ class SourceDeclarationImporter
 
         $query = $this->connexion()->table((string) config('dgi.source.table'));
 
+        // Chiffre d'affaires : colonne facultative de la base source (règle « baisse du chiffre d'affaires »)
+        $avecCa = ! empty($col['chiffre_affaires']);
+        $champs = ['nif', 'nom', 'centre', 'type_impot', 'periode', 'montant', 'date_depot'];
+        if ($avecCa) {
+            $champs[] = 'chiffre_affaires';
+        }
+
         // « colonne as champ » : les lignes lues portent toujours les mêmes noms de champs, quel que soit le schéma source.
-        $query->select(array_map(fn (string $champ) => $col[$champ] . ' as ' . $champ, [
-            'nif', 'nom', 'centre', 'type_impot', 'periode', 'montant', 'date_depot',
-        ]));
+        $query->select(array_map(fn (string $champ) => $col[$champ] . ' as ' . $champ, $champs));
 
         if ($depuis !== null) {
             $query->where($col['periode'], '>=', $depuis);
@@ -95,7 +102,7 @@ class SourceDeclarationImporter
 
         $stats = ['lues' => 0, 'importees' => 0, 'rejetees' => 0, 'contribuables_crees' => 0, 'erreurs' => []];
 
-        DB::transaction(function () use ($query, $impots, $centres, &$stats) {
+        DB::transaction(function () use ($query, $impots, $centres, $avecCa, &$stats) {
             $ids = [];  // NIF => id du contribuable
             $lot = [];  // clé unique => ligne à écrire (dédoublonne)
             $now = now()->toDateTimeString();
@@ -108,6 +115,16 @@ class SourceDeclarationImporter
                 if ($ligne === null) {
                     $this->rejeter($stats, $row, $raison);
                     continue;
+                }
+
+                $chiffreAffaires = null;
+                if ($avecCa) {
+                    [$chiffreAffaires, $raisonCa] = self::normaliserChiffreAffaires($row);
+
+                    if ($raisonCa !== null) {
+                        $this->rejeter($stats, $row, $raisonCa);
+                        continue;
+                    }
                 }
 
                 $centreId = $centres[mb_strtolower($ligne['centre'])] ?? null;
@@ -128,7 +145,7 @@ class SourceDeclarationImporter
                     }
                 }
 
-                $lot[$ids[$nif] . '|' . $ligne['type_impot'] . '|' . $ligne['periode']] = [
+                $declaration = [
                     'contribuable_id' => $ids[$nif],
                     'type_impot' => $ligne['type_impot'],
                     'periode' => $ligne['periode'],
@@ -137,15 +154,20 @@ class SourceDeclarationImporter
                     'created_at' => $now,
                     'updated_at' => $now,
                 ];
+                // Colonne source configurée seulement : sinon on ne touche pas au CA déjà enregistré
+                if ($avecCa) {
+                    $declaration['chiffre_affaires'] = $chiffreAffaires;
+                }
+                $lot[$ids[$nif] . '|' . $ligne['type_impot'] . '|' . $ligne['periode']] = $declaration;
                 $stats['importees']++;
 
                 if (count($lot) >= self::LOT) {
-                    $this->ecrire($lot);
+                    $this->ecrire($lot, $avecCa);
                     $lot = [];
                 }
             }
 
-            $this->ecrire($lot);
+            $this->ecrire($lot, $avecCa);
         });
 
         return $stats;
@@ -212,6 +234,28 @@ class SourceDeclarationImporter
         ], null];
     }
 
+    /**
+     * Valide le chiffre d'affaires d'une ligne source (fonction pure). Vide = pas de CA (autorisé).
+     *
+     * @return array{0: string|null, 1: string|null}  [CA normalisé ou null, raison du rejet ou null]
+     */
+    public static function normaliserChiffreAffaires(object $row): array
+    {
+        $brut = trim((string) ($row->chiffre_affaires ?? ''));
+
+        if ($brut === '') {
+            return [null, null];
+        }
+
+        $ca = str_replace(',', '.', str_replace([' ', "\xC2\xA0"], '', $brut));
+
+        if (! is_numeric($ca) || (float) $ca < 0) {
+            return [null, 'chiffre_affaires « ' . $brut . ' » invalide.'];
+        }
+
+        return [$ca, null];
+    }
+
     /** @param array<string, mixed> $stats */
     private function rejeter(array &$stats, object $row, ?string $raison): void
     {
@@ -223,10 +267,15 @@ class SourceDeclarationImporter
     }
 
     /** @param array<string, array<string, mixed>> $lot */
-    private function ecrire(array $lot): void
+    private function ecrire(array $lot, bool $avecCa): void
     {
         if ($lot !== []) {
-            Declaration::upsert(array_values($lot), ['contribuable_id', 'type_impot', 'periode'], ['montant', 'date_depot', 'updated_at']);
+            $colonnes = ['montant', 'date_depot', 'updated_at'];
+            if ($avecCa) {
+                $colonnes[] = 'chiffre_affaires';
+            }
+
+            Declaration::upsert(array_values($lot), ['contribuable_id', 'type_impot', 'periode'], $colonnes);
         }
     }
 }

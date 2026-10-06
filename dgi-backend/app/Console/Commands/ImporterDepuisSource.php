@@ -2,13 +2,14 @@
 
 namespace App\Console\Commands;
 
+use App\Services\AnomalieAnalyseur;
 use App\Services\DefaillanceDetector;
 use App\Services\SourceDeclarationImporter;
 use Illuminate\Console\Command;
 use Throwable;
 
 /**
- * Récupère les déclarations depuis la base PostgreSQL source puis (option) lance l'analyse :
+ * Récupère les déclarations depuis la base PostgreSQL source puis (option) lance l'analyse des anomalies :
  *   php artisan dgi:importer-source --tester
  *   php artisan dgi:importer-source
  *   php artisan dgi:importer-source --depuis=2025-10 --jusqua=2026-09 --centre=1 --analyser
@@ -20,11 +21,11 @@ class ImporterDepuisSource extends Command
         {--depuis= : Première période à lire AAAA-MM (défaut : tout l'historique)}
         {--jusqua= : Dernière période à lire AAAA-MM (défaut : jusqu'à la fin)}
         {--centre= : ID d'un centre de l'application (défaut : tous)}
-        {--analyser : Lance ensuite la détection des défaillances (période de référence = --jusqua, sinon mois précédent)}";
+        {--analyser : Lance ensuite la détection des anomalies : défaillances et baisses du chiffre d'affaires (période de référence = --jusqua, sinon mois précédent)}";
 
     protected $description = "Importe les déclarations depuis la base PostgreSQL source (lecture seule) pour l'analyse";
 
-    public function handle(SourceDeclarationImporter $importer, DefaillanceDetector $detector): int
+    public function handle(SourceDeclarationImporter $importer, AnomalieAnalyseur $analyseur): int
     {
         try {
             if ($this->option('tester')) {
@@ -58,9 +59,12 @@ class ImporterDepuisSource extends Command
 
         if ($this->option('analyser')) {
             $periode = (string) ($this->option('jusqua') ?: DefaillanceDetector::periodePrecedente());
-            $a = $detector->analyser($periode, $centre);
+            $a = $analyseur->analyser($periode, $centre);
 
-            $this->info("Analyse {$a['periode']} : {$a['analyses']} couple(s) analysé(s) — nouvelles alertes : {$a['crees']} | mises à jour : {$a['mis_a_jour']} | régularisées : {$a['regularisees']}");
+            $this->info("Analyse {$a['periode']} :");
+            $this->line("  Défaillances : {$a['defaillance']['analyses']} couple(s) analysé(s), {$a['defaillance']['crees']} nouvelle(s) alerte(s)");
+            $this->line("  Baisses du CA : {$a['baisse_ca']['analyses']} déclaration(s) analysée(s), {$a['baisse_ca']['crees']} nouvelle(s) alerte(s)");
+            $this->info("Total : {$a['crees']} nouvelle(s) | {$a['mis_a_jour']} mise(s) à jour | {$a['regularisees']} régularisée(s)");
         }
 
         return self::SUCCESS;

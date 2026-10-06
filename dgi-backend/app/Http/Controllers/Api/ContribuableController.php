@@ -78,6 +78,7 @@ class ContribuableController extends Controller
                         'periode' => $periode,
                         'declare' => $d !== null,
                         'montant' => $d ? (float) $d->montant : null,
+                        'chiffre_affaires' => $d && $d->chiffre_affaires !== null ? (float) $d->chiffre_affaires : null,
                         'date_depot' => $d?->date_depot?->toDateString(),
                     ];
                 }, $periodes),
@@ -98,12 +99,14 @@ class ContribuableController extends Controller
             ],
             'alertes' => $alertes->map(fn (Alerte $a) => [
                 'id' => $a->id,
+                'regle' => $a->regle,
                 'type_impot' => $a->type_impot,
                 'periode' => $a->periode,
                 'mois_manques' => $a->mois_manques,
                 'serie_precedente' => $a->serie_precedente,
                 'niveau' => $a->niveau,
                 'motif' => $a->motif,
+                'details' => $a->details,
                 'statut' => $a->statut,
                 'commentaire' => $a->commentaire,
                 'traite_par' => $a->traitePar?->nom,

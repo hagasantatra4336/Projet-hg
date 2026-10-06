@@ -6,6 +6,7 @@ use App\Enums\Role;
 use App\Http\Controllers\Controller;
 use App\Models\Alerte;
 use App\Models\User;
+use App\Services\AnomalieAnalyseur;
 use App\Services\DefaillanceDetector;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
@@ -14,7 +15,7 @@ use Illuminate\Support\Facades\Cache;
 use Illuminate\Validation\Rule;
 
 /**
- * Alertes de défaillance de déclaration.
+ * Alertes d'anomalies (défaillance de déclaration, baisse du chiffre d'affaires).
  *
  *  - Consultation et traitement : tous les rôles.
  *      agent / admin        → uniquement les alertes de LEUR centre ;
@@ -28,6 +29,7 @@ class DefaillanceController extends Controller
     public function index(Request $request): JsonResponse
     {
         $data = $request->validate([
+            'regle' => ['nullable', Rule::in(Alerte::REGLES)],
             'niveau' => ['nullable', Rule::in(Alerte::NIVEAUX)],
             'type_impot' => ['nullable', Rule::in(config('anomalies.defaillance.impots'))],
             'statut' => ['nullable', Rule::in([Alerte::A_TRAITER, Alerte::TRAITEE, Alerte::REGULARISEE])],
@@ -40,7 +42,7 @@ class DefaillanceController extends Controller
 
         $query = $this->scopedQuery($request)->with(['contribuable.centre', 'traitePar']);
 
-        foreach (['niveau', 'type_impot', 'statut', 'periode'] as $champ) {
+        foreach (['regle', 'niveau', 'type_impot', 'statut', 'periode'] as $champ) {
             if (! empty($data[$champ])) {
                 $query->where('alertes.' . $champ, $data[$champ]);
             }
@@ -112,7 +114,7 @@ class DefaillanceController extends Controller
 
         if (array_key_exists('statut', $data) && $alerte->statut === Alerte::REGULARISEE) {
             return response()->json([
-                'message' => 'Cette alerte est régularisée (le contribuable a déposé) : son statut ne peut pas être modifié.',
+                'message' => "Cette alerte est régularisée (l'anomalie n'est plus constatée) : son statut ne peut pas être modifié.",
             ], 422);
         }
 
@@ -149,12 +151,14 @@ class DefaillanceController extends Controller
             $centreId = $me->centre_id;
         }
 
-        $stats = (new DefaillanceDetector())->analyser($periode, $centreId);
+        $stats = app(AnomalieAnalyseur::class)->analyser($periode, $centreId);
 
         return response()->json($stats + [
             'message' => sprintf(
-                'Analyse terminée : %d nouvelle(s) alerte(s), %d mise(s) à jour, %d régularisée(s).',
+                "Analyse terminée : %d nouvelle(s) alerte(s) (%d défaillance(s), %d baisse(s) du chiffre d'affaires), %d mise(s) à jour, %d régularisée(s).",
                 $stats['crees'],
+                $stats['defaillance']['crees'],
+                $stats['baisse_ca']['crees'],
                 $stats['mis_a_jour'],
                 $stats['regularisees']
             ),
@@ -169,7 +173,7 @@ class DefaillanceController extends Controller
         $me = $request->user();
         abort_if($me->role === null, 403, "Votre compte n'a pas de fonction attribuée.");
 
-        $query = Alerte::query()->where('alertes.regle', Alerte::REGLE_DEFAILLANCE);
+        $query = Alerte::query();
 
         if (in_array($me->role, [Role::Agent, Role::Admin], true)) {
             abort_if($me->centre_id === null, 403, "Votre compte n'est rattaché à aucun centre.");
@@ -206,12 +210,14 @@ class DefaillanceController extends Controller
                 'nom' => $a->contribuable->nom,
                 'centre' => $a->contribuable->centre?->nom,
             ],
+            'regle' => $a->regle,
             'type_impot' => $a->type_impot,
             'periode' => $a->periode,
             'mois_manques' => $a->mois_manques,
             'serie_precedente' => $a->serie_precedente,
             'niveau' => $a->niveau,
             'motif' => $a->motif,
+            'details' => $a->details,
             'statut' => $a->statut,
             'commentaire' => $a->commentaire,
             'traite_par' => $a->traitePar?->nom,

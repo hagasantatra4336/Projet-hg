@@ -15,7 +15,8 @@ use Illuminate\Support\Str;
 /**
  * EXF-001 : import d'un lot de déclarations depuis un fichier CSV (séparateur « ; » ou « , »).
  *
- * Colonnes obligatoires : nif ; nom ; centre ; type_impot ; periode ; montant      (date_depot facultative)
+ * Colonnes obligatoires : nif ; nom ; centre ; type_impot ; periode ; montant
+ * Colonnes facultatives   : chiffre_affaires (utilisée pour détecter les baisses de CA) ; date_depot
  *   - type_impot : TVA, IR, IS ou IRSA          - periode : AAAA-MM (ex. 2026-07)
  *   - centre     : nom exact d'un centre existant
  * Une déclaration déjà présente (même NIF + impôt + période) est mise à jour.
@@ -55,19 +56,26 @@ class DeclarationImportController extends Controller
             $header
         );
 
+        // Alias acceptés pour la colonne du chiffre d'affaires
+        $cols = array_map(
+            fn (string $c) => in_array($c, ['ca', "chiffre_d'affaires", 'chiffre_d_affaires', 'chiffre_daffaires'], true) ? 'chiffre_affaires' : $c,
+            $cols
+        );
+        $avecCa = in_array('chiffre_affaires', $cols, true);
+
         $missing = array_diff(self::REQUIRED, $cols);
         if ($missing !== []) {
             fclose($handle);
 
             return response()->json([
-                'message' => 'Colonnes manquantes : ' . implode(', ', $missing) . '. Attendu : nif;nom;centre;type_impot;periode;montant;date_depot',
+                'message' => 'Colonnes manquantes : ' . implode(', ', $missing) . '. Attendu : nif;nom;centre;type_impot;periode;montant;chiffre_affaires;date_depot',
             ], 422);
         }
 
         $centres = Centre::pluck('id', 'nom')->mapWithKeys(fn ($id, $nom) => [Str::lower($nom) => $id])->all();
         $impots = config('anomalies.defaillance.impots');
 
-        $result = DB::transaction(function () use ($handle, $delimiter, $cols, $centres, $impots, $centreImpose) {
+        $result = DB::transaction(function () use ($handle, $delimiter, $cols, $centres, $impots, $centreImpose, $avecCa) {
             $importees = 0;
             $rejetees = 0;
             $erreurs = [];
@@ -116,6 +124,15 @@ class DeclarationImportController extends Controller
                     continue;
                 }
 
+                $chiffreAffaires = null;
+                if ($avecCa && ($l['chiffre_affaires'] ?? '') !== '') {
+                    $chiffreAffaires = str_replace(',', '.', str_replace([' ', "\xC2\xA0"], '', $l['chiffre_affaires']));
+                    if (! is_numeric($chiffreAffaires) || (float) $chiffreAffaires < 0) {
+                        $rejeter('chiffre_affaires « ' . $l['chiffre_affaires'] . ' » invalide.');
+                        continue;
+                    }
+                }
+
                 $dateDepot = null;
                 if (($l['date_depot'] ?? '') !== '') {
                     $dateDepot = $this->parseDate($l['date_depot']);
@@ -153,7 +170,7 @@ class DeclarationImportController extends Controller
                     }
                 }
 
-                $lot[$ids[$nif] . '|' . $impot . '|' . $periode] = [
+                $ligneDeclaration = [
                     'contribuable_id' => $ids[$nif],
                     'type_impot' => $impot,
                     'periode' => $periode,
@@ -162,15 +179,20 @@ class DeclarationImportController extends Controller
                     'created_at' => $now,
                     'updated_at' => $now,
                 ];
+                // Colonne présente dans le fichier seulement : sinon on ne touche pas au CA déjà enregistré
+                if ($avecCa) {
+                    $ligneDeclaration['chiffre_affaires'] = $chiffreAffaires;
+                }
+                $lot[$ids[$nif] . '|' . $impot . '|' . $periode] = $ligneDeclaration;
                 $importees++;
 
                 if (count($lot) >= 500) {
-                    $this->ecrire($lot);
+                    $this->ecrire($lot, $avecCa);
                     $lot = [];
                 }
             }
 
-            $this->ecrire($lot);
+            $this->ecrire($lot, $avecCa);
 
             return compact('importees', 'rejetees', 'erreurs');
         });
@@ -183,10 +205,15 @@ class DeclarationImportController extends Controller
     }
 
     /** @param array<string, array<string, mixed>> $lot */
-    private function ecrire(array $lot): void
+    private function ecrire(array $lot, bool $avecCa): void
     {
         if ($lot !== []) {
-            Declaration::upsert(array_values($lot), ['contribuable_id', 'type_impot', 'periode'], ['montant', 'date_depot', 'updated_at']);
+            $colonnes = ['montant', 'date_depot', 'updated_at'];
+            if ($avecCa) {
+                $colonnes[] = 'chiffre_affaires';
+            }
+
+            Declaration::upsert(array_values($lot), ['contribuable_id', 'type_impot', 'periode'], $colonnes);
         }
     }
 

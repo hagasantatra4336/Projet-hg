@@ -115,7 +115,7 @@ export default function AppLayout() {
 
           <NavLink to="/defaillances" className={linkClass}>
             <IconAlert />
-            <span>Défaillances</span>
+            <span>Anomalies</span>
           </NavLink>
 
           {adminItems.length > 0 && (
