@@ -12,4 +12,5 @@ Artisan::command('inspire', function () {
 // période de référence = mois précédent). Voir « schedule:work » / cron dans le LISEZ-MOI.
 Schedule::command('dgi:detecter-defaillances')
     ->everyMinute()
-    ->withoutOverlapping(5);
+    ->withoutOverlapping(5)
+    ->runInBackground();

@@ -1,6 +1,7 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
+import { useAnalyseAuto } from "../hooks/useAnalyseAuto";
 import { ROLE_LABELS, type Role } from "../types";
 import {
   IconAlert,
@@ -43,6 +44,9 @@ const subLinkClass = ({ isActive }: { isActive: boolean }) =>
 
 export default function AppLayout() {
   const { user, logout } = useAuth();
+
+  // Analyse automatique des défaillances : active tant que cette session est ouverte (stoppée à la déconnexion).
+  useAnalyseAuto(user?.role);
   const navigate = useNavigate();
   const { pathname } = useLocation();
 
@@ -70,7 +74,7 @@ export default function AppLayout() {
     <div className="min-h-screen bg-brand-white lg:flex">
       {/* Barre du haut (mobile uniquement) */}
       <div className="sticky top-0 z-30 flex h-14 items-center justify-between bg-white px-4 shadow-sm lg:hidden">
-        <span className="text-lg font-bold tracking-wide text-brand-blue">DGI</span>
+        <img src="/logo-dgi.png" alt="Direction Générale des Impôts" className="h-10 w-auto" />
         <button
           type="button"
           onClick={() => setMobileOpen(true)}
@@ -91,12 +95,7 @@ export default function AppLayout() {
         }`}
       >
         <div className="mb-8 flex items-center justify-between px-2">
-          <div className="flex items-center gap-2.5">
-            <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-brand-blue text-sm font-bold text-brand-green">
-              D
-            </span>
-            <span className="text-xl font-bold tracking-wide text-brand-blue">DGI</span>
-          </div>
+          <img src="/logo-dgi.png" alt="Direction Générale des Impôts" className="h-16 w-auto" />
           <button
             type="button"
             onClick={() => setMobileOpen(false)}
@@ -115,7 +114,7 @@ export default function AppLayout() {
 
           <NavLink to="/defaillances" className={linkClass}>
             <IconAlert />
-            <span>Anomalies</span>
+            <span>Défaillances</span>
           </NavLink>
 
           {adminItems.length > 0 && (

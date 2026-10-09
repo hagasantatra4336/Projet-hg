@@ -348,7 +348,7 @@ export default function DefaillancesPage() {
             {role === "agent" || role === "admin" ? ` · ${user?.centre?.nom ?? "votre centre"}` : ""}
           </p>
           <p className="mt-1 text-xs text-gray-400">
-            Analyse automatique toutes les 5 minutes
+            Analyse automatique toutes les minutes
             {summary
               ? summary.derniere_analyse
                 ? ` · dernière : ${formatDateHeure(summary.derniere_analyse.at)} (référence ${labelPeriode(
