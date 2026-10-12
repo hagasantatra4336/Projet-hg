@@ -30,10 +30,10 @@ import {
   PeriodeAnomalie,
   RegleBadge,
   StatutBadge,
+  aujourdhui,
   formatDate,
   formatDateHeure,
-  labelPeriode,
-  moisPrecedent,
+  formatJour,
 } from "../components/defaillance";
 
 // ---------------------------------------------------------------------
@@ -54,7 +54,7 @@ interface Filters {
   niveau: "" | NiveauRisque;
   type_impot: string;
   statut: "" | StatutAlerte;
-  periode: string;
+  annee_fiscale: string;
   centre_id: string;
 }
 
@@ -63,7 +63,7 @@ interface ImportResult {
   erreurs: string[];
 }
 
-type SortField = "niveau" | "type_impot" | "periode";
+type SortField = "niveau" | "type_impot" | "annee_fiscale";
 
 const selectClass = `${inputClass} py-2 text-sm`;
 
@@ -91,7 +91,7 @@ export default function DefaillancesPage() {
     niveau: "",
     type_impot: "",
     statut: "a_traiter",
-    periode: "",
+    annee_fiscale: "",
     centre_id: "",
   });
   const [searchInput, setSearchInput] = useState<string>("");
@@ -109,7 +109,7 @@ export default function DefaillancesPage() {
 
   // Lancer l'analyse
   const [analyseOpen, setAnalyseOpen] = useState<boolean>(false);
-  const [analysePeriode, setAnalysePeriode] = useState<string>(moisPrecedent());
+  const [analysePeriode, setAnalysePeriode] = useState<string>(aujourdhui());
   const [analyseRunning, setAnalyseRunning] = useState<boolean>(false);
   const [analyseError, setAnalyseError] = useState<string>("");
   const [analyseMessage, setAnalyseMessage] = useState<string>("");
@@ -156,7 +156,7 @@ export default function DefaillancesPage() {
           niveau: filters.niveau || undefined,
           type_impot: filters.type_impot || undefined,
           statut: filters.statut || undefined,
-          periode: filters.periode || undefined,
+          annee_fiscale: filters.annee_fiscale || undefined,
           centre_id: filters.centre_id || undefined,
         },
       })
@@ -265,9 +265,9 @@ export default function DefaillancesPage() {
     setAnalyseMessage("");
 
     try {
-      const res = await api.post<{ message: string }>("/defaillances/analyser", { periode: analysePeriode });
+      const res = await api.post<{ message: string }>("/defaillances/analyser", { date: analysePeriode });
       setAnalyseMessage(res.data.message);
-      setFilters((f) => ({ ...f, statut: "a_traiter", regle: "", niveau: "", type_impot: "", periode: "" }));
+      setFilters((f) => ({ ...f, statut: "a_traiter", regle: "", niveau: "", type_impot: "", annee_fiscale: "" }));
       setPage(1);
       reload();
     } catch (err) {
@@ -314,11 +314,10 @@ export default function DefaillancesPage() {
   function downloadTemplate() {
     const centre = user?.centre?.nom ?? "Nom du centre";
     const lignes = [
-      "nif;nom;centre;type_impot;periode;montant;chiffre_affaires;date_depot",
-      `NIF-0001;Contribuable exemple;${centre};TVA;2026-01;1500000;7500000;2026-02-10`,
-      `NIF-0001;Contribuable exemple;${centre};TVA;2026-02;1620000;8100000;2026-03-12`,
-      `NIF-0001;Contribuable exemple;${centre};TVA;2026-03;900000;4500000;2026-04-09`,
-      `NIF-0001;Contribuable exemple;${centre};IRSA;2026-01;400000;;2026-02-15`,
+      "nif;nom;centre;type_impot;annee_fiscale;mois;chiffre_affaires;date_limite;date_depot",
+      `0000000001;Contribuable exemple;${centre};TVA;2025;7;85000000;2025-08-15;2025-08-12`,
+      `0000000001;Contribuable exemple;${centre};TVA;2025;8;88000000;2025-09-15;2025-09-10`,
+      `0000000001;Contribuable exemple;${centre};IR;2024;;1020000000;2025-05-31;2025-05-20`,
     ];
     const blob = new Blob(["\uFEFF" + lignes.join("\n")], { type: "text/csv;charset=utf-8" });
     const url = URL.createObjectURL(blob);
@@ -348,12 +347,10 @@ export default function DefaillancesPage() {
             {role === "agent" || role === "admin" ? ` · ${user?.centre?.nom ?? "votre centre"}` : ""}
           </p>
           <p className="mt-1 text-xs text-gray-400">
-            Analyse automatique toutes les minutes
+            Analyse automatique toutes les 5 minutes
             {summary
               ? summary.derniere_analyse
-                ? ` · dernière : ${formatDateHeure(summary.derniere_analyse.at)} (référence ${labelPeriode(
-                    summary.derniere_analyse.periode
-                  )})`
+                ? ` · dernière : ${formatDateHeure(summary.derniere_analyse.at)} (au ${formatJour(summary.derniere_analyse.date)})`
                 : " · aucune analyse effectuée pour l'instant"
               : ""}
           </p>
@@ -475,12 +472,15 @@ export default function DefaillancesPage() {
           </select>
 
           <input
-            type="month"
-            aria-label="Période"
-            title="Période de l'anomalie (pour une défaillance : première période manquante)"
+            type="number"
+            min={1990}
+            max={2100}
+            aria-label="Exercice"
+            title="Exercice (année fiscale) de l'anomalie"
+            placeholder="Exercice (ex. 2025)"
             className={selectClass}
-            value={filters.periode}
-            onChange={(e) => changeFilter("periode", e.target.value)}
+            value={filters.annee_fiscale}
+            onChange={(e) => changeFilter("annee_fiscale", e.target.value)}
           />
 
           {canPickCentre && (
@@ -515,8 +515,8 @@ export default function DefaillancesPage() {
                   </button>
                 </th>
                 <th className="px-3 py-3">
-                  <button type="button" onClick={() => toggleSort("periode")} className="hover:text-brand-blue">
-                    Période{sortMark("periode")}
+                  <button type="button" onClick={() => toggleSort("annee_fiscale")} className="hover:text-brand-blue">
+                    Exercice / période{sortMark("annee_fiscale")}
                   </button>
                 </th>
                 <th className="px-3 py-3">
@@ -697,10 +697,11 @@ export default function DefaillancesPage() {
         <Modal title="Lancer l'analyse" onClose={() => setAnalyseOpen(false)}>
           <form onSubmit={handleAnalyse} className="space-y-4">
             <p className="text-sm text-gray-600">
-              Deux règles sont appliquées : (1) <strong>défaillance</strong> : un contribuable qui a déclaré au moins 6 mois
-              consécutifs puis n'a plus rien déposé jusqu'à la période de référence ; (2) <strong>baisse du chiffre
-              d'affaires</strong> : une déclaration récente dont le chiffre d'affaires baisse de 30 % ou plus par rapport à la
-              déclaration précédente du même impôt. L'analyse tourne aussi automatiquement toutes les 5 minutes.
+              Deux règles sont appliquées. <strong>Défaut de dépôt</strong> (critère R4 de la DGI) : un contribuable assujetti
+              qui n'a pas déposé une déclaration dont la date limite est dépassée (score sur 5 : déclaration annuelle non déposée = 5,
+              mois de TVA non déposés dans l'exercice : 1 à 4 = 2, 5 à 9 = 3, 10 à 12 = 4) ; les contribuables en cessation ou radiés
+              sont exclus. <strong>Baisse du chiffre d'affaires</strong> de 30 % ou plus : TVA par rapport au même mois de l'année
+              précédente, IR par rapport à l'exercice précédent. L'analyse tourne aussi automatiquement toutes les 5 minutes.
               {role === "admin" ? " L'analyse porte sur votre centre." : " L'analyse porte sur tous les centres."}
             </p>
 
@@ -711,9 +712,9 @@ export default function DefaillancesPage() {
               </p>
             )}
 
-            <Field label="Période de référence (dernier mois attendu)">
+            <Field label="Date d'analyse (les dates limites dépassées à cette date sont contrôlées)">
               <input
-                type="month"
+                type="date"
                 required
                 className={inputClass}
                 value={analysePeriode}
@@ -739,9 +740,12 @@ export default function DefaillancesPage() {
           <form onSubmit={handleImport} className="space-y-4">
             <p className="text-sm text-gray-600">
               Colonnes :{" "}
-              <code className="text-xs">nif ; nom ; centre ; type_impot ; periode ; montant ; chiffre_affaires ; date_depot</code>
-              . Le <strong>chiffre_affaires</strong> (facultatif) sert à détecter les baisses. Périodes au format{" "}
-              <code className="text-xs">AAAA-MM</code>, impôts : TVA, IR, IS, IRSA. Une déclaration déjà présente est mise à jour.
+              <code className="text-xs">
+                nif ; nom ; centre ; type_impot ; annee_fiscale ; mois ; chiffre_affaires ; date_limite ; date_depot
+              </code>
+              . Le <strong>mois</strong> (1 à 12) est vide pour une déclaration annuelle (IR, IS). Le chiffre d'affaires et la date
+              limite servent à détecter les anomalies. Impôts : TVA, IR, IS, IRSA. Une déclaration déjà présente est mise à jour.
+              Pour charger aussi les assujettissements et l'état des contribuables, utilisez l'import depuis la base source.
             </p>
             <button type="button" onClick={downloadTemplate} className="text-sm font-medium text-brand-blue underline">
               Télécharger un modèle CSV

@@ -7,7 +7,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Alerte;
 use App\Models\User;
 use App\Services\AnomalieAnalyseur;
-use App\Services\DefaillanceDetector;
+use DateTimeImmutable;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -24,8 +24,6 @@ use Illuminate\Validation\Rule;
  */
 class DefaillanceController extends Controller
 {
-    private const PERIODE_REGEX = '/^\d{4}-(0[1-9]|1[0-2])$/';
-
     public function index(Request $request): JsonResponse
     {
         $data = $request->validate([
@@ -33,16 +31,16 @@ class DefaillanceController extends Controller
             'niveau' => ['nullable', Rule::in(Alerte::NIVEAUX)],
             'type_impot' => ['nullable', Rule::in(config('anomalies.defaillance.impots'))],
             'statut' => ['nullable', Rule::in([Alerte::A_TRAITER, Alerte::TRAITEE, Alerte::REGULARISEE])],
-            'periode' => ['nullable', 'regex:' . self::PERIODE_REGEX],
+            'annee_fiscale' => ['nullable', 'integer', 'between:1990,2100'],
             'centre_id' => ['nullable', 'integer'],
             'search' => ['nullable', 'string', 'max:100'],
-            'sort' => ['nullable', Rule::in(['niveau', 'type_impot', 'periode'])],
+            'sort' => ['nullable', Rule::in(['niveau', 'type_impot', 'annee_fiscale'])],
             'dir' => ['nullable', Rule::in(['asc', 'desc'])],
         ]);
 
         $query = $this->scopedQuery($request)->with(['contribuable.centre', 'traitePar']);
 
-        foreach (['regle', 'niveau', 'type_impot', 'statut', 'periode'] as $champ) {
+        foreach (['regle', 'niveau', 'type_impot', 'statut', 'annee_fiscale'] as $champ) {
             if (! empty($data[$champ])) {
                 $query->where('alertes.' . $champ, $data[$champ]);
             }
@@ -62,7 +60,7 @@ class DefaillanceController extends Controller
 
         if ($sort === 'niveau') {
             $query->orderByRaw("CASE alertes.niveau WHEN 'eleve' THEN 3 WHEN 'moyen' THEN 2 ELSE 1 END {$dir}")
-                ->orderBy('alertes.periode', 'desc');
+                ->orderBy('alertes.annee_fiscale', 'desc');
         } else {
             $query->orderBy('alertes.' . $sort, $dir);
         }
@@ -97,7 +95,7 @@ class DefaillanceController extends Controller
         }
 
         return response()->json($summary + [
-            'derniere_analyse' => Cache::get(DefaillanceDetector::CACHE_DERNIERE_ANALYSE),
+            'derniere_analyse' => Cache::get(AnomalieAnalyseur::CACHE_DERNIERE_ANALYSE),
         ]);
     }
 
@@ -133,16 +131,16 @@ class DefaillanceController extends Controller
         return response()->json($this->present($alerte->load(['contribuable.centre', 'traitePar'])));
     }
 
-    /** Lance le moteur de détection (superadmin, central, admin). */
+    /** Lance le moteur de détection (superadmin, central, admin) à la date indiquée (aujourd'hui par défaut). */
     public function analyser(Request $request): JsonResponse
     {
         $me = $request->user();
 
         $data = $request->validate([
-            'periode' => ['nullable', 'regex:' . self::PERIODE_REGEX],
+            'date' => ['nullable', 'date_format:Y-m-d'],
         ]);
 
-        $periode = $data['periode'] ?? DefaillanceDetector::periodePrecedente();
+        $date = isset($data['date']) ? new DateTimeImmutable($data['date']) : AnomalieAnalyseur::aujourdhui();
 
         // L'admin n'analyse que son propre centre.
         $centreId = null;
@@ -151,7 +149,7 @@ class DefaillanceController extends Controller
             $centreId = $me->centre_id;
         }
 
-        $stats = app(AnomalieAnalyseur::class)->analyser($periode, $centreId);
+        $stats = app(AnomalieAnalyseur::class)->analyser($date, $centreId);
 
         return response()->json($stats + [
             'message' => sprintf(
@@ -212,9 +210,11 @@ class DefaillanceController extends Controller
             ],
             'regle' => $a->regle,
             'type_impot' => $a->type_impot,
-            'periode' => $a->periode,
-            'mois_manques' => $a->mois_manques,
-            'serie_precedente' => $a->serie_precedente,
+            'annee_fiscale' => $a->annee_fiscale,
+            'mois' => $a->mois,
+            'date_limite' => $a->date_limite?->toDateString(),
+            'periodes_manquees' => $a->periodes_manquees,
+            'periodes_declarees' => $a->periodes_declarees,
             'niveau' => $a->niveau,
             'motif' => $a->motif,
             'details' => $a->details,

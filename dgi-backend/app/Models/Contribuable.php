@@ -8,7 +8,29 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Contribuable extends Model
 {
-    protected $fillable = ['nif', 'nom', 'centre_id'];
+    public const ETAT_ACTIF = 1;
+    public const ETAT_BLOQUE = 2;
+    public const ETAT_CESSATION = 3;
+    public const ETAT_RADIE = 4;
+
+    public const ETATS = [
+        self::ETAT_ACTIF => 'Actif',
+        self::ETAT_BLOQUE => 'Bloqué',
+        self::ETAT_CESSATION => 'Cessation',
+        self::ETAT_RADIE => 'Radié',
+    ];
+
+    protected $fillable = ['nif', 'nom', 'centre_id', 'etat', 'date_cessation', 'date_radiation', 'date_blocage'];
+
+    protected function casts(): array
+    {
+        return [
+            'etat' => 'integer',
+            'date_cessation' => 'date',
+            'date_radiation' => 'date',
+            'date_blocage' => 'date',
+        ];
+    }
 
     public function centre(): BelongsTo
     {
@@ -18,6 +40,11 @@ class Contribuable extends Model
     public function declarations(): HasMany
     {
         return $this->hasMany(Declaration::class);
+    }
+
+    public function assujettissements(): HasMany
+    {
+        return $this->hasMany(Assujettissement::class);
     }
 
     public function alertes(): HasMany

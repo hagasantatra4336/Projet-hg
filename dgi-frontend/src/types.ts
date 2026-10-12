@@ -64,12 +64,20 @@ export const REGLE_LABELS: Record<Regle, string> = {
   baisse_ca: "Baisse du chiffre d'affaires",
 };
 
-/** Détails d'une alerte « baisse du chiffre d'affaires ». */
-export interface DetailsBaisseCa {
-  ca_precedent: number;
-  ca_actuel: number;
-  baisse_pct: number;
-  periode_precedente: string;
+/** Détails d'une alerte : défaillance (score R4...) ou baisse du chiffre d'affaires. */
+export interface DetailsAlerte {
+  // défaillance de dépôt
+  score_r4?: number;
+  periodicite?: "mensuelle" | "annuelle";
+  mois_manquants?: number[];
+  jours_retard?: number;
+  origine_obligation?: "assujettissement" | "historique";
+  // baisse du chiffre d'affaires
+  ca_precedent?: number;
+  ca_actuel?: number;
+  baisse_pct?: number;
+  reference?: "meme_mois_annee_precedente" | "annee_precedente";
+  annee_precedente?: number;
 }
 
 export const NIVEAU_LABELS: Record<NiveauRisque, string> = {
@@ -89,12 +97,14 @@ export interface Defaillance {
   contribuable: { id: number; nif: string; nom: string; centre: string | null };
   regle: Regle;
   type_impot: string;
-  periode: string; // première période manquante, "AAAA-MM"
-  mois_manques: number;
-  serie_precedente: number;
+  annee_fiscale: number; // exercice concerné
+  mois: number; // 0 = exercice entier (défaillance, déclaration annuelle), 1 à 12 = mois (baisse du CA de la TVA)
+  date_limite: string | null; // « AAAA-MM-JJ »
+  periodes_manquees: number; // périodes (mois ou années) non déposées
+  periodes_declarees: number;
   niveau: NiveauRisque;
   motif: string;
-  details: DetailsBaisseCa | null;
+  details: DetailsAlerte | null;
   statut: StatutAlerte;
   commentaire: string | null;
   traite_par: string | null;
@@ -108,28 +118,47 @@ export interface DefaillanceSummary {
   faible: number;
   traitees: number;
   regularisees: number;
-  derniere_analyse: { at: string; periode: string } | null;
+  derniere_analyse: { at: string; date: string } | null;
 }
 
 export type AlerteContribuable = Omit<Defaillance, "contribuable">;
 
-/** Fiche d'un contribuable : identité, alertes et historique des 12 derniers mois. */
+export const ETAT_LABELS: Record<number, string> = { 1: "Actif", 2: "Bloqué", 3: "Cessation", 4: "Radié" };
+
+export interface CelluleDeclaration {
+  annee: number;
+  mois: number; // 0 = déclaration annuelle
+  declare: boolean;
+  chiffre_affaires: number | null;
+  date_limite: string | null;
+  date_depot: string | null;
+  echue: boolean; // date limite dépassée
+  obligee: boolean; // le contribuable devait déclarer cette période
+}
+
+export interface LigneHistorique {
+  type_impot: string;
+  cellules: CelluleDeclaration[];
+}
+
+/** Fiche d'un contribuable : identité, état, obligations, alertes et historique des déclarations. */
 export interface ContribuableFiche {
-  contribuable: { id: number; nif: string; nom: string; centre: string | null };
-  stats: { nb_declarations: number; premiere_periode: string | null; derniere_periode: string | null };
+  contribuable: {
+    id: number;
+    nif: string;
+    nom: string;
+    centre: string | null;
+    etat: number | null;
+    etat_libelle: string | null;
+    date_cessation: string | null;
+    date_radiation: string | null;
+    date_blocage: string | null;
+  };
+  stats: { nb_declarations: number; premiere_annee: number | null; derniere_annee: number | null };
+  obligations: { type_impot: string; annee_fiscale: number; periodicite: string; actif: boolean; exonere: boolean }[];
   alertes: AlerteContribuable[];
   historique: {
-    periodes: string[];
-    impots: {
-      type_impot: string;
-      premiere_periode: string | null;
-      cellules: {
-        periode: string;
-        declare: boolean;
-        montant: number | null;
-        chiffre_affaires: number | null;
-        date_depot: string | null;
-      }[];
-    }[];
+    mensuel: { periodes: { annee: number; mois: number }[]; impots: LigneHistorique[] };
+    annuel: { annees: number[]; impots: LigneHistorique[] };
   };
 }

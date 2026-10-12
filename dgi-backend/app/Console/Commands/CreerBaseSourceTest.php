@@ -3,6 +3,8 @@
 namespace App\Console\Commands;
 
 use App\Models\Centre;
+use Database\Seeders\DeclarationDemoSeeder;
+use DateTimeImmutable;
 use Illuminate\Console\Command;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\DB;
@@ -10,22 +12,29 @@ use Illuminate\Support\Facades\Schema;
 use Throwable;
 
 /**
- * Crée (si besoin) la base PostgreSQL de TEST utilisée comme source, y crée la table et la remplit avec des
- * données SIMULÉES ET ANONYMISÉES (mêmes 6 scénarios que DeclarationDemoSeeder, avec chiffre d'affaires
- * et 3 baisses de 35 %, 55 % et 75 %, + quelques lignes invalides pour vérifier les rejets) :
- *   php artisan dgi:source-test-db            # crée la base + la table + les données (relançable)
+ * Crée (si besoin) la base PostgreSQL de TEST utilisée comme source, avec les MÊMES tables et colonnes que la vraie base
+ * de la DGI (exemples fournis) et des données SIMULÉES ET ANONYMISÉES :
+ *   declaration_ir, declaration_tva (une ligne par ligne du formulaire, CA = ligne 15 / 170, DATE_ECHEANCE, versions),
+ *   assujettissement (impôt, année, périodicité), info_contribuable (état, centre), centre_gestionnaire (identifiants).
+ * Mêmes scénarios que DeclarationDemoSeeder (défaillances, baisses de CA, cessation, radiation, exonération...)
+ * + quelques lignes invalides pour vérifier les rejets :
+ *   php artisan dgi:source-test-db            # crée la base + les tables + les données (relançable)
  *   php artisan dgi:source-test-db --reset    # supprime puis recrée la base de test
  *
  * Il faut au moins un centre dans l'application (Administration > Centres) : les contribuables de test y sont répartis.
  * Le compte PostgreSQL (SOURCE_DB_USERNAME) doit avoir le droit CREATEDB.
- * Par sécurité, la commande est refusée si le nom de la base ne contient pas « test » (sauf --force) :
- * elle SUPPRIME puis recrée la table source, il ne faut jamais la lancer sur une vraie base de déclarations.
+ * Par sécurité, si le nom de la base ne contient pas « test », la commande est refusée (sauf --force) dès que ces tables
+ * contiennent déjà des données, ou avec --reset : elle SUPPRIME puis recrée les tables source, il ne faut jamais la lancer
+ * sur une vraie base de déclarations. Une base vide (ex. « declarations_source » tout juste créée) est acceptée.
  */
 class CreerBaseSourceTest extends Command
 {
+    /** Tables créées (et recréées) dans la base source de test. */
+    private const TABLES = ['declaration_ir', 'declaration_tva', 'assujettissement', 'info_contribuable', 'centre_gestionnaire'];
+
     protected $signature = 'dgi:source-test-db {--reset : Supprime puis recrée la base} {--force : Autorise --reset sur une base dont le nom ne contient pas « test »}';
 
-    protected $description = 'Crée la base PostgreSQL de test (source) avec des déclarations simulées';
+    protected $description = 'Crée la base PostgreSQL de test (source) avec des déclarations IR/TVA simulées';
 
     public function handle(): int
     {
@@ -53,13 +62,23 @@ class CreerBaseSourceTest extends Command
             return self::FAILURE;
         }
 
-        // Sécurité : cette commande SUPPRIME puis recrée la table source (et la base avec --reset).
-        // Sur une base dont le nom ne contient pas « test » (ex. une vraie base de déclarations), on refuse sauf --force.
+        // Sécurité : cette commande SUPPRIME puis recrée les 5 tables source (et la base avec --reset).
+        // Sur une base dont le nom ne contient pas « test », on ne refuse que s'il y a quelque chose à détruire :
+        //   - --reset (suppression de toute la base) : toujours refusé sans --force ;
+        //   - sinon : refusé seulement si l'une de ces tables existe déjà et contient des lignes (vraies déclarations ?).
+        // Une base vide, ou sans ces tables, peut donc être remplie sans --force.
         if (! $this->option('force') && ! str_contains(strtolower($base), 'test')) {
-            $this->error("Refus : la base « {$base} » ne contient pas « test » dans son nom, et cette commande supprime puis recrée la table « " . config('dgi.source.table') . ' ».');
-            $this->line('Si c\'est bien une base de TEST, ajoutez --force. Sinon utilisez une base dédiée (ex. SOURCE_DB_DATABASE=dgi_source_test).');
+            $existantes = $this->option('reset') ? [] : $this->tablesAvecDonnees($connexion);
 
-            return self::FAILURE;
+            if ($this->option('reset') || $existantes !== []) {
+                $this->error("Refus : la base « {$base} » ne contient pas « test » dans son nom, et cette commande "
+                    . ($this->option('reset')
+                        ? 'supprimerait toute la base.'
+                        : 'supprime puis recrée des tables qui contiennent déjà des données : ' . implode(', ', $existantes) . '.'));
+                $this->line('Si c\'est bien une base de TEST, ajoutez --force. Sinon utilisez une base dédiée (ex. SOURCE_DB_DATABASE=dgi_source_test).');
+
+                return self::FAILURE;
+            }
         }
 
         try {
@@ -72,13 +91,36 @@ class CreerBaseSourceTest extends Command
             return self::FAILURE;
         }
 
-        $this->info("Base « {$base} » prête : {$total} ligne(s) dans « " . config('dgi.source.table') . ' ».');
-        if (empty(config('dgi.source.colonnes.chiffre_affaires'))) {
-            $this->warn("Pour importer le chiffre d'affaires, ajoutez dans le .env : DGI_SOURCE_COL_CHIFFRE_AFFAIRES=chiffre_affaires puis php artisan config:clear");
-        }
-        $this->line('Étapes suivantes :  php artisan dgi:importer-source --tester   puis   php artisan dgi:importer-source --analyser');
+        $this->info("Base « {$base} » prête : {$total} ligne(s) de déclaration dans les tables de test.");
+        $this->line('Étapes suivantes :');
+        $this->line('  php artisan dgi:importer-centres');
+        $this->line('  php artisan dgi:importer-source --tester');
+        $this->line('  php artisan dgi:importer-source --analyser');
 
         return self::SUCCESS;
+    }
+
+    /**
+     * Tables de test déjà présentes ET non vides dans la base source (base inexistante ou inaccessible : aucune).
+     *
+     * @return array<int, string>
+     */
+    private function tablesAvecDonnees(string $connexion): array
+    {
+        $trouvees = [];
+
+        try {
+            $schema = Schema::connection($connexion);
+            foreach (self::TABLES as $table) {
+                if ($schema->hasTable($table) && DB::connection($connexion)->table($table)->exists()) {
+                    $trouvees[] = $table;
+                }
+            }
+        } catch (Throwable) {
+            return []; // base absente : rien à détruire
+        }
+
+        return $trouvees;
     }
 
     /** @param array<string, mixed> $cfg */
@@ -114,89 +156,162 @@ class CreerBaseSourceTest extends Command
      */
     private function remplir(string $connexion, array $centres): int
     {
-        $table = (string) config('dgi.source.table');
-        $c = (array) config('dgi.source.colonnes');
+        $cx = DB::connection($connexion);
         $schema = Schema::connection($connexion);
+        foreach (self::TABLES as $t) {
+            $schema->dropIfExists($t);
+        }
 
-        // Colonne du chiffre d'affaires : celle configurée (DGI_SOURCE_COL_CHIFFRE_AFFAIRES) ou « chiffre_affaires » par défaut
-        $colCa = (string) (($c['chiffre_affaires'] ?? null) ?: 'chiffre_affaires');
-
-        $schema->dropIfExists($table);
-        $schema->create($table, function (Blueprint $t) use ($c, $colCa) {
-            $t->id();
-            $t->string($c['nif'], 30);
-            $t->string($c['nom']);
-            $t->string($c['centre']);
-            $t->string($c['type_impot'], 10);
-            $t->char($c['periode'], 7);
-            $t->decimal($c['montant'], 16, 2)->default(0);
-            $t->decimal($colCa, 16, 2)->nullable(); // chiffre d'affaires (règle « baisse du chiffre d'affaires »)
-            $t->date($c['date_depot'])->nullable();
-            $t->unique([$c['nif'], $c['type_impot'], $c['periode']]);
-            $t->index($c['periode']);
+        // Centres gestionnaires : identifiant officiel, libellé, abréviation (d'après les centres de l'application)
+        $schema->create('centre_gestionnaire', function (Blueprint $t) {
+            $t->string('CENTRE ID', 20);
+            $t->string('LIBELLE CENTRE');
+            $t->string('CENTRE ABREV');
         });
 
-        mt_srand(42); // résultats reproductibles
+        $codes = [];
+        $lignesCentres = [];
+        foreach (Centre::orderBy('id')->get() as $i => $c) {
+            $codes[$i] = $c->code ?: sprintf('21-9-%03d', $c->id);
+            $lignesCentres[] = ['CENTRE ID' => $codes[$i], 'LIBELLE CENTRE' => $c->nom, 'CENTRE ABREV' => $c->abreviation ?: $c->nom];
+        }
+        $cx->table('centre_gestionnaire')->insert($lignesCentres);
 
-        $ref = now()->startOfMonth()->subMonthNoOverflow(); // dernier mois attendu
-        // [mois manqués, mois déclarés avant] : régulier | 1/8 | 2/7 | 4/10 | 3/3 (pas « habituel ») | 1/12 (très régulier)
-        $scenarios = [[0, 12], [1, 8], [2, 7], [4, 10], [3, 3], [1, 12]];
-        // Baisse du chiffre d'affaires de la dernière déclaration (en %), par numéro de contribuable « régulier » :
-        // 35 % → faible, 55 % → moyen, 75 % → élevé ; 20 % et 0 % restent sous le seuil de 30 % (aucune alerte).
-        $baissesCa = [1 => 35, 7 => 55, 13 => 75, 19 => 20, 25 => 0];
-        $lignes = [];
+        // Contribuables
+        $schema->create('info_contribuable', function (Blueprint $t) {
+            $t->string('NIF', 10);
+            $t->smallInteger('ETAT');
+            $t->string('RAISON_SOCIALE');
+            $t->string('CENTRE_GEST')->nullable();
+            $t->date('DATE_CESSATION')->nullable();
+            $t->date('DATE_RADIE')->nullable();
+            $t->date('DATE_BLOQUE')->nullable();
+        });
 
-        $ligne = function (string $nif, string $nom, string $centre, string $impot, string $periode, $montant, ?string $depot, ?float $ca = null) use ($c, $colCa) {
-            return [
-                $c['nif'] => $nif, $c['nom'] => $nom, $c['centre'] => $centre, $c['type_impot'] => $impot,
-                $c['periode'] => $periode, $c['montant'] => $montant, $colCa => $ca, $c['date_depot'] => $depot,
+        // Assujettissements
+        $schema->create('assujettissement', function (Blueprint $t) {
+            $t->string('NIF', 10);
+            $t->string('REGIST_NAME')->nullable();
+            $t->smallInteger('ANNEE');
+            $t->date('DEBUT')->nullable();
+            $t->date('FIN')->nullable();
+            $t->smallInteger('PERIODICITE');
+            $t->date('DATE_ASSUJ')->nullable();
+            $t->string('ABREV', 10);
+            $t->smallInteger('ACTIF');
+            $t->smallInteger('EXONERE');
+        });
+
+        // Déclarations : une ligne par ligne du formulaire
+        $schema->create('declaration_ir', function (Blueprint $t) {
+            $t->string('CF')->nullable();
+            $t->string('FISCAL_NO', 10);
+            $t->string('RS')->nullable();
+            $t->integer('RECEPTION_DATE')->nullable();
+            $t->integer('TAX_PERIOD_NO')->nullable();
+            $t->smallInteger('MOIS')->nullable();
+            $t->smallInteger('ANNEE');
+            $t->decimal('MONTANT_SOUMIS', 18, 2)->nullable();
+            $t->decimal('MONTANT_LIQUIDE', 18, 2)->nullable();
+            $t->smallInteger('VERSION_NO');
+            $t->smallInteger('IRD_LINE_NO');
+            $t->string('LABEL_2')->nullable();
+            $t->date('DATE_RECEPTION')->nullable();
+            $t->date('DATE_ECHEANCE')->nullable();
+        });
+        $schema->create('declaration_tva', function (Blueprint $t) {
+            $t->string('CENTRE')->nullable();
+            $t->string('FISCAL_NO', 10);
+            $t->string('RS')->nullable();
+            $t->integer('RECEPTION_DATE')->nullable();
+            $t->integer('TAX_PERIOD_NO')->nullable();
+            $t->smallInteger('MOIS');
+            $t->smallInteger('ANNEE');
+            $t->decimal('MONTANT_SOUMIS', 18, 2)->nullable();
+            $t->decimal('MONTANT_LIQUIDE', 18, 2)->nullable();
+            $t->smallInteger('IRD_LINE_NO');
+            $t->string('LABEL_2')->nullable();
+            $t->date('DATE_RECEPTION')->nullable();
+            $t->date('DATE_ECHEANCE')->nullable();
+        });
+
+        // Données simulées (mêmes scénarios que le seeder)
+        $jeu = DeclarationDemoSeeder::jeu('91000', 'Contribuable source anonyme ', new DateTimeImmutable(now()->toDateString()));
+        // Répartition mélangée (et non $i % n) : sinon, avec 2 centres, tous les scénarios identiques tombent dans le même centre
+        $centreDe = fn (int $i) => $centres[($i + intdiv($i, 12)) % count($centres)];
+
+        $contribuables = [];
+        $nomDe = [];
+        $centreNif = [];
+        foreach ($jeu['contribuables'] as $i => $c) {
+            $nomDe[$c['nif']] = $c['nom'];
+            $centreNif[$c['nif']] = $centreDe($i);
+            $contribuables[] = [
+                'NIF' => $c['nif'], 'ETAT' => $c['etat'], 'RAISON_SOCIALE' => $c['nom'], 'CENTRE_GEST' => $centreDe($i),
+                'DATE_CESSATION' => $c['date_cessation'], 'DATE_RADIE' => $c['date_radiation'], 'DATE_BLOQUE' => $c['date_blocage'],
             ];
-        };
+        }
+        foreach (array_chunk($contribuables, 500) as $lot) {
+            $cx->table('info_contribuable')->insert($lot);
+        }
 
-        for ($i = 1; $i <= 30; $i++) {
-            $nif = sprintf('NIF-SRC-%03d', $i);
-            $nom = sprintf('Contribuable source anonyme %03d', $i);
-            $centre = $centres[($i - 1) % count($centres)];
-            [$manques, $serie] = $scenarios[($i - 1) % 6];
-            $base = mt_rand(2_000_000, 40_000_000);
+        $assujs = array_map(fn ($a) => [
+            'NIF' => $a['nif'], 'REGIST_NAME' => $nomDe[$a['nif']], 'ANNEE' => $a['annee_fiscale'], 'DEBUT' => $a['date_debut'], 'FIN' => $a['date_fin'],
+            'PERIODICITE' => $a['periodicite'], 'DATE_ASSUJ' => $a['date_debut'], 'ABREV' => $a['type_impot'],
+            'ACTIF' => $a['actif'] ? 1 : 0, 'EXONERE' => $a['exonere'] ? 1 : 0,
+        ], $jeu['assujettissements']);
+        foreach (array_chunk($assujs, 500) as $lot) {
+            $cx->table('assujettissement')->insert($lot);
+        }
 
-            // Chiffre d'affaires mensuel stable (± 8 %), du mois le plus récent ($manques) au plus ancien
-            $cas = [];
-            for ($k = $manques; $k < $manques + $serie; $k++) {
-                $cas[$k] = round($base * 5 * mt_rand(92, 108) / 100, 2);
-            }
-            if (($baissesCa[$i] ?? 0) > 0) {
-                // la dernière déclaration baisse de X % par rapport à la précédente
-                $cas[$manques] = round($cas[$manques + 1] * (1 - $baissesCa[$i] / 100), 2);
-            }
+        // Lignes de formulaire : CA (IR ligne 15, TVA ligne 170) + quelques autres lignes
+        $lignesIr = [];
+        $lignesTva = [];
+        $periode = 1000;
+        foreach ($jeu['declarations'] as $d) {
+            $periode++;
+            $commun = [
+                'FISCAL_NO' => $d['nif'], 'RS' => $nomDe[$d['nif']], 'RECEPTION_DATE' => $d['annee_fiscale'], 'TAX_PERIOD_NO' => $periode,
+                'ANNEE' => $d['annee_fiscale'], 'DATE_RECEPTION' => $d['date_depot'], 'DATE_ECHEANCE' => $d['date_limite'],
+            ];
+            $ca = $d['chiffre_affaires'];
 
-            for ($k = $manques; $k < $manques + $serie; $k++) {
-                $mois = $ref->copy()->subMonthsNoOverflow($k);
-                $lignes[] = $ligne($nif, $nom, $centre, 'TVA', $mois->format('Y-m'), round($cas[$k] * 0.2, 2),
-                    $mois->copy()->addMonthNoOverflow()->day(mt_rand(5, 15))->toDateString(), $cas[$k]);
-            }
-
-            if ($i % 3 === 0) {
-                for ($k = 0; $k < 12; $k++) {
-                    $mois = $ref->copy()->subMonthsNoOverflow($k);
-                    $lignes[] = $ligne($nif, $nom, $centre, 'IRSA', $mois->format('Y-m'), round(($base / 4) * mt_rand(85, 115) / 100, 2),
-                        $mois->copy()->addMonthNoOverflow()->day(mt_rand(5, 15))->toDateString());
+            if ($d['type_impot'] === 'IR') {
+                // Une déclaration rectificative (version 1, CA différent) puis la version définitive (version 2) pour les exercices pairs
+                $versions = $d['annee_fiscale'] % 2 === 0 ? [[1, round($ca * 0.9, 2)], [2, $ca]] : [[2, $ca]];
+                foreach ($versions as [$version, $caVersion]) {
+                    foreach ([[15, 'Chiffre d\'affaires total (L12 + L13)', $caVersion], [20, 'Résultat comptable avant impôt', round($caVersion * 0.1, 2)], [115, 'IR brut', round($caVersion * 0.02, 2)], [190, 'IR net à payer', round($caVersion * 0.02, 2)]] as [$ligne, $libelle, $montant]) {
+                        $lignesIr[] = $commun + ['CF' => $centreNif[$d['nif']], 'MOIS' => null, 'MONTANT_SOUMIS' => $ligne === 190 ? null : $montant, 'MONTANT_LIQUIDE' => $montant,
+                            'VERSION_NO' => $version, 'IRD_LINE_NO' => $ligne, 'LABEL_2' => $libelle];
+                    }
+                }
+            } else {
+                foreach ([[150, 'Chiffre d\'affaires taxable', $ca], [160, 'Chiffre d\'affaires exonéré', 0], [170, 'Chiffre d\'affaires total (lignes 150 + 160)', $ca], [400, 'Crédit de TVA', 0]] as [$ligne, $libelle, $montant]) {
+                    $lignesTva[] = $commun + ['CENTRE' => $centreNif[$d['nif']], 'MOIS' => $d['mois'], 'MONTANT_SOUMIS' => $montant, 'MONTANT_LIQUIDE' => $montant,
+                        'IRD_LINE_NO' => $ligne, 'LABEL_2' => $libelle];
                 }
             }
         }
 
         // Lignes volontairement invalides : elles doivent être REJETÉES à l'import (et signalées), sans bloquer le reste.
-        $m = $ref->format('Y-m');
-        $lignes[] = $ligne('NIF-SRC-900', 'Rejet : centre inconnu', 'Centre qui n\'existe pas', 'TVA', $m, 1000, null);
-        $lignes[] = $ligne('NIF-SRC-901', 'Rejet : impôt inconnu', $centres[0], 'XYZ', $m, 1000, null);
-        $lignes[] = $ligne('NIF-SRC-902', 'Rejet : période invalide', $centres[0], 'TVA', '2026-13', 1000, null);
-        $lignes[] = $ligne('NIF-SRC-903', 'Rejet : montant négatif', $centres[0], 'TVA', $m, -5, null);
+        $annee = (int) now()->year;
+        $invalide = fn (string $nif, int $an, int $mois, float $ca) => [
+            'CENTRE' => null, 'FISCAL_NO' => $nif, 'RS' => 'Rejet', 'RECEPTION_DATE' => $an, 'TAX_PERIOD_NO' => 9999, 'MOIS' => $mois, 'ANNEE' => $an,
+            'MONTANT_SOUMIS' => $ca, 'MONTANT_LIQUIDE' => $ca, 'IRD_LINE_NO' => 170, 'LABEL_2' => 'CA', 'DATE_RECEPTION' => null, 'DATE_ECHEANCE' => now()->subDays(30)->toDateString(),
+        ];
+        $lignesTva[] = $invalide('9100099901', 1850, 3, 1000);                 // année fiscale invalide
+        $lignesTva[] = $invalide('9100099902', $annee - 1, 13, 1000);          // mois invalide
+        $lignesTva[] = $invalide('9100099903', $annee - 1, 3, -5);             // chiffre d'affaires négatif
+        // Une déclaration valide d'un contribuable absent de la table des contribuables : créé sans centre (avertissement)
+        $lignesTva[] = ['DATE_ECHEANCE' => now()->subMonths(2)->toDateString()] + $invalide('9100099904', $annee - 1, 6, 5000000);
 
-        $cx = DB::connection($connexion);
-        foreach (array_chunk($lignes, 500) as $lot) {
-            $cx->table($table)->insert($lot);
+        foreach (array_chunk($lignesIr, 500) as $lot) {
+            $cx->table('declaration_ir')->insert($lot);
+        }
+        foreach (array_chunk($lignesTva, 500) as $lot) {
+            $cx->table('declaration_tva')->insert($lot);
         }
 
-        return count($lignes);
+        return count($lignesIr) + count($lignesTva);
     }
 }

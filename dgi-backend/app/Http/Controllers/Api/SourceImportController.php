@@ -5,11 +5,11 @@ namespace App\Http\Controllers\Api;
 use App\Enums\Role;
 use App\Http\Controllers\Controller;
 use App\Services\AnomalieAnalyseur;
-use App\Services\DefaillanceDetector;
 use App\Services\SourceDeclarationImporter;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
+use InvalidArgumentException;
 use Throwable;
 
 /**
@@ -32,8 +32,9 @@ class SourceImportController extends Controller
     public function store(Request $request, SourceDeclarationImporter $importer): JsonResponse
     {
         $data = $request->validate([
-            'depuis' => ['nullable', 'regex:' . SourceDeclarationImporter::PERIODE_REGEX],
-            'jusqua' => ['nullable', 'regex:' . SourceDeclarationImporter::PERIODE_REGEX],
+            // Années fiscales « AAAA » (incluses) ; sans valeur : tout l'historique
+            'depuis' => ['nullable', 'regex:' . SourceDeclarationImporter::ANNEE_REGEX],
+            'jusqua' => ['nullable', 'regex:' . SourceDeclarationImporter::ANNEE_REGEX],
             'analyser' => ['sometimes', 'boolean'],
         ]);
 
@@ -47,6 +48,9 @@ class SourceImportController extends Controller
 
         try {
             $stats = $importer->importer($data['depuis'] ?? null, $data['jusqua'] ?? null, $centreId);
+        } catch (InvalidArgumentException $e) {
+            // Configuration incomplète (ex. import limité à un centre sans colonne « centre ») : message sans secret, utile à l'utilisateur
+            return response()->json(['message' => $e->getMessage()], 422);
         } catch (Throwable $e) {
             return $this->echecSource($e);
         }
@@ -54,16 +58,15 @@ class SourceImportController extends Controller
         $analyse = null;
         if ($request->boolean('analyser')) {
             // Toutes les règles : défaillance de déclaration + baisse du chiffre d'affaires
-            $analyse = app(AnomalieAnalyseur::class)->analyser($data['jusqua'] ?? DefaillanceDetector::periodePrecedente(), $centreId);
-            // Compatibilité : nombre total d'éléments analysés (clé « analyses » d'avant)
-            $analyse['analyses'] = $analyse['defaillance']['analyses'] + $analyse['baisse_ca']['analyses'];
+            $analyse = app(AnomalieAnalyseur::class)->analyser(AnomalieAnalyseur::aujourdhui(), $centreId);
         }
 
         return response()->json($stats + ['analyse' => $analyse, 'message' => sprintf(
-            '%d ligne(s) lue(s) : %d importée(s), %d rejetée(s).%s',
+            '%d déclaration(s) lue(s) : %d importée(s), %d rejetée(s)%s.%s',
             $stats['lues'],
             $stats['importees'],
             $stats['rejetees'],
+            $stats['ignorees'] > 0 ? sprintf(', %d ignorée(s) (autre centre)', $stats['ignorees']) : '',
             $analyse ? sprintf(
                 " Analyse : %d nouvelle(s) alerte(s) (%d défaillance(s), %d baisse(s) du chiffre d'affaires), %d mise(s) à jour, %d régularisée(s).",
                 $analyse['crees'],

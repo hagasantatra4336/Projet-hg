@@ -7,7 +7,8 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Centre extends Model
 {
-    protected $fillable = ['nom', 'adresse'];
+    // code : identifiant officiel du centre (ex. « 21-1-702 ») ; abreviation : ex. « CF TANA I »
+    protected $fillable = ['nom', 'adresse', 'code', 'abreviation'];
 
     public function users(): HasMany
     {

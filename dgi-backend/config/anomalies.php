@@ -3,30 +3,37 @@
 /**
  * Règles de détection d'anomalies (modifiables sans toucher au code : EXNF-004).
  * Chaque valeur peut être changée ici ou dans le .env, puis : php artisan config:clear
+ *
+ * Les déclarations sont MENSUELLES (TVA, IRSA) ou ANNUELLES (IR, IS). Une déclaration = (contribuable, impôt,
+ * année fiscale, mois ; mois = 0 si annuelle), avec un chiffre d'affaires (CA) et une date limite.
  */
 return [
+    // Défaillance de déclaration = critère R4 de la DGI « Défaut de dépôt de déclaration »
     'defaillance' => [
-        // Impôts analysés (déclarations mensuelles)
+        // Impôts analysés
         'impots' => array_values(array_filter(array_map('trim', explode(',', (string) env('ANOMALIES_IMPOTS', 'TVA,IR,IS,IRSA'))))),
 
-        // Un contribuable est "habituellement déclarant" s'il a déclaré au moins ce nombre de mois consécutifs
-        // juste avant la rupture (EXF-004 : 6 mois).
-        'serie_minimale' => (int) env('ANOMALIES_DEFAILLANCE_SERIE_MIN', 6),
+        // Périodicité supposée quand le contribuable n'a pas d'assujettissement connu pour cet impôt
+        // (l'obligation est alors déduite de sa première déclaration)
+        'periodicite_defaut' => ['TVA' => 'mensuelle', 'IRSA' => 'mensuelle', 'IR' => 'annuelle', 'IS' => 'annuelle'],
 
-        // Niveau de risque selon le nombre de mois consécutifs manqués
-        //   < seuil_moyen  → faible ;  >= seuil_moyen → moyen ;  >= seuil_eleve → élevé
-        'seuil_moyen' => (int) env('ANOMALIES_DEFAILLANCE_SEUIL_MOYEN', 2),
-        'seuil_eleve' => (int) env('ANOMALIES_DEFAILLANCE_SEUIL_ELEVE', 3),
+        // Exercices analysés : année en cours + N précédentes (1 → année en cours et année précédente)
+        'fenetre_exercices' => (int) env('ANOMALIES_DEFAILLANCE_FENETRE_EXERCICES', 1),
 
-        // Gravité aggravée : si le contribuable était très régulier (au moins ce nombre de mois consécutifs),
-        // le niveau monte d'un cran (la rupture est plus suspecte).
-        'serie_longue' => (int) env('ANOMALIES_DEFAILLANCE_SERIE_LONGUE', 12),
+        // Barème R4 (score sur 5). Déclaration annuelle non déposée : 5 points.
+        'score_annuel' => 5,
+        // Déclarations mensuelles non déposées dans l'exercice : [nombre minimum, nombre maximum, score]
+        'bareme_mensuel' => [[1, 4, 2], [5, 9, 3], [10, 12, 4]],
+
+        // Niveau de risque d'après le score R4 : >= score_eleve → élevé (rouge) ; >= score_moyen → moyen (orange) ; sinon faible (vert)
+        'score_moyen' => (int) env('ANOMALIES_DEFAILLANCE_SCORE_MOYEN', 4),
+        'score_eleve' => (int) env('ANOMALIES_DEFAILLANCE_SCORE_ELEVE', 5),
     ],
 
-    // Baisse du chiffre d'affaires déclaré par rapport à la déclaration PRÉCÉDENTE du même impôt
+    // Baisse du chiffre d'affaires déclaré : TVA = même mois de l'année précédente ; IR / IS = année précédente
     'baisse_ca' => [
         // Impôts dont la déclaration comporte un chiffre d'affaires
-        'impots' => array_values(array_filter(array_map('trim', explode(',', (string) env('ANOMALIES_CA_IMPOTS', 'TVA,IR,IS'))))),
+        'impots' => array_values(array_filter(array_map('trim', explode(',', (string) env('ANOMALIES_CA_IMPOTS', 'TVA,IR'))))),
 
         // Seuil de déclenchement : baisse d'au moins X % (niveau « faible »)
         'seuil_pourcentage' => (float) env('ANOMALIES_CA_SEUIL_BAISSE', 30),
@@ -35,8 +42,7 @@ return [
         'seuil_moyen' => (float) env('ANOMALIES_CA_SEUIL_MOYEN', 50),
         'seuil_eleve' => (float) env('ANOMALIES_CA_SEUIL_ELEVE', 70),
 
-        // Nombre de derniers mois (jusqu'à la période de référence) dont les déclarations sont analysées :
-        // permet de détecter aussi les déclarations déposées en retard ou corrigées.
-        'fenetre_mois' => (int) env('ANOMALIES_CA_FENETRE_MOIS', 3),
+        // Exercices analysés : année en cours + N précédentes
+        'fenetre_annees' => (int) env('ANOMALIES_CA_FENETRE_ANNEES', 1),
     ],
 ];

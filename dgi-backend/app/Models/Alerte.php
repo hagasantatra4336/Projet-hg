@@ -16,15 +16,17 @@ class Alerte extends Model
 
     public const A_TRAITER = 'a_traiter';
     public const TRAITEE = 'traitee';
-    public const REGULARISEE = 'regularisee'; // le contribuable a déposé depuis (statut automatique)
+    public const REGULARISEE = 'regularisee'; // l'anomalie n'est plus constatée (statut automatique)
 
     protected $fillable = [
         'contribuable_id',
         'regle',
         'type_impot',
-        'periode',
-        'mois_manques',
-        'serie_precedente',
+        'annee_fiscale',
+        'mois',
+        'date_limite',
+        'periodes_manquees',
+        'periodes_declarees',
         'niveau',
         'motif',
         'details',
@@ -37,8 +39,11 @@ class Alerte extends Model
     protected function casts(): array
     {
         return [
-            'mois_manques' => 'integer',
-            'serie_precedente' => 'integer',
+            'annee_fiscale' => 'integer',
+            'mois' => 'integer',
+            'periodes_manquees' => 'integer',
+            'periodes_declarees' => 'integer',
+            'date_limite' => 'date',
             'details' => 'array',
             'traite_le' => 'datetime',
         ];

@@ -5,23 +5,67 @@ return [
     // À définir dans .env :  FRONTEND_URL=http://localhost:5173   puis : php artisan config:clear
     'frontend_url' => env('FRONTEND_URL', 'http://localhost:5173'),
 
-    // Source PostgreSQL des déclarations (voir config/database.php, connexion « source »).
-    // « colonnes » : champ attendu par l'application => nom de la colonne dans la table source.
-    // Si votre base réelle a d'autres noms, changez-les ici ou dans le .env, puis : php artisan config:clear
+    // Base PostgreSQL SOURCE (voir config/database.php, connexion « source »). Elle n'est jamais modifiée (SELECT uniquement).
+    // Les noms de colonnes ci-dessous sont ceux des exemples fournis (déclarations IR et TVA, assujettissement,
+    // centres gestionnaires, info contribuable). La casse n'a pas d'importance (FISCAL_NO ou fiscal_no).
+    // Si votre base réelle a d'autres noms, changez-les ici, puis : php artisan config:clear
     'source' => [
         'connection' => env('DGI_SOURCE_CONNECTION', 'source'),
-        'table' => env('DGI_SOURCE_TABLE', 'declarations_source'),
-        'colonnes' => [
-            'nif' => env('DGI_SOURCE_COL_NIF', 'nif'),
-            'nom' => env('DGI_SOURCE_COL_NOM', 'nom'),
-            'centre' => env('DGI_SOURCE_COL_CENTRE', 'centre'),
-            'type_impot' => env('DGI_SOURCE_COL_TYPE_IMPOT', 'type_impot'),
-            'periode' => env('DGI_SOURCE_COL_PERIODE', 'periode'),   // texte « AAAA-MM »
-            'montant' => env('DGI_SOURCE_COL_MONTANT', 'montant'),
-            'date_depot' => env('DGI_SOURCE_COL_DATE_DEPOT', 'date_depot'),
-            // Facultatif : colonne du chiffre d'affaires dans la table source (règle « baisse du chiffre d'affaires »).
-            // Sans valeur (défaut), le CA n'est pas importé. Ex. dans .env : DGI_SOURCE_COL_CHIFFRE_AFFAIRES=chiffre_affaires
-            'chiffre_affaires' => env('DGI_SOURCE_COL_CHIFFRE_AFFAIRES'),
+
+        // Déclarations : UNE TABLE PAR IMPÔT, au format « une ligne par ligne du formulaire » (IRD_LINE_NO).
+        //   ligne_ca : numéro de la ligne qui contient le chiffre d'affaires (IR : ligne 15 ; TVA : ligne 170)
+        //   mois     : colonne du mois (vide ou 0 pour une déclaration annuelle)
+        //   version  : colonne de version (déclarations rectificatives) : seule la dernière version est retenue ; null si absente
+        // Pour ajouter l'IS ou l'IRSA, copiez un bloc ci-dessous avec le nom de leur table et la ligne de leur CA.
+        'declarations' => [
+            'IR' => [
+                'table' => env('DGI_SOURCE_TABLE_IR', 'declaration_ir'),
+                'ligne_ca' => (int) env('DGI_SOURCE_LIGNE_CA_IR', 15),
+                'colonnes' => [
+                    'nif' => 'FISCAL_NO', 'annee' => 'ANNEE', 'mois' => 'MOIS', 'ligne' => 'IRD_LINE_NO',
+                    'montant' => 'MONTANT_SOUMIS', 'montant_liquide' => 'MONTANT_LIQUIDE',
+                    'date_limite' => 'DATE_ECHEANCE', 'date_depot' => 'DATE_RECEPTION', 'version' => 'VERSION_NO',
+                ],
+            ],
+            'TVA' => [
+                'table' => env('DGI_SOURCE_TABLE_TVA', 'declaration_tva'),
+                'ligne_ca' => (int) env('DGI_SOURCE_LIGNE_CA_TVA', 170),
+                'colonnes' => [
+                    'nif' => 'FISCAL_NO', 'annee' => 'ANNEE', 'mois' => 'MOIS', 'ligne' => 'IRD_LINE_NO',
+                    'montant' => 'MONTANT_SOUMIS', 'montant_liquide' => 'MONTANT_LIQUIDE',
+                    'date_limite' => 'DATE_ECHEANCE', 'date_depot' => 'DATE_RECEPTION', 'version' => null,
+                ],
+            ],
         ],
+
+        // Obligations déclaratives : un impôt, une année, une périodicité (1 mensuel, 5 annuel...), actif / exonéré
+        'assujettissements' => [
+            'table' => env('DGI_SOURCE_TABLE_ASSUJETTISSEMENT', 'assujettissement'),
+            'colonnes' => [
+                'nif' => 'NIF', 'annee' => 'ANNEE', 'debut' => 'DEBUT', 'fin' => 'FIN', 'periodicite' => 'PERIODICITE',
+                'impot' => 'ABREV', 'actif' => 'ACTIF', 'exonere' => 'EXONERE',
+            ],
+        ],
+
+        // Contribuables : nom, centre gestionnaire, état et dates de fin d'activité.
+        // centre_code (facultatif) : colonne contenant l'identifiant du centre (« 21-1-702 »), plus fiable que le nom.
+        'contribuables' => [
+            'table' => env('DGI_SOURCE_TABLE_CONTRIBUABLES', 'info_contribuable'),
+            'colonnes' => [
+                'nif' => 'NIF', 'nom' => 'RAISON_SOCIALE', 'centre' => 'CENTRE_GEST',
+                'centre_code' => env('DGI_SOURCE_CONTRIBUABLES_COL_CENTRE_CODE'),
+                'etat' => 'ETAT', 'date_cessation' => 'DATE_CESSATION', 'date_radiation' => 'DATE_RADIE', 'date_blocage' => 'DATE_BLOQUE',
+            ],
+        ],
+
+        // Centres gestionnaires officiels (identifiant, libellé, abréviation) : commande php artisan dgi:importer-centres
+        'centres' => [
+            'table' => env('DGI_SOURCE_TABLE_CENTRES', 'centre_gestionnaire'),
+            'colonnes' => ['code' => 'CENTRE ID', 'libelle' => 'LIBELLE CENTRE', 'abreviation' => 'CENTRE ABREV'],
+        ],
+
+        // Noms de centres ambigus de la base source => code ou nom du centre de l'application. Exemple :
+        //   'ANTANANARIVO' => '21-1-702', 'MAHAJANGA' => 'CENTRE FISCAL MAHAJANGA A'
+        'alias_centres' => [],
     ],
 ];

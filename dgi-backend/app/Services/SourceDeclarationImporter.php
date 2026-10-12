@@ -2,28 +2,36 @@
 
 namespace App\Services;
 
+use App\Models\Assujettissement;
 use App\Models\Centre;
 use App\Models\Contribuable;
 use App\Models\Declaration;
+use App\Support\Nif;
+use DateTime;
 use Illuminate\Database\ConnectionInterface;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use InvalidArgumentException;
 
 /**
- * Récupère les déclarations depuis une base PostgreSQL SOURCE (connexion « source », voir config/dgi.php)
- * et les recopie dans les tables de l'application (contribuables + declarations), prêtes pour l'analyse
- * (AnomalieAnalyseur : défaillance de déclaration + baisse du chiffre d'affaires). Mêmes règles que l'import CSV (EXF-001) :
- *   - type_impot ∈ config('anomalies.defaillance.impots') ; periode « AAAA-MM » ; montant >= 0 ;
- *   - le centre doit exister (comparaison sans tenir compte de la casse) ;
- *   - une déclaration déjà présente (même contribuable + impôt + période) est mise à jour (pas de doublon) ;
- *   - le chiffre d'affaires est FACULTATIF : il n'est lu que si la colonne est déclarée dans
- *     config('dgi.source.colonnes.chiffre_affaires') ; sinon le CA déjà enregistré n'est pas touché.
+ * Récupère les données depuis la base PostgreSQL SOURCE (connexion « source », voir config/dgi.php) et les recopie
+ * dans les tables de l'application, prêtes pour l'analyse (AnomalieAnalyseur).
+ *
+ *   1. contribuables   : NIF, nom, centre gestionnaire, état (actif, bloqué, cessation, radié) et dates ;
+ *   2. assujettissements : obligations déclaratives (impôt, année, périodicité, actif, exonéré) ;
+ *   3. déclarations   : une table source PAR IMPÔT, en « une ligne par ligne du formulaire ». Pour chaque déclaration
+ *                       (NIF, année fiscale, mois) on lit le chiffre d'affaires (ligne 15 de l'IR, ligne 170 de la TVA),
+ *                       la date limite (DATE_ECHEANCE) et la date de dépôt (DATE_RECEPTION), dernière version seulement.
+ *
+ * Règles : NIF sur 10 chiffres ; type d'impôt connu ; année fiscale à 4 chiffres ; montants >= 0 ; une déclaration déjà
+ * présente (même contribuable + impôt + année + mois) est mise à jour. Un centre introuvable ou ambigu n'empêche pas
+ * l'import : le contribuable est créé sans centre (avertissement).
  *
  * La base source n'est JAMAIS modifiée : uniquement des SELECT.
  */
 class SourceDeclarationImporter
 {
-    public const PERIODE_REGEX = '/^\d{4}-(0[1-9]|1[0-2])$/';
+    public const ANNEE_REGEX = '/^\d{4}$/';
 
     private const MAX_ERRORS = 15;
     private const LOT = 500;
@@ -34,226 +42,589 @@ class SourceDeclarationImporter
     }
 
     /**
-     * Vérifie que la base source répond et que la table attendue est lisible.
+     * Vérifie que la base source répond et que les tables attendues sont lisibles.
      *
-     * @return array{base: string, version: string, table: string, lignes: int}
+     * @return array{base: string, version: string, table: string, lignes: int, tables: array<int, array{table: string, existe: bool, lignes: int|null}>}
      */
     public function tester(): array
     {
         $cx = $this->connexion();
-        $table = (string) config('dgi.source.table');
+        $noms = [];
+
+        foreach ((array) config('dgi.source.declarations') as $def) {
+            $noms[] = (string) $def['table'];
+        }
+        foreach (['assujettissements', 'contribuables', 'centres'] as $cle) {
+            $noms[] = (string) config("dgi.source.{$cle}.table");
+        }
+
+        $tables = [];
+        $total = 0;
+        foreach ($noms as $i => $nom) {
+            $existe = $this->tableExiste($nom);
+            $lignes = $existe ? (int) $cx->table($nom)->count() : null;
+            $tables[] = ['table' => $nom, 'existe' => $existe, 'lignes' => $lignes];
+            if ($i < count((array) config('dgi.source.declarations'))) {
+                $total += (int) $lignes; // lignes des tables de déclarations
+            }
+        }
 
         return [
             'base' => (string) $cx->getDatabaseName(),
             'version' => $cx->getDriverName() === 'pgsql' ? (string) ($cx->selectOne('select version() as v')->v ?? '') : '',
-            'table' => $table,
-            'lignes' => (int) $cx->table($table)->count(),
+            'table' => implode(', ', $noms),
+            'lignes' => $total,
+            'tables' => $tables,
         ];
     }
 
     /**
-     * @param string|null $depuis    première période à lire « AAAA-MM » (incluse), sinon tout l'historique
-     * @param string|null $jusqua    dernière période à lire « AAAA-MM » (incluse), sinon jusqu'à la fin
-     * @param int|null    $centreId  limiter à un centre (admin) ; null = tous les centres
+     * Importe les centres gestionnaires officiels (code, libellé, abréviation) dans la table des centres.
+     * Un centre existant (même code, ou même nom que le libellé ou l'abréviation) est complété, sinon créé.
      *
-     * @return array{lues: int, importees: int, rejetees: int, contribuables_crees: int, erreurs: array<int, string>}
+     * @return array{lues: int, crees: int, mis_a_jour: int}
      */
-    public function importer(?string $depuis = null, ?string $jusqua = null, ?int $centreId = null): array
+    public function importerCentres(): array
     {
-        foreach (['depuis' => $depuis, 'jusqua' => $jusqua] as $nom => $valeur) {
-            if ($valeur !== null && ! preg_match(self::PERIODE_REGEX, $valeur)) {
-                throw new InvalidArgumentException("Période « {$nom} » invalide : utilisez le format AAAA-MM.");
+        $cfg = (array) config('dgi.source.centres');
+        $table = (string) $cfg['table'];
+
+        if (! $this->tableExiste($table)) {
+            throw new InvalidArgumentException("Table des centres « {$table} » introuvable dans la base source (DGI_SOURCE_TABLE_CENTRES).");
+        }
+
+        $col = $this->colonnes($table, (array) $cfg['colonnes'], ['code', 'libelle']);
+        $select = [];
+        foreach (['code', 'libelle', 'abreviation'] as $champ) {
+            if ($col[$champ] !== null) {
+                $select[] = $col[$champ] . ' as ' . $champ;
             }
         }
 
-        $col = (array) config('dgi.source.colonnes');
-        $impots = (array) config('anomalies.defaillance.impots');
+        $stats = ['lues' => 0, 'crees' => 0, 'mis_a_jour' => 0];
 
-        $query = $this->connexion()->table((string) config('dgi.source.table'));
-
-        // Chiffre d'affaires : colonne facultative de la base source (règle « baisse du chiffre d'affaires »)
-        $avecCa = ! empty($col['chiffre_affaires']);
-        $champs = ['nif', 'nom', 'centre', 'type_impot', 'periode', 'montant', 'date_depot'];
-        if ($avecCa) {
-            $champs[] = 'chiffre_affaires';
+        $parCode = [];
+        $parNom = [];
+        foreach (Centre::all() as $c) {
+            if ($c->code) {
+                $parCode[CentreResolver::normaliser($c->code)] = $c;
+            }
+            $parNom[CentreResolver::normaliser($c->nom)] = $c;
         }
 
-        // « colonne as champ » : les lignes lues portent toujours les mêmes noms de champs, quel que soit le schéma source.
-        $query->select(array_map(fn (string $champ) => $col[$champ] . ' as ' . $champ, $champs));
+        DB::transaction(function () use ($table, $select, &$stats, &$parCode, &$parNom) {
+            foreach ($this->connexion()->table($table)->select($select)->cursor() as $row) {
+                $code = trim((string) ($row->code ?? ''));
+                $libelle = trim((string) ($row->libelle ?? ''));
+                $abrev = trim((string) ($row->abreviation ?? ''));
 
-        if ($depuis !== null) {
-            $query->where($col['periode'], '>=', $depuis);
-        }
-        if ($jusqua !== null) {
-            $query->where($col['periode'], '<=', $jusqua);
-        }
-        if ($centreId !== null) {
-            $centre = Centre::find($centreId);
-            // Aucun centre correspondant : on ne lit rien plutôt que de tout lire.
-            $query->whereRaw('lower(' . $query->getGrammar()->wrap($col['centre']) . ') = lower(?)', [$centre?->nom ?? '']);
-        }
-
-        $query->orderBy($col['periode'])->orderBy($col['nif'])->orderBy($col['type_impot']);
-
-        $centres = [];
-        foreach (Centre::pluck('id', 'nom') as $nom => $id) {
-            $centres[mb_strtolower((string) $nom)] = (int) $id;
-        }
-
-        $stats = ['lues' => 0, 'importees' => 0, 'rejetees' => 0, 'contribuables_crees' => 0, 'erreurs' => []];
-
-        DB::transaction(function () use ($query, $impots, $centres, $avecCa, &$stats) {
-            $ids = [];  // NIF => id du contribuable
-            $lot = [];  // clé unique => ligne à écrire (dédoublonne)
-            $now = now()->toDateTimeString();
-
-            foreach ($query->cursor() as $row) {
+                if ($code === '' || $libelle === '' || CentreResolver::normaliser($libelle) === 'NON RENSEIGNE') {
+                    continue;
+                }
                 $stats['lues']++;
 
-                [$ligne, $raison] = self::normaliser($row, $impots);
+                $centre = $parCode[CentreResolver::normaliser($code)]
+                    ?? $parNom[CentreResolver::normaliser($libelle)]
+                    ?? ($abrev !== '' ? ($parNom[CentreResolver::normaliser($abrev)] ?? null) : null);
 
-                if ($ligne === null) {
-                    $this->rejeter($stats, $row, $raison);
-                    continue;
-                }
+                if ($centre) {
+                    $centre->fill(['code' => $code, 'abreviation' => $abrev !== '' ? $abrev : $centre->abreviation]);
 
-                $chiffreAffaires = null;
-                if ($avecCa) {
-                    [$chiffreAffaires, $raisonCa] = self::normaliserChiffreAffaires($row);
-
-                    if ($raisonCa !== null) {
-                        $this->rejeter($stats, $row, $raisonCa);
-                        continue;
+                    if ($centre->isDirty()) {
+                        $centre->save();
+                        $stats['mis_a_jour']++;
                     }
+                } else {
+                    $centre = Centre::create(['nom' => $libelle, 'code' => $code, 'abreviation' => $abrev !== '' ? $abrev : null]);
+                    $stats['crees']++;
                 }
 
-                $centreId = $centres[mb_strtolower($ligne['centre'])] ?? null;
-                if ($centreId === null) {
-                    $this->rejeter($stats, $row, 'centre « ' . $ligne['centre'] . ' » introuvable.');
-                    continue;
-                }
-
-                $nif = $ligne['nif'];
-                if (! isset($ids[$nif])) {
-                    $existant = Contribuable::where('nif', $nif)->first();
-
-                    if ($existant) {
-                        $ids[$nif] = $existant->id;
-                    } else {
-                        $ids[$nif] = Contribuable::create(['nif' => $nif, 'nom' => $ligne['nom'], 'centre_id' => $centreId])->id;
-                        $stats['contribuables_crees']++;
-                    }
-                }
-
-                $declaration = [
-                    'contribuable_id' => $ids[$nif],
-                    'type_impot' => $ligne['type_impot'],
-                    'periode' => $ligne['periode'],
-                    'montant' => $ligne['montant'],
-                    'date_depot' => $ligne['date_depot'],
-                    'created_at' => $now,
-                    'updated_at' => $now,
-                ];
-                // Colonne source configurée seulement : sinon on ne touche pas au CA déjà enregistré
-                if ($avecCa) {
-                    $declaration['chiffre_affaires'] = $chiffreAffaires;
-                }
-                $lot[$ids[$nif] . '|' . $ligne['type_impot'] . '|' . $ligne['periode']] = $declaration;
-                $stats['importees']++;
-
-                if (count($lot) >= self::LOT) {
-                    $this->ecrire($lot, $avecCa);
-                    $lot = [];
-                }
+                $parCode[CentreResolver::normaliser($code)] = $centre;
+                $parNom[CentreResolver::normaliser($centre->nom)] = $centre;
             }
-
-            $this->ecrire($lot, $avecCa);
         });
 
         return $stats;
     }
 
     /**
-     * Valide et normalise une ligne lue dans la base source (fonction pure, sans accès base).
+     * @param string|null $depuis    première année fiscale à lire « AAAA » (incluse), sinon tout l'historique
+     * @param string|null $jusqua    dernière année fiscale à lire « AAAA » (incluse), sinon jusqu'à la fin
+     * @param int|null    $centreId  limiter à un centre (admin) ; null = tous les centres
      *
-     * @param object            $row    champs : nif, nom, centre, type_impot, periode, montant, date_depot
-     * @param array<int,string> $impots impôts autorisés
-     *
-     * @return array{0: array<string, mixed>|null, 1: string|null}  [ligne normalisée, null] ou [null, raison du rejet]
+     * @return array{lues: int, importees: int, rejetees: int, ignorees: int, contribuables_crees: int, sans_centre: int,
+     *               assujettissements: int, erreurs: array<int, string>, centres_non_resolus: array<string, int>, tables_absentes: array<int, string>}
      */
-    public static function normaliser(object $row, array $impots): array
+    public function importer(?string $depuis = null, ?string $jusqua = null, ?int $centreId = null): array
     {
-        $nif = trim((string) ($row->nif ?? ''));
-        $nom = trim((string) ($row->nom ?? ''));
-        $centre = trim((string) ($row->centre ?? ''));
-        $impot = strtoupper(trim((string) ($row->type_impot ?? '')));
-        $periode = trim((string) ($row->periode ?? ''));
-        $montant = str_replace([' ', "\xC2\xA0"], '', trim((string) ($row->montant ?? '')));
-        $montant = str_replace(',', '.', $montant);
+        foreach (['depuis' => $depuis, 'jusqua' => $jusqua] as $nom => $valeur) {
+            if ($valeur !== null && ! preg_match(self::ANNEE_REGEX, $valeur)) {
+                throw new InvalidArgumentException("Année « {$nom} » invalide : utilisez 4 chiffres (ex. 2025).");
+            }
+        }
+
+        $stats = [
+            'lues' => 0, 'importees' => 0, 'rejetees' => 0, 'ignorees' => 0, 'contribuables_crees' => 0, 'sans_centre' => 0,
+            'assujettissements' => 0, 'erreurs' => [], 'centres_non_resolus' => [], 'tables_absentes' => [],
+        ];
+
+        $resolver = CentreResolver::depuisBase();
+
+        DB::transaction(function () use ($depuis, $jusqua, $centreId, $resolver, &$stats) {
+            $this->importerContribuables($resolver, $centreId, $stats);
+
+            // Contribuables locaux (pour un admin : ceux de son centre seulement)
+            $ids = ($centreId === null ? Contribuable::query() : Contribuable::where('centre_id', $centreId))->pluck('id', 'nif')->all();
+
+            $this->importerAssujettissements($ids, $depuis, $jusqua, $stats);
+            $this->importerDeclarations($ids, $depuis, $jusqua, $centreId, $stats);
+        });
+
+        return $stats;
+    }
+
+    // ------------------------------------------------------------------
+    //  1. Contribuables
+    // ------------------------------------------------------------------
+
+    /** @param array<string, mixed> $stats */
+    private function importerContribuables(CentreResolver $resolver, ?int $centreId, array &$stats): void
+    {
+        $cfg = (array) config('dgi.source.contribuables');
+        $table = (string) $cfg['table'];
+
+        if (! $this->tableExiste($table)) {
+            $stats['tables_absentes'][] = $table;
+
+            return;
+        }
+
+        $col = $this->colonnes($table, (array) $cfg['colonnes'], ['nif']);
+        $select = [];
+        foreach ($col as $champ => $nom) {
+            if ($nom !== null) {
+                $select[] = $nom . ' as ' . $champ;
+            }
+        }
+
+        $locaux = Contribuable::get(['id', 'nif', 'nom', 'centre_id', 'etat', 'date_cessation', 'date_radiation', 'date_blocage'])->keyBy('nif');
+        $nouveaux = [];
+        $now = now()->toDateTimeString();
+
+        foreach ($this->connexion()->table($table)->select($select)->cursor() as $row) {
+            $nif = Nif::normaliser($row->nif ?? '');
+            if ($nif === '' || strlen($nif) > 30) {
+                continue;
+            }
+
+            $nom = trim((string) ($row->nom ?? ''));
+            $brut = trim((string) ($row->centre_code ?? '')) !== '' ? trim((string) $row->centre_code) : trim((string) ($row->centre ?? ''));
+            $centreLigne = $resolver->resoudre($row->centre ?? null, $row->centre_code ?? null);
+
+            if ($brut !== '' && $centreLigne === null) {
+                $stats['centres_non_resolus'][$brut] = ($stats['centres_non_resolus'][$brut] ?? 0) + 1;
+            }
+
+            // Admin : on ne garde que les contribuables de son centre
+            if ($centreId !== null && $centreLigne !== $centreId) {
+                $stats['ignorees']++;
+                continue;
+            }
+
+            $valeurs = [
+                'etat' => is_numeric($row->etat ?? null) ? (int) $row->etat : null,
+                'date_cessation' => self::date($row->date_cessation ?? null),
+                'date_radiation' => self::date($row->date_radiation ?? null),
+                'date_blocage' => self::date($row->date_blocage ?? null),
+            ];
+
+            $existant = $locaux->get($nif);
+
+            if ($existant) {
+                // La base source fait foi pour le nom, le centre (quand elle le fournit), l'état et les dates
+                $maj = $valeurs;
+                if ($nom !== '') {
+                    $maj['nom'] = $nom;
+                }
+                if ($centreLigne !== null) {
+                    $maj['centre_id'] = $centreLigne;
+                }
+                $existant->fill($maj);
+                if ($existant->isDirty()) {
+                    $existant->save();
+                }
+            } else {
+                $nouveaux[] = ['nif' => $nif, 'nom' => $nom !== '' ? $nom : $nif, 'centre_id' => $centreLigne, 'created_at' => $now, 'updated_at' => $now] + $valeurs;
+                $stats['contribuables_crees']++;
+                if ($centreLigne === null) {
+                    $stats['sans_centre']++;
+                }
+
+                if (count($nouveaux) >= self::LOT) {
+                    DB::table('contribuables')->insert($nouveaux);
+                    $nouveaux = [];
+                }
+            }
+        }
+
+        if ($nouveaux !== []) {
+            DB::table('contribuables')->insert($nouveaux);
+        }
+    }
+
+    // ------------------------------------------------------------------
+    //  2. Assujettissements
+    // ------------------------------------------------------------------
+
+    /**
+     * @param array<string, int> $ids  NIF => id des contribuables locaux
+     * @param array<string, mixed> $stats
+     */
+    private function importerAssujettissements(array $ids, ?string $depuis, ?string $jusqua, array &$stats): void
+    {
+        $cfg = (array) config('dgi.source.assujettissements');
+        $table = (string) $cfg['table'];
+
+        if (! $this->tableExiste($table)) {
+            $stats['tables_absentes'][] = $table;
+
+            return;
+        }
+
+        $col = $this->colonnes($table, (array) $cfg['colonnes'], ['nif', 'annee', 'periodicite', 'impot']);
+        $select = [];
+        foreach ($col as $champ => $nom) {
+            if ($nom !== null) {
+                $select[] = $nom . ' as ' . $champ;
+            }
+        }
+
+        $query = $this->connexion()->table($table)->select($select);
+        if ($depuis !== null) {
+            $query->where($col['annee'], '>=', $depuis);
+        }
+        if ($jusqua !== null) {
+            $query->where($col['annee'], '<=', $jusqua);
+        }
+
+        $impots = (array) config('anomalies.defaillance.impots');
+        $lot = [];
+        $now = now()->toDateTimeString();
+
+        foreach ($query->cursor() as $row) {
+            $nif = Nif::normaliser($row->nif ?? '');
+            $impot = strtoupper(trim((string) ($row->impot ?? '')));
+            $annee = trim((string) ($row->annee ?? ''));
+            $periodicite = is_numeric($row->periodicite ?? null) ? (int) $row->periodicite : 0;
+
+            if (! isset($ids[$nif]) || ! in_array($impot, $impots, true) || ! preg_match(self::ANNEE_REGEX, $annee) || $periodicite < 1 || $periodicite > 5) {
+                continue;
+            }
+
+            $lot[$ids[$nif] . '|' . $impot . '|' . $annee] = [
+                'contribuable_id' => $ids[$nif],
+                'type_impot' => $impot,
+                'annee_fiscale' => (int) $annee,
+                'periodicite' => $periodicite,
+                'date_debut' => self::date($row->debut ?? null),
+                'date_fin' => self::date($row->fin ?? null),
+                'actif' => self::booleen($row->actif ?? 1),
+                'exonere' => self::booleen($row->exonere ?? 0),
+                'created_at' => $now,
+                'updated_at' => $now,
+            ];
+            $stats['assujettissements']++;
+
+            if (count($lot) >= self::LOT) {
+                $this->ecrireAssujettissements($lot);
+                $lot = [];
+            }
+        }
+
+        $this->ecrireAssujettissements($lot);
+    }
+
+    /** @param array<string, array<string, mixed>> $lot */
+    private function ecrireAssujettissements(array $lot): void
+    {
+        if ($lot !== []) {
+            Assujettissement::upsert(
+                array_values($lot),
+                ['contribuable_id', 'type_impot', 'annee_fiscale'],
+                ['periodicite', 'date_debut', 'date_fin', 'actif', 'exonere', 'updated_at']
+            );
+        }
+    }
+
+    // ------------------------------------------------------------------
+    //  3. Déclarations
+    // ------------------------------------------------------------------
+
+    /**
+     * @param array<string, int> $ids  NIF => id des contribuables locaux
+     * @param array<string, mixed> $stats
+     */
+    private function importerDeclarations(array &$ids, ?string $depuis, ?string $jusqua, ?int $centreId, array &$stats): void
+    {
+        $now = now()->toDateTimeString();
+        $impots = (array) config('anomalies.defaillance.impots');
+        $trouvee = false;
+
+        foreach ((array) config('dgi.source.declarations') as $impot => $def) {
+            $table = (string) $def['table'];
+
+            if (! $this->tableExiste($table)) {
+                $stats['tables_absentes'][] = $table;
+                continue;
+            }
+            $trouvee = true;
+
+            $col = $this->colonnes($table, (array) $def['colonnes'], ['nif', 'annee', 'ligne', 'montant', 'date_limite']);
+            $w = fn (string $c) => $this->connexion()->getQueryGrammar()->wrap($c);
+
+            $mois = $col['mois'] !== null ? 'coalesce(' . $w($col['mois']) . ', 0)' : '0';
+            $version = $col['version'] !== null ? 'coalesce(' . $w($col['version']) . ', 0)' : '0';
+            $montant = $col['montant_liquide'] !== null
+                ? 'coalesce(' . $w($col['montant']) . ', ' . $w($col['montant_liquide']) . ')'
+                : $w($col['montant']);
+            $depot = $col['date_depot'] !== null ? 'max(' . $w($col['date_depot']) . ')' : 'null';
+
+            // Une ligne par déclaration (et par version) : le chiffre d'affaires est celui de la ligne « ligne_ca »
+            $query = $this->connexion()->table($table)
+                ->selectRaw(
+                    $w($col['nif']) . ' as nif, ' . $w($col['annee']) . ' as annee, ' . $mois . ' as mois, ' . $version . ' as version, '
+                    . 'max(' . $w($col['date_limite']) . ') as date_limite, ' . $depot . ' as date_depot, '
+                    . 'max(case when ' . $w($col['ligne']) . ' = ? then ' . $montant . ' end) as chiffre_affaires',
+                    [(int) $def['ligne_ca']]
+                )
+                ->groupByRaw(implode(', ', array_filter([
+                    $w($col['nif']),
+                    $w($col['annee']),
+                    // Pas de constante dans GROUP BY : PostgreSQL lirait « 0 » comme un numéro de colonne (erreur
+                    // « GROUP BY position 0 is not in select list »). On ne groupe donc que sur les vraies colonnes.
+                    $col['mois'] !== null ? $mois : null,
+                    $col['version'] !== null ? $version : null,
+                ])));
+
+            if ($depuis !== null) {
+                $query->where($col['annee'], '>=', $depuis);
+            }
+            if ($jusqua !== null) {
+                $query->where($col['annee'], '<=', $jusqua);
+            }
+
+            $lot = [];
+
+            foreach (self::retenirDerniereVersion($query->cursor()) as $row) {
+                $stats['lues']++;
+
+                [$ligne, $raison] = self::normaliserDeclaration($row, $impot, $impots);
+
+                if ($ligne === null) {
+                    $this->rejeter($stats, $row, $raison);
+                    continue;
+                }
+
+                $nif = $ligne['nif'];
+
+                if (! isset($ids[$nif])) {
+                    if ($centreId !== null) {
+                        $stats['ignorees']++; // admin : contribuable d'un autre centre ou inconnu
+                        continue;
+                    }
+
+                    // Contribuable absent de la table des contribuables : créé sans centre (avertissement)
+                    $ids[$nif] = Contribuable::create(['nif' => $nif, 'nom' => $nif])->id;
+                    $stats['contribuables_crees']++;
+                    $stats['sans_centre']++;
+                }
+
+                $lot[$ids[$nif] . '|' . $impot . '|' . $ligne['annee_fiscale'] . '|' . $ligne['mois']] = [
+                    'contribuable_id' => $ids[$nif],
+                    'type_impot' => $impot,
+                    'annee_fiscale' => $ligne['annee_fiscale'],
+                    'mois' => $ligne['mois'],
+                    'chiffre_affaires' => $ligne['chiffre_affaires'],
+                    'date_limite' => $ligne['date_limite'],
+                    'date_depot' => $ligne['date_depot'],
+                    'created_at' => $now,
+                    'updated_at' => $now,
+                ];
+                $stats['importees']++;
+
+                if (count($lot) >= self::LOT) {
+                    $this->ecrireDeclarations($lot);
+                    $lot = [];
+                }
+            }
+
+            $this->ecrireDeclarations($lot);
+        }
+
+        if (! $trouvee) {
+            throw new InvalidArgumentException(
+                'Aucune table de déclarations trouvée dans la base source (DGI_SOURCE_TABLE_IR, DGI_SOURCE_TABLE_TVA ou config/dgi.php).'
+            );
+        }
+    }
+
+    /** @param array<string, array<string, mixed>> $lot */
+    private function ecrireDeclarations(array $lot): void
+    {
+        if ($lot !== []) {
+            Declaration::upsert(
+                array_values($lot),
+                ['contribuable_id', 'type_impot', 'annee_fiscale', 'mois'],
+                ['chiffre_affaires', 'date_limite', 'date_depot', 'updated_at']
+            );
+        }
+    }
+
+    // ------------------------------------------------------------------
+    //  Fonctions pures (sans accès base) : testables seules
+    // ------------------------------------------------------------------
+
+    /**
+     * Ne garde, pour chaque déclaration (NIF, année, mois), que la ligne de la DERNIÈRE version (déclarations rectificatives).
+     *
+     * @param iterable<object> $rows champs : nif, annee, mois, version, date_limite, date_depot, chiffre_affaires
+     * @return array<string, object>
+     */
+    public static function retenirDerniereVersion(iterable $rows): array
+    {
+        $retenues = [];
+
+        foreach ($rows as $row) {
+            $cle = trim((string) $row->nif) . '|' . trim((string) $row->annee) . '|' . (int) $row->mois;
+
+            if (! isset($retenues[$cle]) || (int) $row->version > (int) $retenues[$cle]->version) {
+                $retenues[$cle] = $row;
+            }
+        }
+
+        return $retenues;
+    }
+
+    /**
+     * Valide et normalise une déclaration lue dans la base source.
+     *
+     * @param object            $row    champs : nif, annee, mois, date_limite, date_depot, chiffre_affaires
+     * @param array<int,string> $impots impôts autorisés
+     * @return array{0: array<string, mixed>|null, 1: string|null}  [déclaration normalisée, null] ou [null, raison du rejet]
+     */
+    public static function normaliserDeclaration(object $row, string $impot, array $impots): array
+    {
+        $nif = Nif::normaliser($row->nif ?? '');
+        $annee = trim((string) ($row->annee ?? ''));
+        $mois = trim((string) ($row->mois ?? '0'));
 
         if ($nif === '' || strlen($nif) > 30) {
             return [null, 'NIF vide ou trop long.'];
         }
-        if ($nom === '') {
-            return [null, 'nom vide.'];
-        }
         if (! in_array($impot, $impots, true)) {
-            return [null, 'type_impot « ' . $impot . ' » inconnu (attendu : ' . implode(', ', $impots) . ').'];
+            return [null, 'type d\'impôt « ' . $impot . ' » inconnu (attendu : ' . implode(', ', $impots) . ').'];
         }
-        if (! preg_match(self::PERIODE_REGEX, $periode)) {
-            return [null, 'periode « ' . $periode . ' » invalide (format AAAA-MM).'];
+        if (! preg_match(self::ANNEE_REGEX, $annee) || (int) $annee < 1990 || (int) $annee > 2100) {
+            return [null, 'année fiscale « ' . $annee . ' » invalide (4 chiffres, ex. 2025).'];
         }
-        if ($montant === '' || ! is_numeric($montant) || (float) $montant < 0) {
-            return [null, 'montant « ' . trim((string) ($row->montant ?? '')) . ' » invalide.'];
-        }
-        if ($centre === '') {
-            return [null, 'centre vide.'];
+        if (! ctype_digit($mois) || (int) $mois > 12) {
+            return [null, 'mois « ' . $mois . ' » invalide (0 à 12).'];
         }
 
-        // date_depot facultative ; PostgreSQL renvoie « AAAA-MM-JJ » (ou « AAAA-MM-JJ HH:MM:SS » pour un timestamp).
-        $dateDepot = null;
-        $brute = trim((string) ($row->date_depot ?? ''));
-        if ($brute !== '') {
-            $jour = substr($brute, 0, 10);
-            $d = \DateTime::createFromFormat('!Y-m-d', $jour);
+        $ca = null;
+        $brut = trim((string) ($row->chiffre_affaires ?? ''));
+        if ($brut !== '') {
+            $ca = str_replace(',', '.', str_replace([' ', "\xC2\xA0"], '', $brut));
 
-            if ($d === false || $d->format('Y-m-d') !== $jour) {
-                return [null, 'date_depot « ' . $brute . ' » invalide.'];
+            if (! is_numeric($ca) || (float) $ca < 0) {
+                return [null, 'chiffre d\'affaires « ' . $brut . ' » invalide.'];
             }
-            $dateDepot = $jour;
+        }
+
+        $limite = self::date($row->date_limite ?? null);
+        if ($limite === false) {
+            return [null, 'date limite « ' . trim((string) $row->date_limite) . ' » invalide.'];
         }
 
         return [[
             'nif' => $nif,
-            'nom' => $nom,
-            'centre' => $centre,
-            'type_impot' => $impot,
-            'periode' => $periode,
-            'montant' => $montant,
-            'date_depot' => $dateDepot,
+            'annee_fiscale' => (int) $annee,
+            'mois' => (int) $mois,
+            'chiffre_affaires' => $ca,
+            'date_limite' => $limite,
+            'date_depot' => self::date($row->date_depot ?? null) ?: null,
         ], null];
     }
 
     /**
-     * Valide le chiffre d'affaires d'une ligne source (fonction pure). Vide = pas de CA (autorisé).
-     *
-     * @return array{0: string|null, 1: string|null}  [CA normalisé ou null, raison du rejet ou null]
+     * « AAAA-MM-JJ » (ou « AAAA-MM-JJ HH:MM:SS ») → « AAAA-MM-JJ » ; vide → null ; invalide → false.
      */
-    public static function normaliserChiffreAffaires(object $row): array
+    public static function date(mixed $valeur): string|null|false
     {
-        $brut = trim((string) ($row->chiffre_affaires ?? ''));
+        $brut = trim((string) ($valeur ?? ''));
 
         if ($brut === '') {
-            return [null, null];
+            return null;
         }
 
-        $ca = str_replace(',', '.', str_replace([' ', "\xC2\xA0"], '', $brut));
+        $jour = substr($brut, 0, 10);
+        $d = DateTime::createFromFormat('!Y-m-d', $jour);
 
-        if (! is_numeric($ca) || (float) $ca < 0) {
-            return [null, 'chiffre_affaires « ' . $brut . ' » invalide.'];
+        return ($d !== false && $d->format('Y-m-d') === $jour) ? $jour : false;
+    }
+
+    public static function booleen(mixed $valeur): bool
+    {
+        return in_array(strtolower(trim((string) $valeur)), ['1', 't', 'true', 'o', 'oui', 'y', 'yes'], true);
+    }
+
+    // ------------------------------------------------------------------
+    //  Accès à la base source
+    // ------------------------------------------------------------------
+
+    private function tableExiste(string $table): bool
+    {
+        return $table !== '' && Schema::connection((string) config('dgi.source.connection'))->hasTable($table);
+    }
+
+    /**
+     * Retrouve les vrais noms de colonnes (sans tenir compte de la casse : FISCAL_NO ou fiscal_no).
+     *
+     * @param array<string, string|null> $voulues  champ => nom de colonne configuré
+     * @param array<int, string>         $obligatoires champs qui doivent exister
+     * @return array<string, string|null>  champ => vrai nom (null si non configuré ou absent et facultatif)
+     */
+    private function colonnes(string $table, array $voulues, array $obligatoires): array
+    {
+        $reelles = [];
+        foreach (Schema::connection((string) config('dgi.source.connection'))->getColumnListing($table) as $nom) {
+            $reelles[mb_strtolower((string) $nom)] = (string) $nom;
         }
 
-        return [$ca, null];
+        $resultat = [];
+        $manquantes = [];
+
+        foreach ($voulues as $champ => $nom) {
+            if ($nom === null || $nom === '') {
+                $resultat[$champ] = null;
+                continue;
+            }
+
+            $resultat[$champ] = $reelles[mb_strtolower((string) $nom)] ?? null;
+
+            if ($resultat[$champ] === null && in_array($champ, $obligatoires, true)) {
+                $manquantes[] = $nom;
+            }
+        }
+
+        if ($manquantes !== []) {
+            throw new InvalidArgumentException(
+                "Colonnes introuvables dans la table « {$table} » : " . implode(', ', $manquantes)
+                . '. Corrigez config/dgi.php (section source) ou le .env.'
+            );
+        }
+
+        return $resultat;
     }
 
     /** @param array<string, mixed> $stats */
@@ -262,20 +633,13 @@ class SourceDeclarationImporter
         $stats['rejetees']++;
 
         if (count($stats['erreurs']) < self::MAX_ERRORS) {
-            $stats['erreurs'][] = sprintf('NIF « %s », période « %s » : %s', trim((string) ($row->nif ?? '')), trim((string) ($row->periode ?? '')), $raison);
-        }
-    }
-
-    /** @param array<string, array<string, mixed>> $lot */
-    private function ecrire(array $lot, bool $avecCa): void
-    {
-        if ($lot !== []) {
-            $colonnes = ['montant', 'date_depot', 'updated_at'];
-            if ($avecCa) {
-                $colonnes[] = 'chiffre_affaires';
-            }
-
-            Declaration::upsert(array_values($lot), ['contribuable_id', 'type_impot', 'periode'], $colonnes);
+            $stats['erreurs'][] = sprintf(
+                'NIF « %s », année %s, mois %s : %s',
+                trim((string) ($row->nif ?? '')),
+                trim((string) ($row->annee ?? '')),
+                trim((string) ($row->mois ?? '0')),
+                $raison
+            );
         }
     }
 }
