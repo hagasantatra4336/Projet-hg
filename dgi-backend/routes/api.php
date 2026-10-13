@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Api\AnalyseAutoController;
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\CentreController;
 use App\Http\Controllers\Api\ContribuableController;
@@ -7,11 +8,13 @@ use App\Http\Controllers\Api\DeclarationImportController;
 use App\Http\Controllers\Api\DefaillanceController;
 use App\Http\Controllers\Api\FonctionController;
 use App\Http\Controllers\Api\ProfileController;
-use App\Http\Controllers\Api\SourceImportController;
 use App\Http\Controllers\Api\UserController;
 use App\Http\Middleware\EnsureRole;
 use Illuminate\Support\Facades\Route;
-use App\Http\Controllers\Api\AnalyseAutoController;
+
+// ---------------------------------------------------------------------
+//  Inscription publique (3 étapes) et connexion
+// ---------------------------------------------------------------------
 
 // Listes du formulaire d'inscription : centres + fonctions de rôle "agent"
 Route::get('/signup-options', [AuthController::class, 'signupOptions'])->middleware('throttle:30,1');
@@ -26,39 +29,48 @@ Route::post('/register/resend-otp', [AuthController::class, 'resendOtp'])->middl
 // Étape 3 : définition du mot de passe (+ confirmation), uniquement avec le setup_token
 Route::post('/register/set-password', [AuthController::class, 'setPassword'])->middleware('throttle:10,1');
 
-
+// Connexion en 2 étapes : 1) e-mail + mot de passe → envoie un OTP ; 2) OTP → renvoie le jeton
 Route::post('/login', [AuthController::class, 'login'])->middleware('throttle:10,1');
 Route::post('/login/verify-otp', [AuthController::class, 'verifyLoginOtp'])->middleware('throttle:6,1');
 Route::post('/login/resend-otp', [AuthController::class, 'resendLoginOtp'])->middleware('throttle:3,1');
 
+// Espace utilisateur : confirmation par le lien reçu par e-mail
+// (publique : le lien peut s'ouvrir sur un autre appareil ; jeton à usage unique)
+Route::post('/profile/confirm', [ProfileController::class, 'confirm'])->middleware('throttle:10,1,profile-confirm');
 
-Route::post('/profile/confirm', [ProfileController::class, 'confirm'])->middleware('throttle:10,1');
+// Page d'attente de validation : suit l'état de la demande (l'identifiant aléatoire de 48 caractères fait office de secret)
+Route::get('/profile/change-status/{requestId}', [ProfileController::class, 'changeStatus'])
+    ->where('requestId', '[A-Za-z0-9]{48}')
+    ->middleware('throttle:300,1,profile-status');
 
-
+// ---------------------------------------------------------------------
+//  Routes protégées (jeton Sanctum)
+// ---------------------------------------------------------------------
 Route::middleware('auth:sanctum')->group(function () {
     Route::post('/logout', [AuthController::class, 'logout']);
     Route::get('/me', [AuthController::class, 'me']);
 
-     
+    // Espace utilisateur : demande de modification de ses infos / mot de passe (→ e-mail de confirmation)
     Route::post('/profile/request-change', [ProfileController::class, 'requestChange'])->middleware('throttle:5,1');
+    // Annuler la demande en attente (bouton « Annuler » de la page d'attente)
+    Route::delete('/profile/request-change', [ProfileController::class, 'cancelChange']);
 
-    
-    Route::post('/defaillances/auto', AnalyseAutoController::class)->middleware('throttle:100,1');
-    
+    // Défaillances de déclaration : consultation et traitement des alertes par tous les rôles
+    // (agent et admin ne voient que leur centre : voir DefaillanceController)
     Route::get('/defaillances', [DefaillanceController::class, 'index']);
     Route::get('/defaillances/summary', [DefaillanceController::class, 'summary']);
     Route::patch('/defaillances/{alerte}', [DefaillanceController::class, 'update']);
 
+    // Fiche d'un contribuable (informations, alertes, historique des déclarations) : même filtrage par centre
     Route::get('/contribuables/{contribuable}', [ContribuableController::class, 'show']);
+
+    // Analyse automatique : appelée par le front toutes les 5 min tant qu'une session est ouverte, quel que soit le rôle
+    Route::post('/defaillances/auto', AnalyseAutoController::class)->middleware('throttle:100,1');
 
     // Lancer l'analyse et importer des déclarations (CSV) : superadmin, central, admin (admin = son centre)
     Route::middleware(EnsureRole::class . ':superadmin,central,admin')->group(function () {
         Route::post('/defaillances/analyser', [DefaillanceController::class, 'analyser'])->middleware('throttle:10,1');
         Route::post('/declarations/import', [DeclarationImportController::class, 'store'])->middleware('throttle:10,1');
-
-        // Récupérer les déclarations depuis la base PostgreSQL source (lecture seule) ; l'admin = son centre
-        Route::get('/declarations/source/test', [SourceImportController::class, 'tester'])->middleware('throttle:10,1');
-        Route::post('/declarations/import-source', [SourceImportController::class, 'store'])->middleware('throttle:10,1');
     });
 
     // Section Administration — gestion des utilisateurs : superadmin, central, admin

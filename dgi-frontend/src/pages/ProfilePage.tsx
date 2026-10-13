@@ -1,8 +1,10 @@
-import { useEffect, useState, type FormEvent, type ReactNode } from "react";
+import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
 import api, { getErrorMessage } from "../services/api";
 import { useAuth } from "../context/AuthContext";
 import { ErrorBox, Field, PasswordInput, RoleBadge, inputClass } from "../components/ui";
 import CentreSelect, { type CentreOption } from "../components/CentreSelect";
+import { savePendingRequest } from "../services/profileRequest";
 
 interface ProfileForm {
   nom: string;
@@ -20,6 +22,9 @@ interface PasswordForm {
 interface RequestChangeResponse {
   message: string;
   email: string;
+  request_id: string;
+  champs: string[];
+  expires_at: string;
   debug_confirm_url?: string; // renvoyé par l'API uniquement en mode développement (APP_DEBUG=true)
 }
 
@@ -78,7 +83,9 @@ function Section({ title, hint, children }: { title: string; hint?: string; chil
 }
 
 export default function ProfilePage() {
-  const { user, refreshUser } = useAuth();
+  const { user } = useAuth();
+  const navigate = useNavigate();
+  const location = useLocation();
 
   const [form, setForm] = useState<ProfileForm>({
     nom: user?.nom ?? "",
@@ -89,9 +96,11 @@ export default function ProfilePage() {
   const [passwords, setPasswords] = useState<PasswordForm>(EMPTY_PASSWORDS);
   const [centres, setCentres] = useState<CentreOption[]>([]);
   const [error, setError] = useState<string>("");
-  const [sentTo, setSentTo] = useState<string>("");
-  const [debugUrl, setDebugUrl] = useState<string>("");
   const [loading, setLoading] = useState<boolean>(false);
+  // Arrivée depuis la page d'attente après validation de l'e-mail : on affiche une confirmation.
+  const [updated, setUpdated] = useState<boolean>(
+    () => (location.state as { updated?: boolean } | null)?.updated === true
+  );
 
   // Liste des centres (route publique de l'inscription)
   useEffect(() => {
@@ -111,14 +120,17 @@ export default function ProfilePage() {
     });
   }, [user?.nom, user?.telephone, user?.adresse, user?.centre_id]);
 
-  // L'utilisateur confirme dans sa boîte mail (souvent un autre onglet) puis revient ici :
-  // on recharge alors ses informations pour afficher les nouvelles valeurs.
+  // Le message disparaît tout seul et ne réapparaît pas si on recharge la page (l'état de navigation est effacé une fois).
+  const etatEfface = useRef<boolean>(false);
   useEffect(() => {
-    if (!sentTo) return;
-    const onFocus = () => void refreshUser();
-    window.addEventListener("focus", onFocus);
-    return () => window.removeEventListener("focus", onFocus);
-  }, [sentTo, refreshUser]);
+    if (!updated) return;
+    if (!etatEfface.current) {
+      etatEfface.current = true;
+      navigate(location.pathname, { replace: true, state: null });
+    }
+    const timer = window.setTimeout(() => setUpdated(false), 8000);
+    return () => window.clearTimeout(timer);
+  }, [updated, navigate, location.pathname]);
 
   if (!user) return null;
 
@@ -132,8 +144,6 @@ export default function ProfilePage() {
   async function handleSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setError("");
-    setSentTo("");
-    setDebugUrl("");
     setLoading(true);
 
     const payload: Record<string, string | number | null> = {
@@ -148,9 +158,16 @@ export default function ProfilePage() {
 
     try {
       const res = await api.post<RequestChangeResponse>("/profile/request-change", payload);
-      setSentTo(res.data.email);
-      setDebugUrl(res.data.debug_confirm_url ?? "");
+      // Page d'attente : elle suit la demande et affiche les nouvelles données dès que l'e-mail est validé.
+      savePendingRequest({
+        request_id: res.data.request_id,
+        email: res.data.email,
+        champs: res.data.champs,
+        expires_at: res.data.expires_at,
+        debug_confirm_url: res.data.debug_confirm_url,
+      });
       setPasswords(EMPTY_PASSWORDS);
+      navigate("/profile/attente");
     } catch (err) {
       setError(getErrorMessage(err, "Impossible d'envoyer la demande."));
     } finally {
@@ -170,20 +187,12 @@ export default function ProfilePage() {
 
       <ErrorBox message={error} />
 
-      {sentTo && (
-        <div className="mb-6 rounded-xl border border-brand-green bg-brand-green/20 px-4 py-3 text-sm text-brand-blue">
-          <p>
-            Un e-mail de confirmation a été envoyé à <span className="font-semibold">{sentTo}</span>. Cliquez sur le
-            lien qu'il contient (valable 30 minutes) pour appliquer vos modifications.
-          </p>
-          {debugUrl && (
-            <p className="mt-2 break-all">
-              Mode développement — lien :{" "}
-              <a href={debugUrl} className="underline">
-                {debugUrl}
-              </a>
-            </p>
-          )}
+      {updated && (
+        <div
+          role="status"
+          className="mb-6 rounded-xl border border-brand-green bg-brand-green/20 px-4 py-3 text-sm font-medium text-brand-blue"
+        >
+          ✓ Vos modifications ont été appliquées.
         </div>
       )}
 
@@ -273,7 +282,7 @@ export default function ProfilePage() {
 
           <Section title="Changer mon mot de passe" hint="Laissez vide pour conserver votre mot de passe actuel.">
             <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-              <Field label="Mot de passe actuel">
+            <Field label="Mot de passe actuel">
                 <PasswordInput
                   className={inputClass}
                   value={passwords.current_password}

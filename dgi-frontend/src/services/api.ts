@@ -5,8 +5,12 @@ export interface ApiErrorResponse {
   errors?: Record<string, string[]>;
 }
 
+// Sans VITE_API_URL, l'API est cherchée sur la même machine que celle qui affiche la page (port 8000) :
+// http://127.0.0.1:8000/api depuis le PC, http://192.168.1.20:8000/api depuis un smartphone ouvert sur l'adresse du PC.
+const apiHost = window.location.hostname === "localhost" ? "127.0.0.1" : window.location.hostname;
+
 const api = axios.create({
-  baseURL: import.meta.env.VITE_API_URL ?? "http://127.0.0.1:8000/api", // adaptez dans .env si besoin
+  baseURL: import.meta.env.VITE_API_URL ?? `http://${apiHost}:8000/api`, // définissez VITE_API_URL dans .env si l'API est ailleurs
   headers: {
     "Content-Type": "application/json",
     Accept: "application/json",

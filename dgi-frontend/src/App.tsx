@@ -10,6 +10,7 @@ import FonctionsPage from "./pages/Admin/FonctionsPage";
 import DashboardPage from "./pages/DashboardPage";
 import DefaillancesPage from "./pages/DefaillancesPage";
 import ProfilePage from "./pages/ProfilePage";
+import ProfileWaitingPage from "./pages/ProfileWaitingPage";
 import ConfirmChangePage from "./pages/ConfirmChangePage";
 
 export default function App() {
@@ -26,6 +27,8 @@ export default function App() {
         <Route element={<AppLayout />}>
           <Route path="/dashboard" element={<DashboardPage />} />
           <Route path="/profile" element={<ProfilePage />} />
+          {/* Attente de la validation par e-mail d'une modification du profil */}
+          <Route path="/profile/attente" element={<ProfileWaitingPage />} />
           {/* Défaillances de déclaration : tous les rôles (filtrées par centre côté API) */}
           <Route path="/defaillances" element={<DefaillancesPage />} />
 

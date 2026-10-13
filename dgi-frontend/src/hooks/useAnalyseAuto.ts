@@ -26,7 +26,7 @@ export function useAnalyseAuto(role: Role | null | undefined): void {
         // Les pages qui affichent les alertes peuvent écouter cet événement pour se rafraîchir.
         if (actif && res.data.execute) window.dispatchEvent(new Event("defaillances:maj"));
       } catch {
-        // silencieux : la prochaine tentative a lieu dans 5 minutes
+        // silencieux
       } finally {
         enCours = false;
       }
