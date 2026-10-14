@@ -7,6 +7,7 @@ import AdminLayout from "./layouts/AdminLayout";
 import UsersPage from "./pages/Admin/UsersPage";
 import CentresPage from "./pages/Admin/CentresPage";
 import FonctionsPage from "./pages/Admin/FonctionsPage";
+import ReglesPage from "./pages/Admin/ReglesPage";
 import DashboardPage from "./pages/DashboardPage";
 import DefaillancesPage from "./pages/DefaillancesPage";
 import ProfilePage from "./pages/ProfilePage";
@@ -39,6 +40,8 @@ export default function App() {
               <Route path="utilisateurs" element={<UsersPage />} />
               <Route element={<ProtectedRoute roles={["superadmin", "central"]} />}>
                 <Route path="centres" element={<CentresPage />} />
+                {/* Règles de détection : réglages modifiables sans toucher au code */}
+                <Route path="regles" element={<ReglesPage />} />
               </Route>
               <Route element={<ProtectedRoute roles={["superadmin"]} />}>
                 <Route path="fonctions" element={<FonctionsPage />} />

@@ -5,6 +5,7 @@ const TITLES: Record<string, string> = {
   "/admin/utilisateurs": "Utilisateurs",
   "/admin/centres": "Centres",
   "/admin/fonctions": "Fonctions & rôles",
+  "/admin/regles": "Règles de détection",
 };
 
 export default function AdminLayout() {

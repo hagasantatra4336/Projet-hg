@@ -13,6 +13,7 @@ import {
   IconLogout,
   IconMenu,
   IconShield,
+  IconSliders,
   IconUser,
   IconUsers,
 } from "../components/icons";
@@ -28,6 +29,7 @@ interface SubItem {
 const ADMIN_ITEMS: SubItem[] = [
   { to: "/admin/utilisateurs", label: "Utilisateurs", icon: <IconUsers className="h-4 w-4" />, roles: ["superadmin", "central", "admin"] },
   { to: "/admin/centres", label: "Centres", icon: <IconBuilding className="h-4 w-4" />, roles: ["superadmin", "central"] },
+  { to: "/admin/regles", label: "Règles de détection", icon: <IconSliders className="h-4 w-4" />, roles: ["superadmin", "central"] },
   { to: "/admin/fonctions", label: "Fonctions & rôles", icon: <IconBriefcase className="h-4 w-4" />, roles: ["superadmin"] },
 ];
 

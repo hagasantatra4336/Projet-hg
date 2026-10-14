@@ -8,6 +8,7 @@ use App\Http\Controllers\Api\DeclarationImportController;
 use App\Http\Controllers\Api\DefaillanceController;
 use App\Http\Controllers\Api\FonctionController;
 use App\Http\Controllers\Api\ProfileController;
+use App\Http\Controllers\Api\RegleController;
 use App\Http\Controllers\Api\UserController;
 use App\Http\Middleware\EnsureRole;
 use Illuminate\Support\Facades\Route;
@@ -71,6 +72,13 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::middleware(EnsureRole::class . ':superadmin,central,admin')->group(function () {
         Route::post('/defaillances/analyser', [DefaillanceController::class, 'analyser'])->middleware('throttle:10,1');
         Route::post('/declarations/import', [DeclarationImportController::class, 'store'])->middleware('throttle:10,1');
+    });
+
+    // Règles de détection : réglages modifiables depuis l'application (central, superadmin)
+    Route::middleware(EnsureRole::class . ':superadmin,central')->group(function () {
+        Route::get('/regles', [RegleController::class, 'index']);
+        Route::put('/regles/{code}', [RegleController::class, 'update']);
+        Route::post('/regles/{code}/reinitialiser', [RegleController::class, 'reinitialiser']);
     });
 
     // Section Administration — gestion des utilisateurs : superadmin, central, admin

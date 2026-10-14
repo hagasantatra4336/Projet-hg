@@ -7,6 +7,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Alerte;
 use App\Models\User;
 use App\Services\AnomalieAnalyseur;
+use App\Services\ReglesDetection;
 use DateTimeImmutable;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
@@ -159,7 +160,7 @@ class DefaillanceController extends Controller
                 $stats['baisse_ca']['crees'],
                 $stats['mis_a_jour'],
                 $stats['regularisees']
-            ),
+            ) . ($stats['desactivees'] !== [] ? ' Règle(s) désactivée(s) dans les réglages : ' . implode(', ', $stats['desactivees']) . '.' : ''),
         ]);
     }
 
@@ -172,6 +173,7 @@ class DefaillanceController extends Controller
         abort_if($me->role === null, 403, "Votre compte n'a pas de fonction attribuée.");
 
         $query = Alerte::query();
+        ReglesDetection::limiterAlertes($query); // règles désactivées ou impôts décochés : alertes masquées
 
         if (in_array($me->role, [Role::Agent, Role::Admin], true)) {
             abort_if($me->centre_id === null, 403, "Votre compte n'est rattaché à aucun centre.");

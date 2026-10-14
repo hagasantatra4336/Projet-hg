@@ -10,6 +10,7 @@ use App\Models\Contribuable;
 use App\Models\Declaration;
 use App\Services\AnomalieAnalyseur;
 use App\Services\DefaillanceDetector;
+use App\Services\ReglesDetection;
 use DateTimeImmutable;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -43,7 +44,9 @@ class ContribuableController extends Controller
         $jour = $aujourdhui->format('Y-m-d');
 
         // Alertes (toutes, de la plus récente à la plus ancienne)
-        $alertes = $contribuable->alertes()->with('traitePar')->orderByDesc('annee_fiscale')->orderByDesc('mois')->orderByDesc('id')->get();
+        $requeteAlertes = $contribuable->alertes()->with('traitePar');
+        ReglesDetection::limiterAlertes($requeteAlertes); // règles désactivées ou impôts décochés : alertes masquées
+        $alertes = $requeteAlertes->orderByDesc('annee_fiscale')->orderByDesc('mois')->orderByDesc('id')->get();
 
         // Chiffres clés
         $agg = $contribuable->declarations()

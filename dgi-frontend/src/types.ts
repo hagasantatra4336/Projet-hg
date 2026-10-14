@@ -162,3 +162,40 @@ export interface ContribuableFiche {
     annuel: { annees: number[]; impots: LigneHistorique[] };
   };
 }
+
+// ---- Règles de détection réglables ----
+
+export interface ParametreSchema {
+  cle: string;
+  label: string;
+  aide: string;
+  type: "entier" | "decimal" | "liste_impots" | "bareme";
+  min?: number;
+  max?: number;
+  options?: string[];
+}
+
+export type ValeursRegle = Record<string, unknown>;
+
+export interface HistoriqueRegle {
+  id: number;
+  date: string | null;
+  par: string | null;
+  action: "modification" | "reinitialisation";
+  avant: { actif: boolean; parametres: ValeursRegle };
+  apres: { actif: boolean; parametres: ValeursRegle };
+}
+
+export interface RegleConfig {
+  code: string;
+  nom: string;
+  description: string | null;
+  actif: boolean;
+  parametres: ValeursRegle;
+  defauts: ValeursRegle;
+  personnalisee: boolean;
+  schema: ParametreSchema[];
+  modifie_par: string | null;
+  modifie_le: string | null;
+  historique: HistoriqueRegle[];
+}
