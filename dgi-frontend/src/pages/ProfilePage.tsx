@@ -47,7 +47,7 @@ function LockIcon() {
       strokeWidth={1.8}
       strokeLinecap="round"
       strokeLinejoin="round"
-      className="h-4 w-4 shrink-0 text-gray-400"
+      className="h-4 w-4 shrink-0 text-slate-400"
       aria-hidden="true"
     >
       <rect x="4" y="11" width="16" height="10" rx="2" />
@@ -61,7 +61,7 @@ function InfoRow({ label, children }: { label: string; children: ReactNode }) {
   return (
     <div className="flex items-center justify-between gap-3 py-3">
       <div className="min-w-0">
-        <dt className="text-xs font-medium uppercase tracking-wide text-gray-500">{label}</dt>
+        <dt className="text-xs font-medium text-slate-500">{label}</dt>
         <dd className="break-words text-sm font-medium text-brand-blue">{children}</dd>
       </div>
       <LockIcon />
@@ -72,10 +72,10 @@ function InfoRow({ label, children }: { label: string; children: ReactNode }) {
 /** Carte blanche avec liseré vert et titre bleu. */
 function Section({ title, hint, children }: { title: string; hint?: string; children: ReactNode }) {
   return (
-    <section className="bg-white rounded-2xl shadow-md border-t-4 border-brand-green p-6 space-y-4">
-      <div>
-        <h2 className="font-bold text-brand-blue">{title}</h2>
-        {hint && <p className="text-xs text-gray-500 mt-0.5">{hint}</p>}
+    <section className="bg-white rounded-xl border border-line p-6 space-y-4">
+      <div className="border-b border-line pb-3">
+        <h2 className="font-semibold text-brand-blue">{title}</h2>
+        {hint && <p className="text-xs text-slate-500 mt-0.5">{hint}</p>}
       </div>
       {children}
     </section>
@@ -178,9 +178,9 @@ export default function ProfilePage() {
   return (
     <div className="w-full">
       {/* Titre aligné à gauche, sur toute la largeur */}
-      <div className="mb-6 border-l-4 border-brand-green pl-4">
-        <h1 className="text-2xl font-bold text-brand-blue">Mon profil</h1>
-        <p className="text-sm text-gray-600">
+      <div className="mb-6 border-b border-line pb-4">
+        <h1 className="text-2xl font-semibold tracking-tight text-brand-blue">Mon profil</h1>
+        <p className="text-sm text-slate-600">
           Les modifications ne sont appliquées qu'après confirmation par un lien envoyé à votre adresse e-mail.
         </p>
       </div>
@@ -190,7 +190,7 @@ export default function ProfilePage() {
       {updated && (
         <div
           role="status"
-          className="mb-6 rounded-xl border border-brand-green bg-brand-green/20 px-4 py-3 text-sm font-medium text-brand-blue"
+          className="mb-6 rounded-lg border border-brand-green/60 bg-leaf-50 px-4 py-3 text-sm font-medium text-brand-blue"
         >
           ✓ Vos modifications ont été appliquées.
         </div>
@@ -199,15 +199,15 @@ export default function ProfilePage() {
       {/* Deux colonnes : identité à gauche, formulaires à droite (une seule colonne sur mobile) */}
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3 lg:items-start">
         <aside className="space-y-6 lg:sticky lg:top-6">
-          <div className="overflow-hidden rounded-2xl bg-white shadow-lg">
-            <div className="relative h-20 bg-brand-blue">
-              <div className="absolute inset-x-0 bottom-0 h-1.5 bg-brand-green" />
+          <div className="overflow-hidden rounded-xl border border-line bg-white">
+            <div className="relative h-16 bg-brand-blue">
+              <div className="absolute inset-x-0 bottom-0 h-1 bg-brand-gold" />
             </div>
             <div className="px-6 pb-6">
-              <div className="relative z-10 -mt-10 flex h-20 w-20 items-center justify-center rounded-full bg-brand-green text-2xl font-bold text-brand-blue shadow ring-4 ring-white">
+              <div className="relative z-10 -mt-8 flex h-16 w-16 items-center justify-center rounded-lg bg-brand-green text-xl font-semibold text-brand-blue ring-4 ring-white">
                 {initials(user.nom)}
               </div>
-              <h2 className="mt-3 break-words text-lg font-bold text-brand-blue">{user.nom}</h2>
+              <h2 className="mt-3 break-words text-lg font-semibold text-brand-blue">{user.nom}</h2>
               <div className="mt-3 flex flex-wrap items-center gap-2">
                 <RoleBadge role={user.role} />
                 {user.fonction && (
@@ -216,7 +216,7 @@ export default function ProfilePage() {
                   </span>
                 )}
                 {user.centre && (
-                  <span className="rounded-full bg-brand-green/30 px-2.5 py-0.5 text-xs font-semibold text-brand-blue">
+                  <span className="rounded-full bg-leaf-100 px-2.5 py-0.5 text-xs font-semibold text-brand-blue">
                     {user.centre.nom}
                   </span>
                 )}
@@ -225,7 +225,7 @@ export default function ProfilePage() {
           </div>
 
           <Section title="Informations non modifiables" hint="L'IM, l'e-mail et la fonction sont gérés par un responsable.">
-            <dl className="-my-2 divide-y divide-gray-100">
+            <dl className="-my-2 divide-y divide-line">
               <InfoRow label="IM (matricule)">{user.im ?? "—"}</InfoRow>
               <InfoRow label="E-mail">{user.email}</InfoRow>
               <InfoRow label="Fonction">{user.fonction?.nom ?? "—"}</InfoRow>
@@ -273,7 +273,7 @@ export default function ProfilePage() {
               </div>
             </div>
             {isAdmin && (
-              <p className="text-xs text-gray-500">
+              <p className="text-xs text-slate-500">
                 Un admin gère les agents de son centre : pour changer de centre, contactez un responsable central ou un
                 super admin.
               </p>
@@ -315,7 +315,7 @@ export default function ProfilePage() {
             <button
               type="submit"
               disabled={loading}
-              className="rounded-lg bg-brand-blue px-8 py-3 font-semibold text-white shadow transition hover:bg-brand-green hover:text-brand-blue disabled:cursor-not-allowed disabled:opacity-50"
+              className="rounded-lg bg-brand-blue px-6 py-2.5 font-medium text-white transition hover:bg-brand-blue-light disabled:cursor-not-allowed disabled:opacity-50"
             >
               {loading ? "Envoi..." : "Enregistrer et demander la confirmation"}
             </button>

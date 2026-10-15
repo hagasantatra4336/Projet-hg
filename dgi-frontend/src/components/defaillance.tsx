@@ -64,18 +64,18 @@ export function aujourdhui(): string {
 const NIVEAU_BADGE: Record<NiveauRisque, string> = {
   eleve: "bg-red-100 text-red-700",
   moyen: "bg-amber-100 text-amber-800",
-  faible: "bg-brand-green/30 text-brand-blue",
+  faible: "bg-leaf-100 text-brand-blue",
 };
 
 const STATUT_BADGE: Record<StatutAlerte, string> = {
   a_traiter: "bg-blue-100 text-blue-800",
-  traitee: "bg-brand-green/30 text-brand-blue",
-  regularisee: "bg-gray-100 text-gray-600",
+  traitee: "bg-leaf-100 text-brand-blue",
+  regularisee: "bg-slate-100 text-slate-600",
 };
 
 export function NiveauBadge({ niveau }: { niveau: NiveauRisque }) {
   return (
-    <span className={`inline-block rounded-full px-2.5 py-0.5 text-xs font-semibold ${NIVEAU_BADGE[niveau]}`}>
+    <span className={`inline-block rounded px-2 py-0.5 text-xs font-semibold ${NIVEAU_BADGE[niveau]}`}>
       {NIVEAU_LABELS[niveau]}
     </span>
   );
@@ -83,7 +83,7 @@ export function NiveauBadge({ niveau }: { niveau: NiveauRisque }) {
 
 export function StatutBadge({ statut }: { statut: StatutAlerte }) {
   return (
-    <span className={`inline-block rounded-full px-2.5 py-0.5 text-xs font-semibold ${STATUT_BADGE[statut]}`}>
+    <span className={`inline-block rounded px-2 py-0.5 text-xs font-semibold ${STATUT_BADGE[statut]}`}>
       {STATUT_LABELS[statut]}
     </span>
   );
@@ -97,7 +97,7 @@ const REGLE_BADGE: Record<Regle, string> = {
 /** Type d'anomalie : défaillance de déclaration / baisse du chiffre d'affaires. */
 export function RegleBadge({ regle }: { regle: Regle }) {
   return (
-    <span className={`inline-block rounded-full px-2.5 py-0.5 text-xs font-semibold ${REGLE_BADGE[regle]}`}>
+    <span className={`inline-block rounded px-2 py-0.5 text-xs font-semibold ${REGLE_BADGE[regle]}`}>
       {REGLE_LABELS[regle]}
     </span>
   );
@@ -115,7 +115,7 @@ export function PeriodeAnomalie({ a }: { a: PeriodeAlerte }) {
     return (
       <>
         {libellePeriode(a.annee_fiscale, a.mois)}
-        <p className="text-xs text-gray-500">
+        <p className="text-xs text-slate-500">
           {a.details?.baisse_pct !== undefined ? `CA -${a.details.baisse_pct.toLocaleString("fr-FR")} %` : "Baisse du CA"}
         </p>
       </>
@@ -128,7 +128,7 @@ export function PeriodeAnomalie({ a }: { a: PeriodeAlerte }) {
   return (
     <>
       Exercice {a.annee_fiscale}
-      <p className="text-xs text-gray-500">
+      <p className="text-xs text-slate-500">
         {annuelle
           ? `non déposée${score}`
           : `${a.periodes_manquees} mois non déposé${a.periodes_manquees > 1 ? "s" : ""}${score}`}
@@ -145,11 +145,11 @@ function EtatBadge({ fiche }: { fiche: ContribuableFiche["contribuable"] }) {
   if (fiche.etat === null) return null;
 
   const style =
-    fiche.etat === 1 ? "bg-brand-green/30 text-brand-blue" : fiche.etat === 2 ? "bg-amber-100 text-amber-800" : "bg-gray-200 text-gray-700";
+    fiche.etat === 1 ? "bg-leaf-100 text-brand-blue" : fiche.etat === 2 ? "bg-amber-100 text-amber-800" : "bg-slate-200 text-slate-700";
   const date = fiche.etat === 3 ? fiche.date_cessation : fiche.etat === 4 ? fiche.date_radiation : fiche.etat === 2 ? fiche.date_blocage : null;
 
   return (
-    <span className={`inline-block rounded-full px-2.5 py-0.5 text-xs font-semibold ${style}`}>
+    <span className={`inline-block rounded px-2 py-0.5 text-xs font-semibold ${style}`}>
       {fiche.etat_libelle ?? ETAT_LABELS[fiche.etat] ?? "État inconnu"}
       {date ? ` · ${formatJour(date)}` : ""}
     </span>
@@ -172,7 +172,7 @@ function Cellule({ c, baisse }: { c: CelluleDeclaration; baisse: boolean }) {
     return (
       <td
         title={`${periode} : ${detail || "déclaré"}${baisse ? " · baisse du CA" : ""}`}
-        className={`rounded py-1.5 font-semibold ${baisse ? "bg-orange-100 text-orange-700" : "bg-brand-green/30 text-brand-blue"}`}
+        className={`rounded py-1.5 font-semibold ${baisse ? "bg-orange-100 text-orange-700" : "bg-leaf-100 text-brand-blue"}`}
       >
         {baisse ? "▼" : "✔"}
       </td>
@@ -181,7 +181,7 @@ function Cellule({ c, baisse }: { c: CelluleDeclaration; baisse: boolean }) {
 
   if (!c.obligee) {
     return (
-      <td title={`${periode} : aucune obligation`} className="rounded bg-gray-50 py-1.5 text-gray-300">
+      <td title={`${periode} : aucune obligation`} className="rounded bg-slate-50 py-1.5 text-gray-300">
         ·
       </td>
     );
@@ -199,7 +199,7 @@ function Cellule({ c, baisse }: { c: CelluleDeclaration; baisse: boolean }) {
   }
 
   return (
-    <td title={`${periode} : pas encore due`} className="rounded bg-gray-100 py-1.5 text-gray-400">
+    <td title={`${periode} : pas encore due`} className="rounded bg-slate-100 py-1.5 text-slate-400">
       …
     </td>
   );
@@ -220,11 +220,11 @@ function Matrice({
 
   return (
     <div>
-      <h4 className="mb-1 text-xs font-semibold text-gray-600">{titre}</h4>
+      <h4 className="mb-1 text-xs font-semibold text-slate-600">{titre}</h4>
       <div className="overflow-x-auto">
         <table className="w-full min-w-[560px] border-separate border-spacing-1 text-center text-xs">
           <thead>
-            <tr className="text-gray-500">
+            <tr className="text-slate-500">
               <th className="px-2 py-1 text-left font-medium">Impôt</th>
               {entetes.map((e) => (
                 <th key={e} className="px-1 py-1 font-medium">
@@ -284,17 +284,17 @@ export function ContribuableModal({ id, onClose }: { id: number; onClose: () => 
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-brand-blue-dark/55 p-4"
       onMouseDown={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
     >
-      <div className="max-h-[90vh] w-full max-w-4xl overflow-y-auto rounded-2xl bg-white p-6 shadow-xl">
+      <div className="max-h-[90vh] w-full max-w-4xl overflow-y-auto rounded-xl border border-line bg-white p-6 shadow-xl">
         <div className="mb-4 flex items-start justify-between gap-4">
           <div>
-            <h2 className="text-lg font-bold text-brand-blue">{fiche ? fiche.contribuable.nom : "Fiche contribuable"}</h2>
+            <h2 className="text-lg font-semibold text-brand-blue">{fiche ? fiche.contribuable.nom : "Fiche contribuable"}</h2>
             {fiche && (
-              <p className="mt-0.5 flex flex-wrap items-center gap-2 text-sm text-gray-500">
+              <p className="mt-0.5 flex flex-wrap items-center gap-2 text-sm text-slate-500">
                 <span>
                   NIF {fiche.contribuable.nif} · {fiche.contribuable.centre ?? "Aucun centre"}
                 </span>
@@ -305,7 +305,7 @@ export function ContribuableModal({ id, onClose }: { id: number; onClose: () => 
           <button
             type="button"
             onClick={onClose}
-            className="text-2xl leading-none text-gray-400 hover:text-gray-600"
+            className="text-2xl leading-none text-slate-400 hover:text-slate-600"
             aria-label="Fermer"
           >
             ×
@@ -313,31 +313,31 @@ export function ContribuableModal({ id, onClose }: { id: number; onClose: () => 
         </div>
 
         <ErrorBox message={error} />
-        {!fiche && !error && <p className="py-10 text-center text-sm text-gray-500">Chargement...</p>}
+        {!fiche && !error && <p className="py-10 text-center text-sm text-slate-500">Chargement...</p>}
 
         {fiche && mensuel && annuel && (
           <div className="space-y-6">
             {/* Chiffres clés */}
             <div className="grid gap-3 sm:grid-cols-3">
-              <div className="rounded-xl bg-brand-white p-3">
-                <p className="text-xs text-gray-500">Déclarations enregistrées</p>
-                <p className="text-xl font-bold text-brand-blue">{fiche.stats.nb_declarations}</p>
+              <div className="rounded-xl bg-slate-50 p-3">
+                <p className="text-xs text-slate-500">Déclarations enregistrées</p>
+                <p className="text-xl font-semibold text-brand-blue">{fiche.stats.nb_declarations}</p>
               </div>
-              <div className="rounded-xl bg-brand-white p-3">
-                <p className="text-xs text-gray-500">Première année déclarée</p>
-                <p className="text-xl font-bold text-brand-blue">{fiche.stats.premiere_annee ?? "—"}</p>
+              <div className="rounded-xl bg-slate-50 p-3">
+                <p className="text-xs text-slate-500">Première année déclarée</p>
+                <p className="text-xl font-semibold text-brand-blue">{fiche.stats.premiere_annee ?? "—"}</p>
               </div>
-              <div className="rounded-xl bg-brand-white p-3">
-                <p className="text-xs text-gray-500">Dernière année déclarée</p>
-                <p className="text-xl font-bold text-brand-blue">{fiche.stats.derniere_annee ?? "—"}</p>
+              <div className="rounded-xl bg-slate-50 p-3">
+                <p className="text-xs text-slate-500">Dernière année déclarée</p>
+                <p className="text-xl font-semibold text-brand-blue">{fiche.stats.derniere_annee ?? "—"}</p>
               </div>
             </div>
 
             {/* Obligations */}
             <section>
-              <h3 className="mb-2 text-sm font-bold text-brand-blue">Obligations déclaratives</h3>
+              <h3 className="mb-2 text-sm font-semibold text-brand-blue">Obligations déclaratives</h3>
               {fiche.obligations.length === 0 ? (
-                <p className="rounded-xl bg-brand-white p-3 text-sm text-gray-500">
+                <p className="rounded-xl bg-slate-50 p-3 text-sm text-slate-500">
                   Aucun assujettissement connu : l'obligation est déduite de la première déclaration de chaque impôt.
                 </p>
               ) : (
@@ -346,7 +346,7 @@ export function ContribuableModal({ id, onClose }: { id: number; onClose: () => 
                     <span
                       key={`${o.type_impot}-${o.annee_fiscale}`}
                       className={`rounded-lg px-2.5 py-1 text-xs ${
-                        o.exonere || !o.actif ? "bg-gray-100 text-gray-500 line-through" : "bg-brand-white text-brand-blue"
+                        o.exonere || !o.actif ? "bg-slate-100 text-slate-500 line-through" : "bg-slate-50 text-brand-blue"
                       }`}
                       title={o.exonere ? "Exonéré" : o.actif ? "Actif" : "Inactif"}
                     >
@@ -360,26 +360,26 @@ export function ContribuableModal({ id, onClose }: { id: number; onClose: () => 
 
             {/* Alertes du contribuable */}
             <section>
-              <h3 className="mb-2 text-sm font-bold text-brand-blue">Alertes ({fiche.alertes.length})</h3>
+              <h3 className="mb-2 text-sm font-semibold text-brand-blue">Alertes ({fiche.alertes.length})</h3>
               {fiche.alertes.length === 0 ? (
-                <p className="rounded-xl bg-brand-white p-3 text-sm text-gray-500">Aucune alerte pour ce contribuable.</p>
+                <p className="rounded-xl bg-slate-50 p-3 text-sm text-slate-500">Aucune alerte pour ce contribuable.</p>
               ) : (
                 <ul className="space-y-2">
                   {fiche.alertes.map((a) => (
-                    <li key={a.id} className="rounded-xl border border-gray-100 p-3 text-sm">
+                    <li key={a.id} className="rounded-xl border border-line p-3 text-sm">
                       <div className="flex flex-wrap items-center gap-2">
                         <RegleBadge regle={a.regle} />
                         <NiveauBadge niveau={a.niveau} />
                         <StatutBadge statut={a.statut} />
-                        <span className="font-medium text-gray-700">{a.type_impot}</span>
-                        <span className="text-gray-500">
+                        <span className="font-medium text-slate-700">{a.type_impot}</span>
+                        <span className="text-slate-500">
                           · {a.regle === "baisse_ca" ? libellePeriode(a.annee_fiscale, a.mois) : `exercice ${a.annee_fiscale}`}
                         </span>
                       </div>
-                      <p className="mt-2 text-xs leading-relaxed text-gray-700">{a.motif}</p>
-                      {a.commentaire && <p className="mt-1 text-xs italic text-gray-500">Commentaire : {a.commentaire}</p>}
+                      <p className="mt-2 text-xs leading-relaxed text-slate-700">{a.motif}</p>
+                      {a.commentaire && <p className="mt-1 text-xs italic text-slate-500">Commentaire : {a.commentaire}</p>}
                       {a.statut === "traitee" && a.traite_par && (
-                        <p className="mt-1 text-xs text-gray-500">
+                        <p className="mt-1 text-xs text-slate-500">
                           Traitée par {a.traite_par}
                           {a.traite_le ? `, le ${formatDate(a.traite_le)}` : ""}
                         </p>
@@ -393,15 +393,15 @@ export function ContribuableModal({ id, onClose }: { id: number; onClose: () => 
             {/* Historique des déclarations */}
             <section className="space-y-4">
               <div>
-                <h3 className="text-sm font-bold text-brand-blue">Historique des déclarations</h3>
-                <p className="text-xs text-gray-500">
+                <h3 className="text-sm font-semibold text-brand-blue">Historique des déclarations</h3>
+                <p className="text-xs text-slate-500">
                   ✔ déclaré (survolez pour le CA et les dates) · ▼ baisse du CA · ✘ non déposé, date limite dépassée · … pas encore
                   dû · · aucune obligation
                 </p>
               </div>
 
               {mensuel.impots.length === 0 && annuel.impots.length === 0 ? (
-                <p className="rounded-xl bg-brand-white p-3 text-sm text-gray-500">Aucune déclaration enregistrée.</p>
+                <p className="rounded-xl bg-slate-50 p-3 text-sm text-slate-500">Aucune déclaration enregistrée.</p>
               ) : (
                 <>
                   <Matrice

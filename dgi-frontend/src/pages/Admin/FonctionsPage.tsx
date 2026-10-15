@@ -106,7 +106,7 @@ export default function FonctionsPage() {
   return (
     <div>
       <div className="flex items-center justify-between mb-4">
-        <p className="text-sm text-gray-600">
+        <p className="text-sm text-slate-600">
           Le rôle d'un utilisateur est déterminé par sa fonction.
         </p>
         <button type="button" className={primaryButtonClass} onClick={openNew}>
@@ -116,9 +116,9 @@ export default function FonctionsPage() {
 
       <ErrorBox message={error} />
 
-      <div className="bg-white rounded-2xl shadow overflow-x-auto">
+      <div className="bg-white rounded-xl border border-line overflow-x-auto">
         <table className="w-full text-sm">
-          <thead className="bg-gray-50 text-left text-gray-600">
+          <thead className="border-b border-line bg-slate-50 text-left text-slate-600">
             <tr>
               <th className="px-4 py-3 font-semibold">Fonction</th>
               <th className="px-4 py-3 font-semibold">Rôle</th>
@@ -126,17 +126,17 @@ export default function FonctionsPage() {
               <th className="px-4 py-3" />
             </tr>
           </thead>
-          <tbody className="divide-y divide-gray-100">
+          <tbody className="divide-y divide-line">
             {loading && (
               <tr>
-                <td colSpan={4} className="px-4 py-6 text-center text-gray-500">
+                <td colSpan={4} className="px-4 py-6 text-center text-slate-500">
                   Chargement...
                 </td>
               </tr>
             )}
             {!loading && fonctions.length === 0 && (
               <tr>
-                <td colSpan={4} className="px-4 py-6 text-center text-gray-500">
+                <td colSpan={4} className="px-4 py-6 text-center text-slate-500">
                   Aucune fonction.
                 </td>
               </tr>
@@ -147,7 +147,7 @@ export default function FonctionsPage() {
                 <td className="px-4 py-3">
                   <RoleBadge role={f.role} />
                 </td>
-                <td className="px-4 py-3 text-gray-600">{f.users_count ?? 0}</td>
+                <td className="px-4 py-3 text-slate-600">{f.users_count ?? 0}</td>
                 <td className="px-4 py-3 text-right whitespace-nowrap">
                   <EditButton onClick={() => openEdit(f)} />
                   <DeleteButton onClick={() => setToDelete(f)} />
@@ -158,9 +158,9 @@ export default function FonctionsPage() {
         </table>
       </div>
 
-      <div className="bg-white rounded-2xl shadow p-5 mt-6">
-        <h2 className="text-sm font-bold text-brand-blue mb-3">Droits de chaque rôle</h2>
-        <ul className="space-y-2 text-sm text-gray-700">
+      <div className="bg-white rounded-xl border border-line p-5 mt-6">
+        <h2 className="text-sm font-semibold text-brand-blue mb-3">Droits de chaque rôle</h2>
+        <ul className="space-y-2 text-sm text-slate-700">
           {ROLES.map((r) => (
             <li key={r} className="flex items-start gap-3">
               <span className="w-24 shrink-0">
@@ -197,7 +197,7 @@ export default function FonctionsPage() {
                 ))}
               </select>
             </Field>
-            <p className="text-xs text-gray-500">{ROLE_HELP[form.role]}</p>
+            <p className="text-xs text-slate-500">{ROLE_HELP[form.role]}</p>
             <div className="flex justify-end gap-3 pt-2">
               <button type="button" className={secondaryButtonClass} onClick={() => setEditing(null)}>
                 Annuler

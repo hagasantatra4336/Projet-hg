@@ -116,8 +116,40 @@ class ReglesDetection
                 });
             }
 
-            $q->orWhereNotIn('alertes.regle', self::CODES); // règles futures : non filtrées
+            // Règles personnalisées : seules les alertes des règles ACTIVES sont visibles, et seulement pour leurs impôts.
+            // Brouillon / désactivée : alertes masquées (ni supprimées ni modifiées).
+            $personnalisees = self::personnalisees();
+            foreach ($personnalisees as $r) {
+                if ($r->statut === Regle::ACTIVE && $r->actif) {
+                    $q->orWhere(function ($s) use ($r) {
+                        $s->where('alertes.regle', $r->code)
+                            ->whereIn('alertes.type_impot', array_values((array) $r->impots));
+                    });
+                }
+            }
+
+            $q->orWhereNotIn('alertes.regle', array_merge(self::CODES, $personnalisees->pluck('code')->all())); // règles futures : non filtrées
         });
+    }
+
+    /**
+     * Règles personnalisées (toutes, quel que soit leur statut). Vide si la migration de l'étape 2 n'est pas lancée.
+     *
+     * @return \Illuminate\Support\Collection<int, Regle>
+     */
+    public static function personnalisees(): \Illuminate\Support\Collection
+    {
+        try {
+            return Regle::where('type', Regle::PERSONNALISEE)->get();
+        } catch (Throwable) {
+            return collect();
+        }
+    }
+
+    /** Codes des règles personnalisées (pour valider les filtres de l'écran des alertes). @return array<int, string> */
+    public static function codesPersonnalises(): array
+    {
+        return self::personnalisees()->pluck('code')->all();
     }
 
     private static function regle(string $code): ?Regle

@@ -28,7 +28,7 @@ class DefaillanceController extends Controller
     public function index(Request $request): JsonResponse
     {
         $data = $request->validate([
-            'regle' => ['nullable', Rule::in(Alerte::REGLES)],
+            'regle' => ['nullable', Rule::in(array_merge(Alerte::REGLES, ReglesDetection::codesPersonnalises()))],
             'niveau' => ['nullable', Rule::in(Alerte::NIVEAUX)],
             'type_impot' => ['nullable', Rule::in(config('anomalies.defaillance.impots'))],
             'statut' => ['nullable', Rule::in([Alerte::A_TRAITER, Alerte::TRAITEE, Alerte::REGULARISEE])],

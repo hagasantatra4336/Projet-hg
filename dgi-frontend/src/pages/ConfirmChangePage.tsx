@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import api, { getErrorMessage } from "../services/api";
 import { primaryButtonClass } from "../components/ui";
+import { LogoBand } from "../components/AuthShell";
 
 interface ConfirmResponse {
   message: string;
@@ -39,17 +40,19 @@ export default function ConfirmChangePage() {
   }
 
   return (
-    <div className="min-h-screen bg-brand-white flex items-center justify-center px-4">
-      <div className="w-full max-w-md bg-white rounded-2xl shadow-lg p-8 text-center">
-        <h1 className="text-xl font-bold text-brand-blue mb-4">Confirmation des modifications</h1>
+    <div className="min-h-screen bg-canvas flex items-center justify-center px-4 py-10">
+      <div className="w-full max-w-md overflow-hidden rounded-xl border border-line bg-white text-center">
+        <LogoBand />
+        <div className="p-8">
+        <h1 className="text-xl font-semibold tracking-tight text-brand-blue mb-4">Confirmation des modifications</h1>
 
         {!token && (
-          <p className="text-sm text-red-600">Lien incomplet. Utilisez le lien reçu par e-mail.</p>
+          <p className="text-sm text-red-700">Lien incomplet. Utilisez le lien reçu par e-mail.</p>
         )}
 
         {token && (status === "idle" || status === "loading") && (
           <>
-            <p className="text-sm text-gray-600 mb-6">
+            <p className="text-sm text-slate-600 mb-6">
               Cliquez sur le bouton pour appliquer les modifications demandées sur votre compte.
             </p>
             <button
@@ -65,13 +68,13 @@ export default function ConfirmChangePage() {
 
         {status === "done" && (
           <>
-            <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-brand-green text-2xl font-bold text-brand-blue">
+            <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-brand-green text-2xl font-semibold tracking-tight text-brand-blue">
               ✓
             </div>
-            <p className="text-sm text-brand-blue bg-brand-green/20 border border-brand-green rounded-lg px-3 py-2 mb-4">
+            <p className="text-sm text-brand-blue bg-leaf-50 border border-brand-green/60 rounded-lg px-3 py-2 mb-4">
               {message}
             </p>
-            <p className="text-sm text-gray-600">
+            <p className="text-sm text-slate-600">
               {passwordChanged
                 ? "Votre mot de passe a été modifié : toutes vos sessions ont été fermées. Reconnectez-vous depuis l'application."
                 : "La page d'attente de l'application se met à jour et vous redirige vers votre profil. Vous pouvez fermer cette page."}
@@ -84,11 +87,12 @@ export default function ConfirmChangePage() {
             <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2 mb-4">
               {message}
             </p>
-            <p className="text-sm text-gray-600">
+            <p className="text-sm text-slate-600">
               Refaites une demande depuis la page « Mon profil » de l'application.
             </p>
           </>
         )}
+        </div>
       </div>
     </div>
   );

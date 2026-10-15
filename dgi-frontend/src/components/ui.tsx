@@ -4,17 +4,17 @@ import { ROLE_LABELS } from "../types";
 import { IconEdit, IconTrash } from "./icons";
 
 export const inputClass =
-  "w-full rounded-lg border border-gray-300 px-3 py-2 text-gray-800 placeholder-gray-400 " +
-  "focus:outline-none focus:ring-2 focus:ring-brand-green focus:border-transparent transition " +
-  "disabled:bg-gray-100 disabled:text-gray-500";
+  "w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-slate-900 placeholder-slate-400 " +
+  "focus:outline-none focus:border-brand-blue focus:ring-1 focus:ring-brand-blue transition " +
+  "disabled:bg-slate-100 disabled:text-slate-500";
 
 export const primaryButtonClass =
   "rounded-lg bg-brand-blue text-white font-medium px-4 py-2 " +
-  "hover:bg-opacity-90 disabled:opacity-50 disabled:cursor-not-allowed transition";
+  "hover:bg-brand-blue-light disabled:opacity-50 disabled:cursor-not-allowed transition";
 
 export const secondaryButtonClass =
-  "rounded-lg border border-gray-300 bg-white text-gray-700 font-medium px-4 py-2 " +
-  "hover:bg-gray-50 disabled:opacity-50 transition";
+  "rounded-lg border border-slate-300 bg-white text-slate-700 font-medium px-4 py-2 " +
+  "hover:bg-slate-50 disabled:opacity-50 transition";
 
 export const dangerButtonClass =
   "rounded-lg bg-red-600 text-white font-medium px-4 py-2 hover:bg-red-700 disabled:opacity-50 transition";
@@ -34,7 +34,7 @@ export function PasswordInput({
         onClick={() => setVisible((v) => !v)}
         aria-label={visible ? "Masquer le mot de passe" : "Afficher le mot de passe"}
         title={visible ? "Masquer le mot de passe" : "Afficher le mot de passe"}
-        className="absolute inset-y-0 right-0 flex items-center px-3 text-gray-400 hover:text-brand-blue"
+        className="absolute inset-y-0 right-0 flex items-center px-3 text-slate-400 hover:text-brand-blue"
       >
         <svg
           xmlns="http://www.w3.org/2000/svg"
@@ -69,7 +69,7 @@ export function PasswordInput({
 export function ErrorBox({ message }: { message: string }) {
   if (!message) return null;
   return (
-    <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2 mb-4">
+    <p className="text-sm text-red-700 bg-red-50 border border-red-200 rounded-lg px-3 py-2 mb-4">
       {message}
     </p>
   );
@@ -78,23 +78,23 @@ export function ErrorBox({ message }: { message: string }) {
 export function Field({ label, children }: { label: string; children: ReactNode }) {
   return (
     <label className="block">
-      <span className="block text-sm font-medium text-brand-blue mb-1">{label}</span>
+      <span className="block text-sm font-medium text-slate-700 mb-1">{label}</span>
       {children}
     </label>
   );
 }
 
 const ROLE_BADGE: Record<Role, string> = {
-  agent: "bg-gray-100 text-gray-700",
-  admin: "bg-brand-green/30 text-brand-blue",
-  central: "bg-blue-100 text-blue-800",
+  agent: "bg-slate-100 text-slate-700",
+  admin: "bg-leaf-100 text-brand-blue",
+  central: "bg-sky-100 text-sky-900",
   superadmin: "bg-brand-blue text-white",
 };
 
 export function RoleBadge({ role }: { role: Role | null }) {
-  if (!role) return <span className="text-gray-400">—</span>;
+  if (!role) return <span className="text-slate-400">—</span>;
   return (
-    <span className={`inline-block rounded-full px-2.5 py-0.5 text-xs font-semibold ${ROLE_BADGE[role]}`}>
+    <span className={`inline-block rounded px-2 py-0.5 text-xs font-semibold ${ROLE_BADGE[role]}`}>
       {ROLE_LABELS[role]}
     </span>
   );
@@ -111,18 +111,18 @@ export function Modal({
 }) {
   return (
     <div
-      className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4"
+      className="fixed inset-0 z-50 bg-brand-blue-dark/55 flex items-center justify-center p-4"
       onMouseDown={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
     >
-      <div className="w-full max-w-lg max-h-[90vh] overflow-y-auto bg-white rounded-2xl shadow-xl p-6">
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-bold text-brand-blue">{title}</h2>
+      <div className="w-full max-w-lg max-h-[90vh] overflow-y-auto bg-white rounded-xl border border-line shadow-xl p-6">
+        <div className="flex items-center justify-between mb-5 border-b border-line pb-3">
+          <h2 className="text-lg font-semibold text-brand-blue">{title}</h2>
           <button
             type="button"
             onClick={onClose}
-            className="text-gray-400 hover:text-gray-600 text-2xl leading-none"
+            className="text-slate-400 hover:text-slate-700 text-2xl leading-none"
             aria-label="Fermer"
           >
             ×
@@ -147,7 +147,7 @@ export function ConfirmDialog({
 }) {
   return (
     <Modal title="Confirmation" onClose={onCancel}>
-      <p className="text-sm text-gray-700 mb-6">{message}</p>
+      <p className="text-sm text-slate-700 mb-6">{message}</p>
       <div className="flex justify-end gap-3">
         <button type="button" className={secondaryButtonClass} onClick={onCancel} disabled={loading}>
           Annuler
@@ -168,7 +168,7 @@ export function EditButton({ onClick, label = "Modifier" }: { onClick: () => voi
       onClick={onClick}
       title={label}
       aria-label={label}
-      className="inline-flex h-9 w-9 items-center justify-center rounded-lg text-brand-blue transition hover:bg-brand-green/30 focus:outline-none focus:ring-2 focus:ring-brand-green"
+      className="inline-flex h-9 w-9 items-center justify-center rounded-lg text-brand-blue transition hover:bg-slate-100 focus:outline-none focus:ring-2 focus:ring-brand-blue"
     >
       <IconEdit className="h-[18px] w-[18px]" />
     </button>

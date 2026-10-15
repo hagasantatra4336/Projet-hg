@@ -168,12 +168,12 @@ export default function CentreSelect({
           onClick={clear}
           aria-label="Retirer le centre"
           title="Retirer le centre"
-          className="absolute inset-y-0 right-0 flex items-center px-3 text-lg leading-none text-gray-400 hover:text-red-500"
+          className="absolute inset-y-0 right-0 flex items-center px-3 text-lg leading-none text-slate-400 hover:text-red-500"
         >
           ×
         </button>
       ) : (
-        <span className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-3 text-gray-400">
+        <span className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-3 text-slate-400">
           <svg
             xmlns="http://www.w3.org/2000/svg"
             viewBox="0 0 24 24"
@@ -196,9 +196,9 @@ export default function CentreSelect({
           id={listId}
           ref={listRef}
           role="listbox"
-          className="absolute z-30 mt-1 max-h-60 w-full overflow-auto rounded-lg border border-gray-200 bg-white py-1 shadow-lg"
+          className="absolute z-30 mt-1 max-h-60 w-full overflow-auto rounded-lg border border-slate-300 bg-white py-1 shadow-lg"
         >
-          {results.length === 0 && <li className="px-3 py-2 text-sm text-gray-500">Aucun centre trouvé</li>}
+          {results.length === 0 && <li className="px-3 py-2 text-sm text-slate-500">Aucun centre trouvé</li>}
           {results.map((c, i) => (
             <li
               key={c.id}
@@ -209,12 +209,12 @@ export default function CentreSelect({
                 choose(c);
               }}
               onMouseEnter={() => setActive(i)}
-              className={`cursor-pointer px-3 py-2 ${i === active ? "bg-brand-green/30" : ""}`}
+              className={`cursor-pointer px-3 py-2 ${i === active ? "bg-slate-100" : ""}`}
             >
               <div className={`text-sm text-brand-blue ${String(c.id) === value ? "font-bold" : "font-medium"}`}>
                 {c.nom}
               </div>
-              {c.adresse && <div className="text-xs text-gray-500">{c.adresse}</div>}
+              {c.adresse && <div className="text-xs text-slate-500">{c.adresse}</div>}
             </li>
           ))}
         </ul>

@@ -341,12 +341,12 @@ export default function DefaillancesPage() {
     <div>
       <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-brand-blue">Anomalies de déclaration</h1>
-          <p className="text-sm text-gray-500">
+          <h1 className="text-2xl font-semibold tracking-tight text-brand-blue">Anomalies de déclaration</h1>
+          <p className="text-sm text-slate-500">
             Défaillances de déclaration et baisses du chiffre d'affaires
             {role === "agent" || role === "admin" ? ` · ${user?.centre?.nom ?? "votre centre"}` : ""}
           </p>
-          <p className="mt-1 text-xs text-gray-400">
+          <p className="mt-1 text-xs text-slate-400">
             Analyse automatique toutes les minutes
             {summary
               ? summary.derniere_analyse
@@ -378,9 +378,9 @@ export default function DefaillancesPage() {
 
       {/* Cartes : alertes à traiter par niveau de risque */}
       <div className="grid gap-3 sm:grid-cols-4">
-        <div className="rounded-2xl bg-white p-4 shadow-sm">
-          <p className="text-xs text-gray-500">Alertes à traiter</p>
-          <p className="text-3xl font-bold text-brand-blue">{summary ? summary.a_traiter : "—"}</p>
+        <div className="rounded-xl bg-white p-4 border border-line">
+          <p className="text-xs text-slate-500">Alertes à traiter</p>
+          <p className="text-3xl font-semibold text-brand-blue">{summary ? summary.a_traiter : "—"}</p>
         </div>
         {cards.map((c) => (
           <button
@@ -388,12 +388,12 @@ export default function DefaillancesPage() {
             type="button"
             onClick={() => toggleNiveau(c.niveau)}
             aria-pressed={filters.niveau === c.niveau}
-            className={`rounded-2xl bg-white p-4 text-left shadow-sm transition hover:shadow ${
+            className={`rounded-xl bg-white p-4 text-left border border-line transition hover:border-brand-blue/40 ${
               filters.niveau === c.niveau ? "ring-2 ring-brand-blue" : ""
             }`}
           >
-            <p className="text-xs text-gray-500">Risque {NIVEAU_LABELS[c.niveau].toLowerCase()}</p>
-            <p className="flex items-center gap-2 text-3xl font-bold text-brand-blue">
+            <p className="text-xs text-slate-500">Risque {NIVEAU_LABELS[c.niveau].toLowerCase()}</p>
+            <p className="flex items-center gap-2 text-3xl font-semibold text-brand-blue">
               {c.value ?? "—"}
               <NiveauBadge niveau={c.niveau} />
             </p>
@@ -401,11 +401,11 @@ export default function DefaillancesPage() {
         ))}
       </div>
 
-      <section className="mt-6 rounded-2xl bg-white p-5 shadow-sm sm:p-6">
+      <section className="mt-6 rounded-xl bg-white p-5 border border-line sm:p-6">
         {/* Filtres */}
         <div className="mb-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-6">
           <div className="relative lg:col-span-2">
-            <IconSearch className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+            <IconSearch className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
             <input
               value={searchInput}
               onChange={(e) => setSearchInput(e.target.value)}
@@ -503,9 +503,9 @@ export default function DefaillancesPage() {
         <ErrorBox message={error} />
 
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[1080px] text-left text-sm">
+          <table className="w-full min-w-[980px] text-left text-sm">
             <thead>
-              <tr className="text-xs font-medium text-gray-400">
+              <tr className="bg-slate-50 text-xs font-semibold text-slate-600">
                 <th className="px-3 py-3">Contribuable</th>
                 <th className="px-3 py-3">Centre</th>
                 <th className="px-3 py-3">Anomalie</th>
@@ -531,7 +531,7 @@ export default function DefaillancesPage() {
             </thead>
             <tbody className={loading ? "opacity-50 transition" : "transition"}>
               {data?.data.map((d) => (
-                <tr key={d.id} className="border-t border-gray-100 align-top">
+                <tr key={d.id} className="border-t border-line hover:bg-slate-50 align-top">
                   <td className="px-3 py-4">
                     <button
                       type="button"
@@ -541,29 +541,29 @@ export default function DefaillancesPage() {
                     >
                       {d.contribuable.nom}
                     </button>
-                    <p className="text-xs text-gray-500">{d.contribuable.nif}</p>
+                    <p className="text-xs text-slate-500">{d.contribuable.nif}</p>
                   </td>
-                  <td className="px-3 py-4 text-gray-700">{d.contribuable.centre ?? "—"}</td>
+                  <td className="px-3 py-4 text-slate-700">{d.contribuable.centre ?? "—"}</td>
                   <td className="px-3 py-4">
                     <RegleBadge regle={d.regle} />
                   </td>
-                  <td className="px-3 py-4 font-medium text-gray-700">{d.type_impot}</td>
-                  <td className="px-3 py-4 text-gray-700">
+                  <td className="px-3 py-4 font-medium text-slate-700">{d.type_impot}</td>
+                  <td className="px-3 py-4 text-slate-700">
                     <PeriodeAnomalie a={d} />
                   </td>
                   <td className="px-3 py-4">
                     <NiveauBadge niveau={d.niveau} />
                   </td>
-                  <td className="max-w-xs px-3 py-4 text-xs leading-relaxed text-gray-700">{d.motif}</td>
+                  <td className="max-w-xs px-3 py-4 text-xs leading-relaxed text-slate-700">{d.motif}</td>
                   <td className="px-3 py-4">
                     <StatutBadge statut={d.statut} />
                     {d.statut === "traitee" && d.traite_par && (
-                      <p className="mt-1 text-xs text-gray-500">
+                      <p className="mt-1 text-xs text-slate-500">
                         par {d.traite_par}
                         {d.traite_le ? `, le ${formatDate(d.traite_le)}` : ""}
                       </p>
                     )}
-                    {d.commentaire && <p className="mt-1 max-w-[200px] break-words text-xs italic text-gray-500">{d.commentaire}</p>}
+                    {d.commentaire && <p className="mt-1 max-w-[200px] break-words text-xs italic text-slate-500">{d.commentaire}</p>}
                   </td>
                   <td className="px-3 py-3 text-right">
                     <EditButton onClick={() => openTraitement(d)} label="Traiter l'alerte" />
@@ -572,7 +572,7 @@ export default function DefaillancesPage() {
               ))}
               {data && data.data.length === 0 && (
                 <tr>
-                  <td colSpan={9} className="px-3 py-10 text-center text-gray-500">
+                  <td colSpan={9} className="px-3 py-10 text-center text-slate-500">
                     {canManage
                       ? "Aucune alerte. Importez des déclarations puis lancez l'analyse."
                       : "Aucune anomalie pour votre centre."}
@@ -581,7 +581,7 @@ export default function DefaillancesPage() {
               )}
               {!data && loading && (
                 <tr>
-                  <td colSpan={9} className="px-3 py-10 text-center text-gray-500">
+                  <td colSpan={9} className="px-3 py-10 text-center text-slate-500">
                     Chargement...
                   </td>
                 </tr>
@@ -591,8 +591,8 @@ export default function DefaillancesPage() {
         </div>
 
         {data && data.total > 0 && (
-          <div className="mt-4 flex flex-col gap-3 border-t border-gray-100 pt-4 sm:flex-row sm:items-center sm:justify-between">
-            <p className="text-xs text-gray-500">
+          <div className="mt-4 flex flex-col gap-3 border-t border-line pt-4 sm:flex-row sm:items-center sm:justify-between">
+            <p className="text-xs text-slate-500">
               Affichage de {from} à {to} sur {data.total.toLocaleString("fr-FR")} alertes
             </p>
             <div className="flex items-center gap-1">
@@ -601,7 +601,7 @@ export default function DefaillancesPage() {
                 onClick={() => setPage((p) => Math.max(1, p - 1))}
                 disabled={data.current_page <= 1}
                 aria-label="Page précédente"
-                className="rounded-md px-2 py-1 text-sm text-gray-500 hover:bg-brand-green/20 disabled:opacity-40"
+                className="rounded-md px-2 py-1 text-sm text-slate-500 hover:bg-slate-100 disabled:opacity-40"
               >
                 ‹
               </button>
@@ -612,7 +612,7 @@ export default function DefaillancesPage() {
                   onClick={() => setPage(n)}
                   aria-current={n === data.current_page ? "page" : undefined}
                   className={`h-8 min-w-8 rounded-md px-2 text-sm transition ${
-                    n === data.current_page ? "bg-brand-blue font-semibold text-white" : "text-gray-600 hover:bg-brand-green/20"
+                    n === data.current_page ? "bg-brand-blue font-semibold text-white" : "text-slate-600 hover:bg-slate-100"
                   }`}
                 >
                   {n}
@@ -623,7 +623,7 @@ export default function DefaillancesPage() {
                 onClick={() => setPage((p) => Math.min(data.last_page, p + 1))}
                 disabled={data.current_page >= data.last_page}
                 aria-label="Page suivante"
-                className="rounded-md px-2 py-1 text-sm text-gray-500 hover:bg-brand-green/20 disabled:opacity-40"
+                className="rounded-md px-2 py-1 text-sm text-slate-500 hover:bg-slate-100 disabled:opacity-40"
               >
                 ›
               </button>
@@ -636,11 +636,11 @@ export default function DefaillancesPage() {
       {selected && (
         <Modal title="Traiter l'alerte" onClose={() => setSelected(null)}>
           <form onSubmit={handleSave} className="space-y-4">
-            <div className="rounded-lg bg-brand-white p-3 text-sm">
+            <div className="rounded-lg bg-slate-50 p-3 text-sm">
               <p className="font-semibold text-brand-blue">
-                {selected.contribuable.nom} <span className="font-normal text-gray-500">({selected.contribuable.nif})</span>
+                {selected.contribuable.nom} <span className="font-normal text-slate-500">({selected.contribuable.nif})</span>
               </p>
-              <p className="mt-1 text-gray-700">{selected.motif}</p>
+              <p className="mt-1 text-slate-700">{selected.motif}</p>
               <button
                 type="button"
                 onClick={() => setFicheId(selected.contribuable.id)}
@@ -653,7 +653,7 @@ export default function DefaillancesPage() {
             <ErrorBox message={formError} />
 
             {selected.statut === "regularisee" ? (
-              <p className="text-sm text-gray-600">
+              <p className="text-sm text-slate-600">
                 L'anomalie n'est plus constatée (déclaration déposée ou corrigée) : l'alerte est régularisée. Vous pouvez tout de même ajouter un commentaire.
               </p>
             ) : (
@@ -696,7 +696,7 @@ export default function DefaillancesPage() {
       {analyseOpen && (
         <Modal title="Lancer l'analyse" onClose={() => setAnalyseOpen(false)}>
           <form onSubmit={handleAnalyse} className="space-y-4">
-            <p className="text-sm text-gray-600">
+            <p className="text-sm text-slate-600">
               Deux règles sont appliquées. <strong>Défaut de dépôt</strong> (critère R4 de la DGI) : un contribuable assujetti
               qui n'a pas déposé une déclaration dont la date limite est dépassée (score sur 5 : déclaration annuelle non déposée = 5,
               mois de TVA non déposés dans l'exercice : 1 à 4 = 2, 5 à 9 = 3, 10 à 12 = 4) ; les contribuables en cessation ou radiés
@@ -707,7 +707,7 @@ export default function DefaillancesPage() {
 
             <ErrorBox message={analyseError} />
             {analyseMessage && (
-              <p className="rounded-lg border border-brand-green bg-brand-green/20 px-3 py-2 text-sm text-brand-blue">
+              <p className="rounded-lg border border-brand-green/60 bg-leaf-50 px-3 py-2 text-sm text-brand-blue">
                 {analyseMessage}
               </p>
             )}
@@ -738,7 +738,7 @@ export default function DefaillancesPage() {
       {importOpen && (
         <Modal title="Importer des déclarations (CSV)" onClose={() => setImportOpen(false)}>
           <form onSubmit={handleImport} className="space-y-4">
-            <p className="text-sm text-gray-600">
+            <p className="text-sm text-slate-600">
               Colonnes :{" "}
               <code className="text-xs">
                 nif ; nom ; centre ; type_impot ; annee_fiscale ; mois ; chiffre_affaires ; date_limite ; date_depot
@@ -754,10 +754,10 @@ export default function DefaillancesPage() {
             <ErrorBox message={importError} />
 
             {importResult && (
-              <div className="rounded-lg border border-brand-green bg-brand-green/20 px-3 py-2 text-sm text-brand-blue">
+              <div className="rounded-lg border border-brand-green/60 bg-leaf-50 px-3 py-2 text-sm text-brand-blue">
                 <p className="font-medium">{importResult.message}</p>
                 {importResult.erreurs.length > 0 && (
-                  <ul className="mt-2 list-disc space-y-0.5 pl-5 text-xs text-gray-700">
+                  <ul className="mt-2 list-disc space-y-0.5 pl-5 text-xs text-slate-700">
                     {importResult.erreurs.map((m) => (
                       <li key={m}>{m}</li>
                     ))}

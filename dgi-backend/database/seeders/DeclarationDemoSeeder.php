@@ -10,12 +10,7 @@ use App\Support\Nif;
 use DateTimeImmutable;
 use Illuminate\Database\Seeder;
 
-/**
- * Jeu de données de test SIMULÉ ET ANONYMISÉ (aucune donnée réelle) pour démontrer la détection :
- *   php artisan db:seed --class=DeclarationDemoSeeder
- * Il faut au moins un centre. Relançable sans doublons. Ensuite, lancez l'analyse depuis la page
- * « Anomalies » (ou : php artisan dgi:detecter-defaillances).
- *
+/* 
  * 36 contribuables répartis sur les centres, 12 scénarios (3 contribuables chacun) :
  *   0 TVA régulière | 1 TVA régulière avec baisse du CA en août 2026 (35 %, 55 %, 75 % par rapport à août 2025)
  *   2 TVA : juin à août 2026 non déposés (3 mois) | 3 TVA : avril à août 2026 non déposés (5 mois)

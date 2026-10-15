@@ -3,6 +3,7 @@ import { Link, Navigate, useNavigate } from "react-router-dom";
 import api, { getErrorMessage } from "../../services/api";
 import { useAuth } from "../../context/AuthContext";
 import { PasswordInput } from "../../components/ui";
+import AuthLayout from "../../components/AuthLayout";
 import type { AppUser } from "../../types";
 
 const STEP_CREDENTIALS = 1;
@@ -25,12 +26,17 @@ interface LoginResponse {
 }
 
 const inputClass =
-  "w-full rounded-lg border border-gray-300 px-4 py-2.5 text-gray-800 placeholder-gray-400 " +
-  "focus:outline-none focus:ring-2 focus:ring-brand-green focus:border-transparent transition";
+  "w-full rounded-xl border border-gray-200 bg-gray-50/70 px-4 py-3 text-sm text-gray-800 placeholder-gray-400 " +
+  "focus:bg-white focus:outline-none focus:ring-2 focus:ring-brand-green/60 focus:border-brand-green transition";
 
 const primaryButtonClass =
-  "w-full rounded-lg bg-brand-blue text-white font-medium py-2.5 " +
-  "hover:bg-opacity-90 disabled:opacity-50 disabled:cursor-not-allowed transition";
+  "w-full rounded-xl bg-brand-blue py-3 text-sm font-semibold text-white shadow-md shadow-brand-blue/20 " +
+  "hover:brightness-110 hover:shadow-lg active:scale-[0.99] disabled:opacity-50 disabled:cursor-not-allowed transition";
+
+const linkButtonClass = "w-full text-sm font-medium text-brand-blue hover:underline disabled:opacity-50";
+
+const errorClass = "mb-5 rounded-xl border-l-4 border-red-500 bg-red-50 px-4 py-3 text-sm text-red-700";
+const infoClass = "mb-5 rounded-xl border-l-4 border-brand-green bg-brand-green/15 px-4 py-3 text-sm text-brand-blue";
 
 export default function LoginPage() {
   const navigate = useNavigate();
@@ -112,96 +118,84 @@ export default function LoginPage() {
   if (user) return <Navigate to="/dashboard" replace />;
 
   return (
-    <div className="min-h-screen bg-brand-white flex items-center justify-center px-4">
-      <div className="w-full max-w-md bg-white rounded-2xl shadow-lg p-8">
-        <h1 className="text-xl font-bold text-brand-blue text-center mb-1">Connexion</h1>
-        <p className="text-sm text-gray-500 text-center mb-6">Étape {step} sur 2</p>
+    <AuthLayout>
+      <h1 className="text-2xl font-bold tracking-tight text-brand-blue">Connexion</h1>
+      <p className="mt-1 text-sm text-gray-500">Accédez à votre espace compte.</p>
 
-        {error && (
-          <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2 mb-4">
-            {error}
+      <div className="mb-6 mt-5 flex items-center gap-2">
+        {[1, 2].map((s) => (
+          <span key={s} className={`h-1.5 flex-1 rounded-full transition-colors ${s <= step ? "bg-brand-blue" : "bg-gray-200"}`} />
+        ))}
+        <span className="ml-1 text-xs font-medium text-gray-500">Étape {step} sur 2</span>
+      </div>
+
+      {error && <p className={errorClass}>{error}</p>}
+      {info && <p className={infoClass}>{info}</p>}
+
+      {step === STEP_CREDENTIALS && (
+        <form onSubmit={handleCredentials} className="space-y-4">
+          <input
+            className={inputClass}
+            type="email"
+            placeholder="E-mail"
+            value={form.email}
+            onChange={(e) => setForm({ ...form, email: e.target.value })}
+            autoComplete="username"
+            required
+          />
+          <PasswordInput
+            className={inputClass}
+            placeholder="Mot de passe"
+            value={form.password}
+            onChange={(e) => setForm({ ...form, password: e.target.value })}
+            autoComplete="current-password"
+            required
+          />
+          <button disabled={loading} type="submit" className={primaryButtonClass}>
+            {loading ? "Vérification..." : "Se connecter"}
+          </button>
+        </form>
+      )}
+
+      {step === STEP_OTP && (
+        <form onSubmit={handleOtp} className="space-y-4">
+          <p className="rounded-xl bg-gray-50 px-4 py-3 text-center text-sm text-gray-600">
+            Code à 6 chiffres envoyé à <span className="font-semibold text-brand-blue">{form.email}</span>.
+            <br />
+            Valable 10 minutes.
           </p>
-        )}
-        {info && (
-          <p className="text-sm text-brand-blue bg-brand-green/20 border border-brand-green rounded-lg px-3 py-2 mb-4">
-            {info}
-          </p>
-        )}
-
-        {step === STEP_CREDENTIALS && (
-          <form onSubmit={handleCredentials} className="space-y-4">
-            <input
-              className={inputClass}
-              type="email"
-              placeholder="E-mail"
-              value={form.email}
-              onChange={(e) => setForm({ ...form, email: e.target.value })}
-              autoComplete="username"
-              required
-            />
-            <PasswordInput
-              className={inputClass}
-              placeholder="Mot de passe"
-              value={form.password}
-              onChange={(e) => setForm({ ...form, password: e.target.value })}
-              autoComplete="current-password"
-              required
-            />
-            <button disabled={loading} type="submit" className={primaryButtonClass}>
-              {loading ? "Vérification..." : "Se connecter"}
+          <input
+            className={`${inputClass} text-center tracking-[0.5em] text-xl font-semibold`}
+            placeholder="------"
+            maxLength={6}
+            inputMode="numeric"
+            autoComplete="one-time-code"
+            value={otp}
+            onChange={(e) => setOtp(e.target.value.replace(/\D/g, ""))}
+            required
+          />
+          <button disabled={loading} type="submit" className={primaryButtonClass}>
+            {loading ? "Vérification..." : "Valider le code"}
+          </button>
+          <div className="flex items-center justify-between gap-4 pt-1">
+            <button type="button" onClick={handleBack} disabled={loading} className="text-sm text-gray-500 hover:text-brand-blue hover:underline disabled:opacity-50">
+              ← Retour
             </button>
-          </form>
-        )}
-
-        {step === STEP_OTP && (
-          <form onSubmit={handleOtp} className="space-y-4">
-            <p className="text-sm text-gray-600 text-center">
-              Un code à 6 chiffres a été envoyé à{" "}
-              <span className="font-medium text-brand-blue">{form.email}</span>.
-              <br />
-              Valable 10 minutes.
-            </p>
-            <input
-              className={`${inputClass} text-center tracking-[0.5em] text-lg font-semibold`}
-              placeholder="------"
-              maxLength={6}
-              inputMode="numeric"
-              autoComplete="one-time-code"
-              value={otp}
-              onChange={(e) => setOtp(e.target.value.replace(/\D/g, ""))}
-              required
-            />
-            <button disabled={loading} type="submit" className={primaryButtonClass}>
-              {loading ? "Vérification..." : "Valider le code"}
-            </button>
-            <button
-              type="button"
-              onClick={handleResend}
-              disabled={loading}
-              className="w-full text-sm text-brand-blue font-medium hover:underline disabled:opacity-50"
-            >
+            <button type="button" onClick={handleResend} disabled={loading} className={`${linkButtonClass} w-auto`}>
               Renvoyer le code
             </button>
-            <button
-              type="button"
-              onClick={handleBack}
-              disabled={loading}
-              className="w-full text-sm text-gray-500 hover:underline disabled:opacity-50"
-            >
-              Retour
-            </button>
-          </form>
-        )}
+          </div>
+        </form>
+      )}
 
-        {step === STEP_CREDENTIALS && (
-          <p className="text-sm text-gray-500 text-center mt-6">
-            Pas encore de compte ?{" "}
-            <Link to="/signup" className="text-brand-blue font-medium hover:underline">
-              Sign up
-            </Link>
-          </p>
-        )}
-      </div>
-    </div>
+      {step === STEP_CREDENTIALS && (
+        <p className="mt-8 text-center text-sm text-gray-500">
+          Pas encore de compte ?{" "}
+          <Link to="/signup" className="font-semibold text-brand-blue hover:underline">
+            Sign up
+          </Link>
+        </p>
+      )}
+    </AuthLayout>
   );
 }

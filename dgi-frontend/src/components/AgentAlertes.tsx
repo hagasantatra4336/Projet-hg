@@ -58,8 +58,8 @@ export default function AgentAlertes() {
 
   return (
     <section className="mb-6">
-      <h2 className="text-lg font-bold text-brand-blue">Anomalies de mon centre</h2>
-      <p className="mb-3 text-sm text-gray-500">
+      <h2 className="text-lg font-semibold text-brand-blue">Anomalies de mon centre</h2>
+      <p className="mb-3 text-sm text-slate-500">
         Défaillances de déclaration et baisses du chiffre d'affaires des contribuables de {user?.centre?.nom ?? "votre centre"}
       </p>
 
@@ -67,23 +67,23 @@ export default function AgentAlertes() {
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         {stats.map((s) => (
-          <div key={s.label} className="flex items-center gap-3 rounded-2xl bg-white p-4 shadow-sm">
-            <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-brand-green/30 text-brand-blue">
+          <div key={s.label} className="flex flex-row-reverse items-start justify-between gap-3 rounded-xl border border-line bg-white p-4">
+            <span className="flex shrink-0 items-center justify-center text-slate-400">
               <IconAlert className="h-5 w-5" />
             </span>
             <div className="min-w-0">
-              <p className="truncate text-xs text-gray-500">{s.label}</p>
-              <p className="text-2xl font-bold text-brand-blue">{s.value ?? "—"}</p>
+              <p className="truncate text-sm text-slate-600">{s.label}</p>
+              <p className="text-2xl font-semibold text-brand-blue">{s.value ?? "—"}</p>
             </div>
           </div>
         ))}
       </div>
 
-      <div className="mt-4 rounded-2xl bg-white p-5 shadow-sm">
+      <div className="mt-4 rounded-xl border border-line bg-white p-5">
         <div className="overflow-x-auto">
           <table className="w-full min-w-[760px] text-left text-sm">
             <thead>
-              <tr className="text-xs font-medium text-gray-400">
+              <tr className="bg-slate-50 text-xs font-semibold text-slate-600">
                 <th className="px-3 py-2">Contribuable</th>
                 <th className="px-3 py-2">Anomalie</th>
                 <th className="px-3 py-2">Impôt</th>
@@ -94,7 +94,7 @@ export default function AgentAlertes() {
             </thead>
             <tbody>
               {alertes?.map((a) => (
-                <tr key={a.id} className="border-t border-gray-100 align-top">
+                <tr key={a.id} className="border-t border-line hover:bg-slate-50 align-top">
                   <td className="px-3 py-3">
                     <button
                       type="button"
@@ -104,31 +104,31 @@ export default function AgentAlertes() {
                     >
                       {a.contribuable.nom}
                     </button>
-                    <p className="text-xs text-gray-500">{a.contribuable.nif}</p>
+                    <p className="text-xs text-slate-500">{a.contribuable.nif}</p>
                   </td>
                   <td className="px-3 py-3">
                     <RegleBadge regle={a.regle} />
                   </td>
-                  <td className="px-3 py-3 font-medium text-gray-700">{a.type_impot}</td>
-                  <td className="px-3 py-3 text-gray-700">
+                  <td className="px-3 py-3 font-medium text-slate-700">{a.type_impot}</td>
+                  <td className="px-3 py-3 text-slate-700">
                     <PeriodeAnomalie a={a} />
                   </td>
                   <td className="px-3 py-3">
                     <NiveauBadge niveau={a.niveau} />
                   </td>
-                  <td className="max-w-xs px-3 py-3 text-xs leading-relaxed text-gray-700">{a.motif}</td>
+                  <td className="max-w-xs px-3 py-3 text-xs leading-relaxed text-slate-700">{a.motif}</td>
                 </tr>
               ))}
               {alertes && alertes.length === 0 && (
                 <tr>
-                  <td colSpan={6} className="px-3 py-8 text-center text-gray-500">
+                  <td colSpan={6} className="px-3 py-8 text-center text-slate-500">
                     Aucune alerte à traiter pour votre centre.
                   </td>
                 </tr>
               )}
               {!alertes && !error && (
                 <tr>
-                  <td colSpan={6} className="px-3 py-8 text-center text-gray-500">
+                  <td colSpan={6} className="px-3 py-8 text-center text-slate-500">
                     Chargement...
                   </td>
                 </tr>

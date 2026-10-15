@@ -2,12 +2,14 @@
 
 namespace App\Services;
 
+use App\Models\Regle;
 use DateTimeImmutable;
 use DateTimeInterface;
 use Illuminate\Support\Facades\Cache;
+use Throwable;
 
 /**
- * Lance toutes les règles de détection d'anomalies (défaillance de déclaration + baisse du chiffre d'affaires)
+ * Lance toutes les règles de détection d'anomalies (défaillance de déclaration, baisse du chiffre d'affaires + règles personnalisées actives)
  * à une date donnée (aujourd'hui par défaut) et additionne leurs résultats. Appelé par le bouton
  * « Lancer l'analyse », la commande planifiée et les imports.
  * Pour ajouter une règle : créer son détecteur et l'appeler ici.
@@ -20,6 +22,7 @@ class AnomalieAnalyseur
     public function __construct(
         private readonly DefaillanceDetector $defaillances,
         private readonly BaisseCaDetector $baissesCa,
+        private readonly DetecteurPersonnalise $personnalisees,
     ) {
     }
 
@@ -39,16 +42,39 @@ class AnomalieAnalyseur
         $d = $this->defaillances->analyser($date, $centreId);
         $c = $this->baissesCa->analyser($date, $centreId);
 
+        // Règles personnalisées ACTIVES (brouillons et règles désactivées sont ignorés). Une règle en erreur
+        // (colonne supprimée, indicateur désactivé...) ne bloque ni les autres règles ni l'analyse.
+        $p = ['analyses' => 0, 'crees' => 0, 'mis_a_jour' => 0, 'regularisees' => 0];
+        $detailPerso = [];
+        foreach (ReglesDetection::personnalisees() as $regle) {
+            if ($regle->statut !== Regle::ACTIVE || ! $regle->actif) {
+                continue;
+            }
+            try {
+                $r = $this->personnalisees->analyser($regle, $date, $centreId);
+            } catch (Throwable $e) {
+                report($e);
+                $detailPerso[$regle->code] = ['erreur' => $e->getMessage()];
+                continue;
+            }
+            $detailPerso[$regle->code] = $r;
+            foreach ($p as $k => $v) {
+                $p[$k] += $r[$k];
+            }
+        }
+
         Cache::forever(self::CACHE_DERNIERE_ANALYSE, ['at' => now()->toIso8601String(), 'date' => $date->format('Y-m-d')]);
 
         return [
             'date' => $date->format('Y-m-d'),
             'defaillance' => $d,
             'baisse_ca' => $c,
-            'analyses' => $d['analyses'] + $c['analyses'],
-            'crees' => $d['crees'] + $c['crees'],
-            'mis_a_jour' => $d['mis_a_jour'] + $c['mis_a_jour'],
-            'regularisees' => $d['regularisees'] + $c['regularisees'],
+            'desactivees' => array_keys(array_filter(['defaillance' => $d['desactivee'] ?? false, 'baisse_ca' => $c['desactivee'] ?? false])),
+            'personnalisees' => $detailPerso,
+            'analyses' => $d['analyses'] + $c['analyses'] + $p['analyses'],
+            'crees' => $d['crees'] + $c['crees'] + $p['crees'],
+            'mis_a_jour' => $d['mis_a_jour'] + $c['mis_a_jour'] + $p['mis_a_jour'],
+            'regularisees' => $d['regularisees'] + $c['regularisees'] + $p['regularisees'],
         ];
     }
 }

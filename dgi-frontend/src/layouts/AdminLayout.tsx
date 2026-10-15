@@ -6,6 +6,7 @@ const TITLES: Record<string, string> = {
   "/admin/centres": "Centres",
   "/admin/fonctions": "Fonctions & rôles",
   "/admin/regles": "Règles de détection",
+  "/admin/regles-personnalisees": "Règles personnalisées",
 };
 
 export default function AdminLayout() {
@@ -14,8 +15,8 @@ export default function AdminLayout() {
 
   return (
     <div>
-      <p className="text-sm text-gray-500">Administration</p>
-      <h1 className="mb-6 text-2xl font-bold text-brand-blue">{title}</h1>
+      <p className="text-sm text-slate-500">Administration</p>
+      <h1 className="mb-6 text-2xl font-semibold tracking-tight text-brand-blue">{title}</h1>
       <Outlet />
     </div>
   );

@@ -33,15 +33,15 @@ const ADMIN_ITEMS: SubItem[] = [
   { to: "/admin/fonctions", label: "Fonctions & rôles", icon: <IconBriefcase className="h-4 w-4" />, roles: ["superadmin"] },
 ];
 
-const itemBase = "flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition";
-const itemActive = "bg-brand-blue text-white shadow-sm";
-const itemIdle = "text-gray-500 hover:bg-brand-green/20 hover:text-brand-blue";
+const itemBase = "flex w-full items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium transition";
+const itemActive = "bg-white/10 text-white shadow-[inset_3px_0_0_#7AA95C]";
+const itemIdle = "text-white/70 hover:bg-white/5 hover:text-white";
 
 const linkClass = ({ isActive }: { isActive: boolean }) => `${itemBase} ${isActive ? itemActive : itemIdle}`;
 
 const subLinkClass = ({ isActive }: { isActive: boolean }) =>
-  `flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm transition ${
-    isActive ? "bg-brand-green/30 font-semibold text-brand-blue" : "text-gray-500 hover:text-brand-blue"
+  `flex items-center gap-2.5 rounded-md px-3 py-2 text-sm transition ${
+    isActive ? "bg-white/10 font-semibold text-white" : "text-white/60 hover:text-white"
   }`;
 
 export default function AppLayout() {
@@ -73,36 +73,46 @@ export default function AppLayout() {
   const initial = (user?.nom ?? "?").trim().charAt(0).toUpperCase();
 
   return (
-    <div className="min-h-screen bg-brand-white lg:flex">
+    <div className="min-h-screen bg-canvas lg:flex">
       {/* Barre du haut (mobile uniquement) */}
-      <div className="sticky top-0 z-30 flex h-14 items-center justify-between bg-white px-4 shadow-sm lg:hidden">
-        <img src="/logo-dgi.png" alt="Direction Générale des Impôts" className="h-10 w-auto" />
+      <div className="sticky top-0 z-30 flex h-14 items-center justify-between bg-brand-blue px-4 lg:hidden">
+        <div className="flex items-center gap-3">
+          <img src="/logo-dgi.png" alt="Direction Générale des Impôts" className="h-8 w-auto" />
+          <img src="/logo-mef.png" alt="Ministère de l'Économie et des Finances" className="h-8 w-auto" />
+        </div>
         <button
           type="button"
           onClick={() => setMobileOpen(true)}
           aria-label="Ouvrir le menu"
-          className="rounded-lg p-2 text-brand-blue hover:bg-brand-green/20"
+          className="rounded-lg p-2 text-white hover:bg-white/10"
         >
           <IconMenu />
         </button>
       </div>
 
       {mobileOpen && (
-        <div className="fixed inset-0 z-40 bg-brand-blue/40 lg:hidden" onClick={() => setMobileOpen(false)} aria-hidden="true" />
+        <div className="fixed inset-0 z-40 bg-brand-blue-dark/60 lg:hidden" onClick={() => setMobileOpen(false)} aria-hidden="true" />
       )}
 
       <aside
-        className={`fixed inset-y-0 left-0 z-50 flex w-64 flex-col bg-white px-4 py-6 shadow-lg transition-transform lg:sticky lg:bottom-auto lg:top-0 lg:h-screen lg:shrink-0 lg:translate-x-0 lg:shadow-none ${
+        className={`fixed inset-y-0 left-0 z-50 flex w-64 flex-col bg-brand-blue px-3 py-5 shadow-lg transition-transform lg:sticky lg:bottom-auto lg:top-0 lg:h-screen lg:shrink-0 lg:translate-x-0 lg:shadow-none ${
           mobileOpen ? "translate-x-0" : "-translate-x-full"
         }`}
       >
-        <div className="mb-8 flex items-center justify-between px-2">
-          <img src="/logo-dgi.png" alt="Direction Générale des Impôts" className="h-16 w-auto" />
+        <div className="mb-6 flex items-start justify-between border-b border-white/15 px-2 pb-5">
+          <div className="flex display-flex space-x-5">
+            <div className="flex items-center gap-3">
+              <img src="/logo-dgi.png" alt="Direction Générale des Impôts" className="h-10 w-auto" />
+              <img src="/logo-mef.png" alt="Ministère de l'Économie et des Finances" className="h-10 w-auto" />
+              
+            </div>
+            <p className="mt-3 text-sm font-semibold tracking-tight text-white">E-Kajy</p>
+          </div>
           <button
             type="button"
             onClick={() => setMobileOpen(false)}
             aria-label="Fermer le menu"
-            className="rounded-lg p-1.5 text-gray-400 hover:text-brand-blue lg:hidden"
+            className="rounded-lg p-1.5 text-white/60 hover:text-white lg:hidden"
           >
             <IconClose />
           </button>
@@ -125,7 +135,7 @@ export default function AppLayout() {
                 type="button"
                 onClick={() => setAdminOpen((o) => !o)}
                 aria-expanded={adminOpen}
-                className={`${itemBase} ${inAdmin ? "bg-brand-green/20 text-brand-blue" : itemIdle}`}
+                className={`${itemBase} ${inAdmin ? "text-white" : itemIdle}`}
               >
                 <IconShield />
                 <span className="flex-1 text-left">Administration</span>
@@ -133,7 +143,7 @@ export default function AppLayout() {
               </button>
 
               {adminOpen && (
-                <div className="ml-5 mt-1 space-y-0.5 border-l-2 border-brand-green/50 pl-3">
+                <div className="ml-5 mt-1 space-y-0.5 border-l border-white/20 pl-3">
                   {adminItems.map((i) => (
                     <NavLink key={i.to} to={i.to} className={subLinkClass}>
                       {i.icon}
@@ -152,20 +162,20 @@ export default function AppLayout() {
         </nav>
 
         {/* Utilisateur connecté + déconnexion */}
-        <div className="mt-4 flex items-center gap-3 rounded-2xl bg-brand-white p-3">
-          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-brand-green font-bold text-brand-blue">
+        <div className="mt-4 flex items-center gap-3 rounded-lg border border-white/10 bg-white/5 p-3">
+          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-brand-white font-semibold text-brand-blue">
             {initial}
           </span>
           <div className="min-w-0 flex-1">
-            <p className="truncate text-sm font-semibold text-brand-blue">{user?.nom}</p>
-            <p className="truncate text-xs text-gray-500">{user?.role ? ROLE_LABELS[user.role] : ""}</p>
+            <p className="truncate text-sm font-semibold text-white">{user?.nom}</p>
+            <p className="truncate text-xs text-white/60">{user?.role ? ROLE_LABELS[user.role] : ""}</p>
           </div>
           <button
             type="button"
             onClick={handleLogout}
             title="Déconnexion"
             aria-label="Déconnexion"
-            className="rounded-lg p-2 text-gray-400 transition hover:bg-white hover:text-brand-blue"
+            className="rounded-lg p-2 text-white/60 transition hover:bg-white/10 hover:text-white"
           >
             <IconLogout />
           </button>

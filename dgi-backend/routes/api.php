@@ -7,8 +7,10 @@ use App\Http\Controllers\Api\ContribuableController;
 use App\Http\Controllers\Api\DeclarationImportController;
 use App\Http\Controllers\Api\DefaillanceController;
 use App\Http\Controllers\Api\FonctionController;
+use App\Http\Controllers\Api\IndicateurController;
 use App\Http\Controllers\Api\ProfileController;
 use App\Http\Controllers\Api\RegleController;
+use App\Http\Controllers\Api\ReglePersonnaliseeController;
 use App\Http\Controllers\Api\UserController;
 use App\Http\Middleware\EnsureRole;
 use Illuminate\Support\Facades\Route;
@@ -79,6 +81,22 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/regles', [RegleController::class, 'index']);
         Route::put('/regles/{code}', [RegleController::class, 'update']);
         Route::post('/regles/{code}/reinitialiser', [RegleController::class, 'reinitialiser']);
+
+        // Indicateurs (valeurs lues dans les déclarations) et règles personnalisées : brouillon → simulation → activation
+        Route::get('/indicateurs', [IndicateurController::class, 'index']);
+        Route::post('/indicateurs', [IndicateurController::class, 'store']);
+        Route::put('/indicateurs/{indicateur}', [IndicateurController::class, 'update']);
+        Route::delete('/indicateurs/{indicateur}', [IndicateurController::class, 'destroy']);
+
+        Route::get('/regles-personnalisees/options', [ReglePersonnaliseeController::class, 'options']);
+        Route::get('/regles-personnalisees', [ReglePersonnaliseeController::class, 'index']);
+        Route::post('/regles-personnalisees', [ReglePersonnaliseeController::class, 'store']);
+        Route::get('/regles-personnalisees/{regle}', [ReglePersonnaliseeController::class, 'show']);
+        Route::put('/regles-personnalisees/{regle}', [ReglePersonnaliseeController::class, 'update']);
+        Route::delete('/regles-personnalisees/{regle}', [ReglePersonnaliseeController::class, 'destroy']);
+        Route::post('/regles-personnalisees/{regle}/simuler', [ReglePersonnaliseeController::class, 'simuler'])->middleware('throttle:20,1');
+        Route::post('/regles-personnalisees/{regle}/activer', [ReglePersonnaliseeController::class, 'activer']);
+        Route::post('/regles-personnalisees/{regle}/desactiver', [ReglePersonnaliseeController::class, 'desactiver']);
     });
 
     // Section Administration — gestion des utilisateurs : superadmin, central, admin

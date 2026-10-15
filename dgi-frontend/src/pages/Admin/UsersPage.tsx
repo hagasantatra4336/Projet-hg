@@ -232,9 +232,9 @@ export default function UsersPage() {
 
       <ErrorBox message={error} />
 
-      <div className="bg-white rounded-2xl shadow overflow-x-auto">
+      <div className="bg-white rounded-xl border border-line overflow-x-auto">
         <table className="w-full text-sm">
-          <thead className="bg-gray-50 text-left text-gray-600">
+          <thead className="border-b border-line bg-slate-50 text-left text-slate-600">
             <tr>
               <th className="px-4 py-3 font-semibold">Nom</th>
               <th className="px-4 py-3 font-semibold">IM</th>
@@ -244,17 +244,17 @@ export default function UsersPage() {
               <th className="px-4 py-3" />
             </tr>
           </thead>
-          <tbody className="divide-y divide-gray-100">
+          <tbody className="divide-y divide-line">
             {loading && (
               <tr>
-                <td colSpan={6} className="px-4 py-6 text-center text-gray-500">
+                <td colSpan={6} className="px-4 py-6 text-center text-slate-500">
                   Chargement...
                 </td>
               </tr>
             )}
             {!loading && users.length === 0 && (
               <tr>
-                <td colSpan={6} className="px-4 py-6 text-center text-gray-500">
+                <td colSpan={6} className="px-4 py-6 text-center text-slate-500">
                   Aucun utilisateur.
                 </td>
               </tr>
@@ -264,13 +264,13 @@ export default function UsersPage() {
                 <tr key={u.id}>
                   <td className="px-4 py-3">
                     <div className="font-medium text-brand-blue">{u.nom}</div>
-                    <div className="text-xs text-gray-500">{u.email}</div>
+                    <div className="text-xs text-slate-500">{u.email}</div>
                   </td>
-                  <td className="px-4 py-3 text-gray-600">{u.im ?? "—"}</td>
-                  <td className="px-4 py-3 text-gray-600">{u.telephone ?? "—"}</td>
-                  <td className="px-4 py-3 text-gray-600">{u.centre?.nom ?? "—"}</td>
+                  <td className="px-4 py-3 text-slate-600">{u.im ?? "—"}</td>
+                  <td className="px-4 py-3 text-slate-600">{u.telephone ?? "—"}</td>
+                  <td className="px-4 py-3 text-slate-600">{u.centre?.nom ?? "—"}</td>
                   <td className="px-4 py-3">
-                    <div className="text-gray-700 mb-1">{u.fonction?.nom ?? "—"}</div>
+                    <div className="text-slate-700 mb-1">{u.fonction?.nom ?? "—"}</div>
                     <RoleBadge role={u.role} />
                   </td>
                   <td className="px-4 py-3 text-right whitespace-nowrap">
@@ -290,7 +290,7 @@ export default function UsersPage() {
       </div>
 
       {data && data.last_page > 0 && (
-        <div className="flex items-center justify-between mt-4 text-sm text-gray-600">
+        <div className="flex items-center justify-between mt-4 text-sm text-slate-600">
           <span>
             Page {data.current_page} / {data.last_page} — {data.total} utilisateur(s)
           </span>

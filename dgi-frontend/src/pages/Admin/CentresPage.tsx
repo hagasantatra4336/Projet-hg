@@ -98,7 +98,7 @@ export default function CentresPage() {
   return (
     <div>
       <div className="flex items-center justify-between mb-4">
-        <p className="text-sm text-gray-600">{centres.length} centre(s)</p>
+        <p className="text-sm text-slate-600">{centres.length} centre(s)</p>
         <button type="button" className={primaryButtonClass} onClick={openNew}>
           + Ajouter un centre
         </button>
@@ -106,9 +106,9 @@ export default function CentresPage() {
 
       <ErrorBox message={error} />
 
-      <div className="bg-white rounded-2xl shadow overflow-x-auto">
+      <div className="bg-white rounded-xl border border-line overflow-x-auto">
         <table className="w-full text-sm">
-          <thead className="bg-gray-50 text-left text-gray-600">
+          <thead className="border-b border-line bg-slate-50 text-left text-slate-600">
             <tr>
               <th className="px-4 py-3 font-semibold">Nom</th>
               <th className="px-4 py-3 font-semibold">Adresse</th>
@@ -116,17 +116,17 @@ export default function CentresPage() {
               <th className="px-4 py-3" />
             </tr>
           </thead>
-          <tbody className="divide-y divide-gray-100">
+          <tbody className="divide-y divide-line">
             {loading && (
               <tr>
-                <td colSpan={4} className="px-4 py-6 text-center text-gray-500">
+                <td colSpan={4} className="px-4 py-6 text-center text-slate-500">
                   Chargement...
                 </td>
               </tr>
             )}
             {!loading && centres.length === 0 && (
               <tr>
-                <td colSpan={4} className="px-4 py-6 text-center text-gray-500">
+                <td colSpan={4} className="px-4 py-6 text-center text-slate-500">
                   Aucun centre. Ajoutez le premier.
                 </td>
               </tr>
@@ -134,8 +134,8 @@ export default function CentresPage() {
             {centres.map((c) => (
               <tr key={c.id}>
                 <td className="px-4 py-3 font-medium text-brand-blue">{c.nom}</td>
-                <td className="px-4 py-3 text-gray-600">{c.adresse ?? "—"}</td>
-                <td className="px-4 py-3 text-gray-600">{c.users_count ?? 0}</td>
+                <td className="px-4 py-3 text-slate-600">{c.adresse ?? "—"}</td>
+                <td className="px-4 py-3 text-slate-600">{c.users_count ?? 0}</td>
                 <td className="px-4 py-3 text-right whitespace-nowrap">
                   <EditButton onClick={() => openEdit(c)} />
                   <DeleteButton onClick={() => setToDelete(c)} />

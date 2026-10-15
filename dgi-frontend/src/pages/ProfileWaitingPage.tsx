@@ -25,7 +25,7 @@ function formatCountdown(seconds: number): string {
 
 function Card({ children }: { children: ReactNode }) {
   return (
-    <div className="mx-auto w-full max-w-xl rounded-2xl border-t-4 border-brand-green bg-white p-8 text-center shadow-lg">
+    <div className="mx-auto w-full max-w-xl rounded-xl border border-line bg-white p-8 text-center">
       {children}
     </div>
   );
@@ -136,9 +136,9 @@ export default function ProfileWaitingPage() {
 
   return (
     <div className="w-full">
-      <div className="mb-6 border-l-4 border-brand-green pl-4">
-        <h1 className="text-2xl font-bold text-brand-blue">Validation de vos modifications</h1>
-        <p className="text-sm text-gray-600">
+      <div className="mb-6 border-b border-line pb-4">
+        <h1 className="text-2xl font-semibold tracking-tight text-brand-blue">Validation de vos modifications</h1>
+        <p className="text-sm text-slate-600">
           Vous serez redirigé vers votre profil dès que vous aurez validé l'e-mail, sur ordinateur ou sur smartphone.
         </p>
       </div>
@@ -152,22 +152,22 @@ export default function ProfileWaitingPage() {
             aria-label="En attente de validation"
             className="mx-auto mb-5 h-14 w-14 animate-spin rounded-full border-4 border-brand-green/30 border-t-brand-blue"
           />
-          <h2 className="mb-2 text-lg font-bold text-brand-blue">En attente de votre validation</h2>
-          <p className="text-sm text-gray-600">
+          <h2 className="mb-2 text-lg font-semibold text-brand-blue">En attente de votre validation</h2>
+          <p className="text-sm text-slate-600">
             Un e-mail a été envoyé à <span className="font-semibold text-brand-blue">{request.email}</span>. Ouvrez-le
             (Gmail ou autre) sur cet ordinateur ou sur votre smartphone, cliquez sur le lien, puis sur « Confirmer les
             modifications ».
           </p>
-          <p className="mt-3 text-sm text-gray-600">
+          <p className="mt-3 text-sm text-slate-600">
             À modifier : <span className="font-semibold text-brand-blue">{request.champs.join(", ")}</span>
           </p>
-          <p className="mt-4 text-xs text-gray-500">
+          <p className="mt-4 text-xs text-slate-500">
             Lien valable encore{" "}
             <span className="font-mono font-semibold text-brand-blue">{formatCountdown(secondesRestantes)}</span>
           </p>
 
           {request.debug_confirm_url && (
-            <div className="mt-4 space-y-2 rounded-lg bg-brand-green/20 px-3 py-2 text-xs text-brand-blue">
+            <div className="mt-4 space-y-2 rounded-lg bg-leaf-50 px-3 py-2 text-xs text-brand-blue">
               <p className="break-all">
                 Mode développement — lien :{" "}
                 <a href={request.debug_confirm_url} target="_blank" rel="noreferrer" className="underline">
@@ -175,7 +175,7 @@ export default function ProfileWaitingPage() {
                 </a>
               </p>
               {/\/\/(localhost|127\.0\.0\.1)[:/]/.test(request.debug_confirm_url) && (
-                <p className="text-gray-700">
+                <p className="text-slate-700">
                   Ce lien contient « localhost » : il ne s'ouvrira pas sur un smartphone. Ouvrez l'application depuis
                   l'adresse de votre PC (ex. http://192.168.1.20:5173) puis refaites la demande.
                 </p>
@@ -191,7 +191,7 @@ export default function ProfileWaitingPage() {
               Retour au profil
             </Link>
           </div>
-          <p className="mt-3 text-xs text-gray-500">
+          <p className="mt-3 text-xs text-slate-500">
             Vous pouvez quitter cette page : la demande reste valable jusqu'à la fin du délai.
           </p>
         </Card>
@@ -199,11 +199,11 @@ export default function ProfileWaitingPage() {
 
       {phase === "confirmed" && !passwordChanged && (
         <Card>
-          <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-brand-green text-2xl font-bold text-brand-blue">
+          <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-brand-green text-2xl font-semibold tracking-tight text-brand-blue">
             ✓
           </div>
-          <h2 className="mb-1 text-lg font-bold text-brand-blue">Modifications appliquées</h2>
-          <p className="mb-5 text-sm text-gray-600">Redirection vers votre profil...</p>
+          <h2 className="mb-1 text-lg font-semibold text-brand-blue">Modifications appliquées</h2>
+          <p className="mb-5 text-sm text-slate-600">Redirection vers votre profil...</p>
           <Link to="/profile" replace state={{ updated: true }} className={`${primaryButtonClass} inline-block`}>
             Aller au profil maintenant
           </Link>
@@ -212,11 +212,11 @@ export default function ProfileWaitingPage() {
 
       {phase === "confirmed" && passwordChanged && (
         <Card>
-          <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-brand-green text-2xl font-bold text-brand-blue">
+          <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-brand-green text-2xl font-semibold tracking-tight text-brand-blue">
             ✓
           </div>
-          <h2 className="mb-1 text-lg font-bold text-brand-blue">Modifications appliquées</h2>
-          <p className="mb-6 text-sm text-gray-600">
+          <h2 className="mb-1 text-lg font-semibold text-brand-blue">Modifications appliquées</h2>
+          <p className="mb-6 text-sm text-slate-600">
             Votre mot de passe a été modifié : toutes vos sessions ont été fermées par sécurité. Reconnectez-vous avec
             votre nouveau mot de passe.
           </p>
@@ -229,7 +229,7 @@ export default function ProfileWaitingPage() {
       {phase === "failed" && (
         <Card>
           <h2 className="mb-2 text-lg font-bold text-red-600">Modification impossible</h2>
-          <p className="mb-6 text-sm text-gray-600">
+          <p className="mb-6 text-sm text-slate-600">
             {serverMessage || "La modification n'a pas pu être appliquée. Refaites une demande depuis votre profil."}
           </p>
           <Link to="/profile" className={`${primaryButtonClass} inline-block`}>
@@ -240,10 +240,10 @@ export default function ProfileWaitingPage() {
 
       {(phase === "expired" || phase === "cancelled") && (
         <Card>
-          <h2 className="mb-2 text-lg font-bold text-brand-blue">
+          <h2 className="mb-2 text-lg font-semibold text-brand-blue">
             {phase === "expired" ? "Le lien a expiré" : "Demande annulée"}
           </h2>
-          <p className="mb-6 text-sm text-gray-600">
+          <p className="mb-6 text-sm text-slate-600">
             {phase === "expired"
               ? "Le délai de validation est dépassé : aucune modification n'a été appliquée."
               : "Cette demande a été annulée ou remplacée par une nouvelle : aucune modification n'a été appliquée."}
