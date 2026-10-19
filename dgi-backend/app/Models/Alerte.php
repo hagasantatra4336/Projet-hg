@@ -9,7 +9,7 @@ class Alerte extends Model
 {
     public const REGLE_DEFAILLANCE = 'defaillance';
     public const REGLE_BAISSE_CA = 'baisse_ca';
-    public const REGLES = ['defaillance', 'baisse_ca'];
+    public const REGLES = ['defaillance', 'baisse_ca', 'r1', 'r2', 'r3', 'r5', 'r6', 'r7'];
 
     /** Du moins grave au plus grave. */
     public const NIVEAUX = ['faible', 'moyen', 'eleve'];

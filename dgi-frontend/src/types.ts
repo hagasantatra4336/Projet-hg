@@ -53,7 +53,7 @@ export interface Paginated<T> {
 
 // ---- Défaillances de déclaration ----
 
-export type Regle = "defaillance" | "baisse_ca";
+export type Regle = "defaillance" | "baisse_ca" | "r1" | "r2" | "r3" | "r5" | "r6" | "r7";
 export type NiveauRisque = "faible" | "moyen" | "eleve";
 export type StatutAlerte = "a_traiter" | "traitee" | "regularisee";
 
@@ -62,7 +62,16 @@ export const TYPES_IMPOT = ["TVA", "IR", "IS", "IRSA"] as const;
 export const REGLE_LABELS: Record<Regle, string> = {
   defaillance: "Défaillance de déclaration",
   baisse_ca: "Baisse du chiffre d'affaires",
+  r1: "Écart CA IR / CA TVA (R1)",
+  r2: "Déficit chronique (R2)",
+  r3: "Crédit de TVA permanent (R3)",
+  r5: "Discordance recoupement (R5)",
+  r6: "Importations (R6)",
+  r7: "Exportations (R7)",
 };
+
+/** Score maximal de chaque critère de risque R. */
+export const SCORE_MAX_R: Partial<Record<Regle, number>> = { r1: 10, r2: 5, r3: 5, r5: 5, r6: 10, r7: 10 };
 
 /** Détails d'une alerte : défaillance (score R4...) ou baisse du chiffre d'affaires. */
 export interface DetailsAlerte {
@@ -78,6 +87,10 @@ export interface DetailsAlerte {
   baisse_pct?: number;
   reference?: "meme_mois_annee_precedente" | "annee_precedente";
   annee_precedente?: number;
+  // critères de risque R1, R2, R3, R5, R6, R7
+  score_risque?: number;
+  score_max?: number;
+  indicateurs?: Record<string, number | null>;
 }
 
 export const NIVEAU_LABELS: Record<NiveauRisque, string> = {

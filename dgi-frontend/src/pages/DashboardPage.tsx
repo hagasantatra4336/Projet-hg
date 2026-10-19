@@ -9,22 +9,77 @@ import { IconBriefcase, IconBuilding, IconChevron, IconSearch, IconUsers } from 
 
 interface Stat {
   label: string;
-  value: string;
+  /** nombre (animé) ou texte, null = en cours de chargement */
+  value: number | string | null;
   icon: ReactNode;
+}
+
+/** Animation d'entrée unique (désactivée si l'utilisateur réduit les animations). */
+const ANIMATIONS = `
+@keyframes dash-rise { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+.dash-rise { animation: dash-rise .5s cubic-bezier(.2,.7,.2,1) both; }
+@media (prefers-reduced-motion: reduce) { .dash-rise { animation: none; } }
+`;
+
+/** Compte de 0 jusqu'à la valeur cible. */
+function useCountUp(target: number | null, duration = 700): number | null {
+  const [display, setDisplay] = useState<number | null>(target === null ? null : 0);
+
+  useEffect(() => {
+    if (target === null) {
+      setDisplay(null);
+      return;
+    }
+    if (window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) {
+      setDisplay(target);
+      return;
+    }
+    let frame = 0;
+    const start = performance.now();
+    const tick = (now: number) => {
+      const p = Math.min(1, (now - start) / duration);
+      const eased = 1 - Math.pow(1 - p, 3);
+      setDisplay(Math.round(target * eased));
+      if (p < 1) frame = requestAnimationFrame(tick);
+    };
+    frame = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(frame);
+  }, [target, duration]);
+
+  return display;
+}
+
+function StatValue({ value }: { value: number | string | null }) {
+  const animated = useCountUp(typeof value === "number" ? value : null);
+  if (value === null) return <span className="inline-block h-6 w-14 animate-pulse rounded-md bg-slate-100 align-middle" />;
+  if (typeof value === "string") return <>{value}</>;
+  return <>{(animated ?? 0).toLocaleString("fr-FR")}</>;
 }
 
 function StatsCard({ stats }: { stats: Stat[] }) {
   return (
-    <div className="flex flex-col divide-y divide-line rounded-xl border border-line bg-white sm:flex-row sm:divide-x sm:divide-y-0">
-      {stats.map((s) => (
-        <div key={s.label} className="flex flex-1 flex-row-reverse items-start justify-between gap-4 px-5 py-4">
-          <span className="flex shrink-0 items-center justify-center text-slate-400">
+    <div
+      className={`grid gap-3 grid-cols-1 sm:grid-cols-2 ${
+        stats.length >= 3 ? "lg:grid-cols-3" : ""
+      } ${stats.length >= 4 ? "xl:grid-cols-4" : ""}`}
+    >
+      {stats.map((s, i) => (
+        <div
+          key={s.label}
+          style={{ animationDelay: `${i * 80}ms` }}
+          className="dash-rise group relative flex items-center gap-3 overflow-hidden rounded-xl border border-line bg-white p-4 transition duration-300 hover:-translate-y-1 hover:shadow-lg"
+        >
+          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-brand-blue text-white transition duration-300 group-hover:scale-110 group-hover:rotate-3">
             {s.icon}
           </span>
           <div className="min-w-0">
-            <p className="text-sm text-slate-600">{s.label}</p>
-            <p className="mt-1 truncate text-3xl font-semibold text-brand-blue">{s.value}</p>
+            <p className="text-xs text-slate-500">{s.label}</p>
+            <p className="truncate text-2xl font-semibold tabular-nums text-brand-blue">
+              <StatValue value={s.value} />
+            </p>
           </div>
+          {/* Barre d'accent qui se déploie au survol */}
+          <span className="absolute inset-x-0 bottom-0 h-1 origin-left scale-x-0 bg-brand-blue transition-transform duration-500 group-hover:scale-x-100" />
         </div>
       ))}
     </div>
@@ -36,6 +91,44 @@ function pageWindow(current: number, last: number): number[] {
   const size = Math.min(5, last);
   const start = Math.max(1, Math.min(current - 2, last - size + 1));
   return Array.from({ length: size }, (_, i) => start + i);
+}
+
+/** Initiales pour l'avatar (2 lettres max). */
+function initials(name?: string | null): string {
+  if (!name) return "?";
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  return ((parts[0]?.[0] ?? "") + (parts.length > 1 ? parts[parts.length - 1][0] : "")).toUpperCase() || "?";
+}
+
+function Avatar({ name, size = "md" }: { name?: string | null; size?: "md" | "lg" }) {
+  const dims = size === "lg" ? "h-14 w-14 text-lg" : "h-9 w-9 text-xs";
+  return (
+    <span
+      aria-hidden="true"
+      className={`flex ${dims} shrink-0 items-center justify-center rounded-full border border-line bg-slate-50 font-semibold text-brand-blue transition group-hover:bg-brand-blue group-hover:text-white`}
+    >
+      {initials(name)}
+    </span>
+  );
+}
+
+function SkeletonRows() {
+  return (
+    <>
+      {Array.from({ length: 6 }, (_, i) => (
+        <tr key={i} className="border-t border-line">
+          {Array.from({ length: 6 }, (_, j) => (
+            <td key={j} className="px-4 py-4">
+              <span
+                className="block h-4 animate-pulse rounded bg-slate-100"
+                style={{ width: `${55 + ((i + j) % 4) * 12}%` }}
+              />
+            </td>
+          ))}
+        </tr>
+      ))}
+    </>
+  );
 }
 
 export default function DashboardPage() {
@@ -100,134 +193,200 @@ export default function DashboardPage() {
     }
   }, [canCentres, canFonctions]);
 
-  const fmt = (n: number | null) => (n === null ? "—" : n.toLocaleString("fr-FR"));
-
   const stats: Stat[] = [];
-  if (canUsers) stats.push({ label: "Total utilisateurs", value: fmt(totalUsers), icon: <IconUsers className="h-5 w-5" /> });
-  if (canCentres) stats.push({ label: "Centres", value: fmt(centresCount), icon: <IconBuilding className="h-5 w-5" /> });
-  if (canFonctions) stats.push({ label: "Fonctions", value: fmt(fonctionsCount), icon: <IconBriefcase className="h-5 w-5" /> });
+  if (canUsers) stats.push({ label: "Total utilisateurs", value: totalUsers, icon: <IconUsers className="h-5 w-5" /> });
+  if (canCentres) stats.push({ label: "Centres", value: centresCount, icon: <IconBuilding className="h-5 w-5" /> });
+  if (canFonctions) stats.push({ label: "Fonctions", value: fonctionsCount, icon: <IconBriefcase className="h-5 w-5" /> });
   if (role === "admin") {
     stats.push({ label: "Mon centre", value: user?.centre?.nom ?? "—", icon: <IconBuilding className="h-5 w-5" /> });
   }
 
-  const from = data && data.total > 0 ? (data.current_page - 1) * 10 + 1 : 0;
-  const to = data ? Math.min(data.current_page * 10, data.total) : 0;
-
   return (
-    <div>
-      <h1 className="text-2xl font-semibold tracking-tight text-brand-blue">Bonjour {user?.nom}</h1>
-      <p className="mb-6 text-sm text-slate-500">
-        {role && ROLE_LABELS[role]}
-        {user?.centre && ` · ${user.centre.nom}`}
-      </p>
+    <div className="space-y-5">
+      <style>{ANIMATIONS}</style>
+
+      {/* En-tête de bienvenue */}
+      <header className="dash-rise relative overflow-hidden rounded-xl bg-brand-blue px-5 py-4 text-white sm:px-6">
+        <span aria-hidden="true" className="pointer-events-none absolute -right-8 -top-12 h-36 w-36 rounded-full bg-white/10" />
+        <span aria-hidden="true" className="pointer-events-none absolute -bottom-14 right-20 h-28 w-28 rounded-full bg-white/5" />
+        <div className="relative flex items-center gap-3">
+          <span
+            aria-hidden="true"
+            className="hidden h-10 w-10 shrink-0 items-center justify-center rounded-full bg-white text-sm font-semibold text-brand-blue sm:flex"
+          >
+            {initials(user?.nom)}
+          </span>
+          <div className="min-w-0">
+            <h1 className="truncate text-lg font-semibold tracking-tight sm:text-xl">Bonjour {user?.nom}</h1>
+            <div className="mt-1 flex flex-wrap items-center gap-1.5 text-xs">
+              {role && (
+                <span className="rounded-full bg-white/15 px-2.5 py-0.5 font-medium">{ROLE_LABELS[role]}</span>
+              )}
+              {user?.centre && (
+                <span className="inline-flex items-center gap-1.5 rounded-full bg-white/15 px-2.5 py-0.5">
+                  <IconBuilding className="h-3 w-3" />
+                  {user.centre.nom}
+                </span>
+              )}
+            </div>
+          </div>
+        </div>
+      </header>
 
       {!canUsers ? (
         // Agent : alertes de son centre + résumé de son compte
         <>
-        <AgentAlertes />
-        <div className="rounded-xl bg-white p-6 border border-line">
-          <h2 className="mb-4 text-lg font-semibold text-brand-blue">Mon compte</h2>
-          <dl className="grid gap-4 text-sm sm:grid-cols-2">
-            {[
-              ["E-mail", user?.email],
-              ["IM", user?.im],
-              ["Centre", user?.centre?.nom],
-              ["Fonction", user?.fonction?.nom],
-            ].map(([k, v]) => (
-              <div key={k}>
-                <dt className="text-slate-500">{k}</dt>
-                <dd className="font-medium text-brand-blue">{v || "—"}</dd>
+          <AgentAlertes />
+          <section className="dash-rise overflow-hidden rounded-2xl border border-line bg-white" style={{ animationDelay: "120ms" }}>
+            <div className="flex items-center gap-4 border-b border-line bg-slate-50 px-6 py-5">
+              <Avatar name={user?.nom} size="lg" />
+              <div className="min-w-0">
+                <h2 className="text-lg font-semibold text-brand-blue">Mon compte</h2>
+                <p className="truncate text-sm text-slate-500">{user?.email}</p>
               </div>
-            ))}
-          </dl>
-          <Link to="/profile" className={`${primaryButtonClass} mt-6 inline-flex items-center gap-1`}>
-            Modifier mon profil <IconChevron className="h-4 w-4" />
-          </Link>
-        </div>
+            </div>
+            <dl className="grid gap-4 p-6 text-sm sm:grid-cols-2">
+              {[
+                ["E-mail", user?.email],
+                ["IM", user?.im],
+                ["Centre", user?.centre?.nom],
+                ["Fonction", user?.fonction?.nom],
+              ].map(([k, v]) => (
+                <div
+                  key={k}
+                  className="rounded-xl border border-line p-4 transition duration-200 hover:-translate-y-0.5 hover:border-brand-blue hover:shadow-md"
+                >
+                  <dt className="text-slate-500">{k}</dt>
+                  <dd className="mt-1 break-words text-base font-medium text-brand-blue">{v || "—"}</dd>
+                </div>
+              ))}
+            </dl>
+            <div className="px-6 pb-6">
+              <Link
+                to="/profile"
+                className={`${primaryButtonClass} group inline-flex items-center gap-1`}
+              >
+                Modifier mon profil
+                <IconChevron className="h-4 w-4 transition-transform group-hover:translate-x-1" />
+              </Link>
+            </div>
+          </section>
         </>
       ) : (
         <>
           <StatsCard stats={stats} />
 
-          <section className="mt-6 rounded-xl bg-white p-5 border border-line sm:p-6">
-            <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <div>
-                <h2 className="text-lg font-semibold text-brand-blue">Tous les utilisateurs</h2>
-                <p className="text-sm text-slate-500">Comptes actifs de votre périmètre</p>
+          <section
+            className="dash-rise overflow-hidden rounded-2xl border border-line bg-white"
+            style={{ animationDelay: "200ms" }}
+          >
+            {/* Barre de titre + recherche */}
+            <div className="flex flex-col gap-4 border-b border-line p-5 sm:flex-row sm:items-center sm:justify-between sm:p-6">
+              <div className="flex items-center gap-3">
+                <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-brand-blue text-white">
+                  <IconUsers className="h-5 w-5" />
+                </span>
+                <div>
+                  <h2 className="text-lg font-semibold text-brand-blue">Tous les utilisateurs</h2>
+                  <p className="text-sm text-slate-500">Comptes actifs de votre périmètre</p>
+                </div>
               </div>
               <div className="flex items-center gap-3">
-                <div className="relative flex-1 sm:w-64">
-                  <IconSearch className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                <div className="relative flex-1 sm:w-72">
+                  <IconSearch className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
                   <input
                     value={searchInput}
                     onChange={(e) => setSearchInput(e.target.value)}
                     placeholder="Rechercher..."
                     aria-label="Rechercher un utilisateur"
-                    className="w-full rounded-lg border border-slate-300 bg-slate-50 py-2 pl-9 pr-3 text-sm placeholder-slate-400 focus:border-brand-blue focus:outline-none focus:ring-1 focus:ring-brand-blue"
+                    className="w-full rounded-full border border-slate-300 bg-slate-50 py-2.5 pl-10 pr-9 text-sm placeholder-slate-400 transition focus:border-brand-blue focus:bg-white focus:outline-none focus:ring-2 focus:ring-brand-blue/30"
                   />
+                  {searchInput && (
+                    <button
+                      type="button"
+                      onClick={() => setSearchInput("")}
+                      aria-label="Effacer la recherche"
+                      className="absolute right-2.5 top-1/2 flex h-5 w-5 -translate-y-1/2 items-center justify-center rounded-full text-slate-400 transition hover:bg-slate-200 hover:text-slate-600"
+                    >
+                      ×
+                    </button>
+                  )}
                 </div>
-                <Link to="/admin/utilisateurs" className={`${primaryButtonClass} whitespace-nowrap text-sm`}>
+                <Link
+                  to="/admin/utilisateurs"
+                  className={`${primaryButtonClass} group inline-flex items-center gap-1 whitespace-nowrap text-sm`}
+                >
                   Gérer
+                  <IconChevron className="h-4 w-4 transition-transform group-hover:translate-x-1" />
                 </Link>
               </div>
             </div>
 
-            <ErrorBox message={error} />
+            <div className="px-5 sm:px-6">
+              <ErrorBox message={error} />
+            </div>
 
-            <div className="overflow-x-auto">
-              <table className="w-full min-w-[720px] text-left text-sm">
-                <thead>
-                  <tr className="bg-slate-50 text-slate-600">
+            {/* Tableau */}
+            <div className="max-h-[640px] overflow-auto">
+              <table className="w-full min-w-[760px] text-left text-sm">
+                <thead className="sticky top-0 z-10">
+                  <tr className="border-b-2 border-brand-blue bg-slate-50 text-slate-600">
                     {["Nom", "Centre", "Téléphone", "E-mail", "Fonction", "Rôle"].map((h) => (
-                      <th key={h} className="px-3 py-2.5 text-xs font-semibold">
+                      <th key={h} className="whitespace-nowrap px-4 py-3 text-xs font-semibold tracking-wide">
                         {h}
                       </th>
                     ))}
                   </tr>
                 </thead>
-                <tbody className={loading ? "opacity-50 transition" : "transition"}>
+                <tbody className={loading && data ? "opacity-50 transition" : "transition"}>
                   {data?.data.map((u) => (
-                    <tr key={u.id} className="border-t border-line hover:bg-slate-50">
-                      <td className="px-3 py-4 font-medium text-brand-blue">{u.nom}</td>
-                      <td className="px-3 py-4 text-slate-700">{u.centre?.nom ?? "—"}</td>
-                      <td className="px-3 py-4 text-slate-700">{u.telephone ?? "—"}</td>
-                      <td className="px-3 py-4 text-slate-700">{u.email}</td>
-                      <td className="px-3 py-4 text-slate-700">{u.fonction?.nom ?? "—"}</td>
-                      <td className="px-3 py-4">
+                    <tr
+                      key={u.id}
+                      className="group border-t border-line transition-colors even:bg-slate-50/60 hover:bg-slate-100"
+                    >
+                      <td className="relative px-4 py-3">
+                        {/* Repère d'accent visible au survol */}
+                        <span className="absolute inset-y-0 left-0 w-1 scale-y-0 bg-brand-blue transition-transform duration-200 group-hover:scale-y-100" />
+                        <div className="flex items-center gap-3">
+                          <Avatar name={u.nom} />
+                          <span className="font-medium text-brand-blue">{u.nom}</span>
+                        </div>
+                      </td>
+                      <td className="px-4 py-3 text-slate-700">{u.centre?.nom ?? "—"}</td>
+                      <td className="whitespace-nowrap px-4 py-3 tabular-nums text-slate-700">{u.telephone ?? "—"}</td>
+                      <td className="px-4 py-3 text-slate-700">{u.email}</td>
+                      <td className="px-4 py-3 text-slate-700">{u.fonction?.nom ?? "—"}</td>
+                      <td className="px-4 py-3">
                         <RoleBadge role={u.role} />
                       </td>
                     </tr>
                   ))}
                   {data && data.data.length === 0 && (
                     <tr>
-                      <td colSpan={6} className="px-3 py-10 text-center text-slate-500">
-                        Aucun utilisateur trouvé.
+                      <td colSpan={6} className="px-4 py-14 text-center">
+                        <span className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-slate-100 text-slate-400">
+                          <IconSearch className="h-5 w-5" />
+                        </span>
+                        <p className="font-medium text-brand-blue">Aucun utilisateur trouvé</p>
+                        <p className="mt-1 text-slate-500">Essayez un autre nom ou effacez la recherche.</p>
                       </td>
                     </tr>
                   )}
-                  {!data && loading && (
-                    <tr>
-                      <td colSpan={6} className="px-3 py-10 text-center text-slate-500">
-                        Chargement...
-                      </td>
-                    </tr>
-                  )}
+                  {!data && loading && <SkeletonRows />}
                 </tbody>
               </table>
             </div>
 
+            {/* Pagination */}
             {data && data.total > 0 && (
-              <div className="mt-4 flex flex-col gap-3 border-t border-line pt-4 sm:flex-row sm:items-center sm:justify-between">
-                <p className="text-xs text-slate-500">
-                  Affichage de {from} à {to} sur {data.total.toLocaleString("fr-FR")} entrées
-                </p>
-                <div className="flex items-center gap-1">
+              <div className="flex justify-end border-t border-line bg-slate-50 px-5 py-3 sm:px-6">
+                <div className="flex items-center gap-1.5">
                   <button
                     type="button"
                     onClick={() => setPage((p) => Math.max(1, p - 1))}
                     disabled={data.current_page <= 1}
                     aria-label="Page précédente"
-                    className="rounded-md px-2 py-1 text-sm text-slate-500 hover:bg-slate-100 disabled:opacity-40"
+                    className="flex h-8 w-8 items-center justify-center rounded-full border border-line bg-white text-slate-500 transition hover:border-brand-blue hover:text-brand-blue disabled:opacity-40 disabled:hover:border-line disabled:hover:text-slate-500"
                   >
                     ‹
                   </button>
@@ -237,10 +396,10 @@ export default function DashboardPage() {
                       type="button"
                       onClick={() => setPage(n)}
                       aria-current={n === data.current_page ? "page" : undefined}
-                      className={`h-8 min-w-8 rounded-md px-2 text-sm transition ${
+                      className={`h-8 min-w-8 rounded-full px-2.5 text-sm tabular-nums transition ${
                         n === data.current_page
-                          ? "bg-brand-blue font-semibold text-white"
-                          : "text-slate-600 hover:bg-slate-100"
+                          ? "bg-brand-blue font-semibold text-white shadow-sm"
+                          : "border border-transparent text-slate-600 hover:border-line hover:bg-white"
                       }`}
                     >
                       {n}
@@ -251,7 +410,7 @@ export default function DashboardPage() {
                     onClick={() => setPage((p) => Math.min(data.last_page, p + 1))}
                     disabled={data.current_page >= data.last_page}
                     aria-label="Page suivante"
-                    className="rounded-md px-2 py-1 text-sm text-slate-500 hover:bg-slate-100 disabled:opacity-40"
+                    className="flex h-8 w-8 items-center justify-center rounded-full border border-line bg-white text-slate-500 transition hover:border-brand-blue hover:text-brand-blue disabled:opacity-40 disabled:hover:border-line disabled:hover:text-slate-500"
                   >
                     ›
                   </button>

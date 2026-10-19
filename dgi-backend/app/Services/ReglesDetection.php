@@ -13,7 +13,10 @@ use Throwable;
  */
 class ReglesDetection
 {
-    public const CODES = ['defaillance', 'baisse_ca'];
+    public const CODES = ['defaillance', 'baisse_ca', 'r1', 'r2', 'r3', 'r5', 'r6', 'r7'];
+
+    /** Critères de risque calculés sur la base d'analyse risque (R4 = « defaillance »). Réglages par défaut : config/risque.php. */
+    public const CRITERES_R = ['r1', 'r2', 'r3', 'r5', 'r6', 'r7'];
 
     /** @return array{nom: string, description: string} */
     public static function meta(string $code): array
@@ -21,6 +24,12 @@ class ReglesDetection
         return match ($code) {
             'defaillance' => ['nom' => 'Défaut de dépôt de déclaration (critère R4)', 'description' => ''],
             'baisse_ca' => ['nom' => "Baisse du chiffre d'affaires", 'description' => ''],
+            'r1' => ['nom' => 'Écart entre CA IR et CA TVA (critère R1)', 'description' => ''],
+            'r2' => ['nom' => 'Déficit chronique (critère R2)', 'description' => ''],
+            'r3' => ['nom' => 'Crédit de TVA permanent (critère R3)', 'description' => ''],
+            'r5' => ['nom' => 'Discordance avec le recoupement (critère R5)', 'description' => ''],
+            'r6' => ['nom' => "Risques liés à l'importation (critère R6)", 'description' => ''],
+            'r7' => ['nom' => "Risques liés à l'exportation (critère R7)", 'description' => ''],
             default => ['nom' => $code, 'description' => ''],
         };
     }
@@ -50,8 +59,47 @@ class ReglesDetection
                 ['cle' => 'seuil_eleve', 'label' => 'Baisse à partir de laquelle le risque est élevé (%)', 'aide' => 'Au moins égale au seuil « moyen ».', 'type' => 'decimal', 'min' => 1, 'max' => 100],
                 ['cle' => 'fenetre_annees', 'label' => 'Exercices analysés en plus de l\'année en cours', 'aide' => '1 : année en cours et année précédente.', 'type' => 'entier', 'min' => 0, 'max' => 5],
             ],
+            'r1' => [
+                self::reglageFenetre(),
+                ['cle' => 'seuil_moyen', 'label' => 'Score au-dessus duquel le risque est moyen (orange)', 'aide' => 'Score sur 10. Vert jusqu\'à ce seuil compris.', 'type' => 'decimal', 'min' => 0, 'max' => 10],
+                ['cle' => 'seuil_eleve', 'label' => 'Score au-dessus duquel le risque est élevé (rouge)', 'aide' => 'Score sur 10, au moins égal au seuil « moyen ».', 'type' => 'decimal', 'min' => 0, 'max' => 10],
+            ],
+            'r2' => [
+                self::reglageFenetre(),
+                ['cle' => 'seuil_moyen', 'label' => 'Score à partir duquel le risque est moyen (orange)', 'aide' => 'Score sur 5 : 1 exercice déficitaire = 1 ; 2 = 2,5 ; 3 = 5.', 'type' => 'decimal', 'min' => 0, 'max' => 5],
+                ['cle' => 'seuil_eleve', 'label' => 'Score à partir duquel le risque est élevé (rouge)', 'aide' => 'Score sur 5, au moins égal au seuil « moyen ».', 'type' => 'decimal', 'min' => 0, 'max' => 5],
+            ],
+            'r3' => [
+                self::reglageFenetre(),
+                ['cle' => 'seuil_moyen', 'label' => 'Mois créditeurs consécutifs à partir desquels le risque est moyen (orange)', 'aide' => 'Score sur 5 = nombre de mois (5 mois et plus : 5).', 'type' => 'decimal', 'min' => 1, 'max' => 5],
+                ['cle' => 'seuil_eleve', 'label' => 'Mois créditeurs consécutifs à partir desquels le risque est élevé (rouge)', 'aide' => 'Au moins égal au seuil « moyen ».', 'type' => 'decimal', 'min' => 1, 'max' => 5],
+            ],
+            'r5' => [
+                self::reglageFenetre(),
+                ['cle' => 'taux_tva', 'label' => 'Taux de TVA utilisé pour estimer le CA non déclaré (%)', 'aide' => '20 % dans le document de référence.', 'type' => 'decimal', 'min' => 1, 'max' => 100],
+                ['cle' => 'marge', 'label' => 'Marge supposée sur les achats (%)', 'aide' => '10 % dans le document de référence.', 'type' => 'decimal', 'min' => 0, 'max' => 500],
+                ['cle' => 'seuil_moyen', 'label' => 'Score à partir duquel le risque est moyen (orange)', 'aide' => 'Score sur 5 (moyenne des scores IR et TVA).', 'type' => 'decimal', 'min' => 0, 'max' => 5],
+                ['cle' => 'seuil_eleve', 'label' => 'Score à partir duquel le risque est élevé (rouge)', 'aide' => 'Score sur 5, au moins égal au seuil « moyen ».', 'type' => 'decimal', 'min' => 0, 'max' => 5],
+            ],
+            'r6', 'r7' => [
+                self::reglageFenetre(),
+                ['cle' => 'seuil_moyen', 'label' => 'Score au-dessus duquel le risque est moyen (orange)', 'aide' => 'Score sur 10. Le document de référence ne fixe pas de seuils : ceux de R1 sont proposés.', 'type' => 'decimal', 'min' => 0, 'max' => 10],
+                ['cle' => 'seuil_eleve', 'label' => 'Score au-dessus duquel le risque est élevé (rouge)', 'aide' => 'Score sur 10, au moins égal au seuil « moyen ».', 'type' => 'decimal', 'min' => 0, 'max' => 10],
+            ],
             default => [],
         };
+    }
+
+    /** Réglage commun aux critères R : nombre d'exercices analysés en plus de l'année en cours. @return array<string, mixed> */
+    private static function reglageFenetre(): array
+    {
+        return ['cle' => 'fenetre_exercices', 'label' => "Exercices analysés en plus de l'année en cours", 'aide' => '0 : année en cours seulement ; 1 : année en cours et année précédente.', 'type' => 'entier', 'min' => 0, 'max' => 5];
+    }
+
+    /** Réglages par défaut d'une règle : config/anomalies.php, ou config/risque.php pour les critères R. @return array<string, mixed> */
+    private static function configDe(string $code): array
+    {
+        return in_array($code, self::CRITERES_R, true) ? (array) config("risque.regles.{$code}") : (array) config("anomalies.{$code}");
     }
 
     /** @return array<int, string> clés des réglages modifiables */
@@ -63,7 +111,7 @@ class ReglesDetection
     /** Valeurs par défaut (config/anomalies.php) des réglages modifiables. @return array<string, mixed> */
     public static function defauts(string $code): array
     {
-        return array_intersect_key((array) config("anomalies.{$code}"), array_flip(self::cles($code)));
+        return array_intersect_key(self::configDe($code), array_flip(self::cles($code)));
     }
 
     /**
@@ -74,7 +122,7 @@ class ReglesDetection
      */
     public static function parametres(string $code): array
     {
-        $base = (array) config("anomalies.{$code}");
+        $base = self::configDe($code);
         $regle = self::regle($code);
 
         $surcharges = $regle?->parametres;
@@ -109,7 +157,11 @@ class ReglesDetection
                     $r->where('alertes.regle', $code);
 
                     if (self::actif($code)) {
-                        $r->whereIn('alertes.type_impot', array_values((array) (self::parametres($code)['impots'] ?? [])));
+                        // Les critères R n'ont pas de liste d'impôts : seule l'activation compte
+                        $impots = self::parametres($code)['impots'] ?? null;
+                        if ($impots !== null) {
+                            $r->whereIn('alertes.type_impot', array_values((array) $impots));
+                        }
                     } else {
                         $r->whereRaw('1 = 0');
                     }
@@ -192,6 +244,12 @@ class ReglesDetection
         if ($code === 'baisse_ca') {
             if (! ((float) $p['seuil_pourcentage'] <= (float) $p['seuil_moyen'] && (float) $p['seuil_moyen'] <= (float) $p['seuil_eleve'])) {
                 $erreurs[] = 'Les seuils doivent être croissants : déclenchement, puis risque moyen, puis risque élevé.';
+            }
+        }
+
+        if (in_array($code, self::CRITERES_R, true)) {
+            if ((float) $p['seuil_moyen'] > (float) $p['seuil_eleve']) {
+                $erreurs[] = 'Le seuil « risque moyen » ne peut pas dépasser le seuil « risque élevé ».';
             }
         }
 

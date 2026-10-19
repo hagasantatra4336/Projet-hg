@@ -4,6 +4,7 @@ import {
   ETAT_LABELS,
   NIVEAU_LABELS,
   REGLE_LABELS,
+  SCORE_MAX_R,
   STATUT_LABELS,
   type CelluleDeclaration,
   type ContribuableFiche,
@@ -92,13 +93,19 @@ export function StatutBadge({ statut }: { statut: StatutAlerte }) {
 const REGLE_BADGE: Record<Regle, string> = {
   defaillance: "bg-brand-blue/10 text-brand-blue",
   baisse_ca: "bg-orange-100 text-orange-800",
+  r1: "bg-amber-100 text-amber-900",
+  r2: "bg-amber-100 text-amber-900",
+  r3: "bg-amber-100 text-amber-900",
+  r5: "bg-amber-100 text-amber-900",
+  r6: "bg-amber-100 text-amber-900",
+  r7: "bg-amber-100 text-amber-900",
 };
 
 /** Type d'anomalie : défaillance de déclaration / baisse du chiffre d'affaires. */
 export function RegleBadge({ regle }: { regle: Regle }) {
   return (
-    <span className={`inline-block rounded px-2 py-0.5 text-xs font-semibold ${REGLE_BADGE[regle]}`}>
-      {REGLE_LABELS[regle]}
+    <span className={`inline-block rounded px-2 py-0.5 text-xs font-semibold ${REGLE_BADGE[regle] ?? "bg-slate-100 text-slate-700"}`}>
+      {REGLE_LABELS[regle] ?? regle}
     </span>
   );
 }
@@ -117,6 +124,19 @@ export function PeriodeAnomalie({ a }: { a: PeriodeAlerte }) {
         {libellePeriode(a.annee_fiscale, a.mois)}
         <p className="text-xs text-slate-500">
           {a.details?.baisse_pct !== undefined ? `CA -${a.details.baisse_pct.toLocaleString("fr-FR")} %` : "Baisse du CA"}
+        </p>
+      </>
+    );
+  }
+
+  if (a.regle in SCORE_MAX_R) {
+    const max = a.details?.score_max ?? SCORE_MAX_R[a.regle];
+    const score = a.details?.score_risque;
+    return (
+      <>
+        Exercice {a.annee_fiscale}
+        <p className="text-xs text-slate-500">
+          {score !== undefined ? `${a.regle.toUpperCase()} ${score.toLocaleString("fr-FR")}/${max}` : a.regle.toUpperCase()}
         </p>
       </>
     );
