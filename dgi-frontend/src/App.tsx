@@ -8,6 +8,7 @@ import UsersPage from "./pages/Admin/UsersPage";
 import CentresPage from "./pages/Admin/CentresPage";
 import FonctionsPage from "./pages/Admin/FonctionsPage";
 import ReglesPage from "./pages/Admin/ReglesPage";
+import ReglesHistoriquePage from "./pages/Admin/ReglesHistoriquePage";
 import ReglesPersonnaliseesPage from "./pages/Admin/ReglesPersonnaliseesPage";
 import DashboardPage from "./pages/DashboardPage";
 import DefaillancesPage from "./pages/DefaillancesPage";
@@ -43,6 +44,7 @@ export default function App() {
                 <Route path="centres" element={<CentresPage />} />
                 {/* Règles de détection : réglages modifiables sans toucher au code */}
                 <Route path="regles" element={<ReglesPage />} />
+                <Route path="regles/historique" element={<ReglesHistoriquePage />} />
                 <Route path="regles-personnalisees" element={<ReglesPersonnaliseesPage />} />
               </Route>
               <Route element={<ProtectedRoute roles={["superadmin"]} />}>

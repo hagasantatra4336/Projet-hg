@@ -66,6 +66,13 @@ return [
 
         // Noms de centres ambigus de la base source => code ou nom du centre de l'application. Exemple :
         //   'ANTANANARIVO' => '21-1-702', 'MAHAJANGA' => 'CENTRE FISCAL MAHAJANGA A'
-        'alias_centres' => [],
+        // Jeu « fichiers Excel » : CENTRE_GEST donne la ville sans le sous-centre (A/B, I à VI).
+        // Choix arbitraire du centre principal, à ajuster si vous connaissez le vrai sous-centre.
+        'alias_centres' => [
+            'ANTANANARIVO' => 'CF TANA I',
+            'MAHAJANGA' => 'CF MAHAJANGA A',
+            'FIANARANTSOA' => 'CF FIANARANTSOA A',
+            'TOAMASINA' => 'CF TOAMASINA A',
+        ],
     ],
 ];

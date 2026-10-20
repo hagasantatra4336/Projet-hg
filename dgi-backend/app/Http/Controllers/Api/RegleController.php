@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\Regle;
 use App\Models\RegleHistorique;
+use App\Services\FormulesRegles;
 use App\Services\ReglesDetection;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -28,6 +29,40 @@ class RegleController extends Controller
             ->values();
 
         return response()->json(['regles' => $regles]);
+    }
+
+    /**
+     * Historique des modifications de TOUTES les règles (page « Historique des règles »), du plus récent au plus ancien.
+     * Filtre facultatif : ?regle=code. 300 entrées au plus.
+     */
+    public function historique(Request $request): JsonResponse
+    {
+        $this->verifierInstallation();
+
+        $code = $request->query('regle');
+        abort_if($code !== null && ! in_array($code, ReglesDetection::CODES, true), 404, 'Règle inconnue.');
+
+        $entrees = RegleHistorique::with(['user', 'regle'])
+            ->whereHas('regle', fn ($q) => $q->whereIn('code', ReglesDetection::CODES)->when($code !== null, fn ($r) => $r->where('code', $code)))
+            ->latest('id')
+            ->limit(300)
+            ->get()
+            ->map(fn (RegleHistorique $h) => [
+                'id' => $h->id,
+                'date' => $h->created_at?->toIso8601String(),
+                'par' => $h->user?->nom,
+                'action' => $h->action,
+                'avant' => $h->avant,
+                'apres' => $h->apres,
+                'regle' => [
+                    'code' => $h->regle->code,
+                    'nom' => $h->regle->nom,
+                    'schema' => ReglesDetection::schema($h->regle->code),
+                ],
+            ])
+            ->values();
+
+        return response()->json(['historique' => $entrees]);
     }
 
     public function update(Request $request, string $code): JsonResponse
@@ -155,6 +190,7 @@ class RegleController extends Controller
             'defauts' => ReglesDetection::defauts($r->code),
             'personnalisee' => is_array($r->parametres),
             'schema' => ReglesDetection::schema($r->code),
+            'formule' => FormulesRegles::pour($r->code, ReglesDetection::parametres($r->code)),
             'modifie_par' => $r->modifiePar?->nom,
             'modifie_le' => $r->updated_at?->toIso8601String(),
             'historique' => $historique,

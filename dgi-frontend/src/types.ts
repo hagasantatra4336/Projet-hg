@@ -199,6 +199,18 @@ export interface HistoriqueRegle {
   apres: { actif: boolean; parametres: ValeursRegle };
 }
 
+/** Formules et interprétation d'une règle (texte fourni par l'API, seuils en vigueur). */
+export interface FormuleRegle {
+  formules: { label: string; expr: string }[];
+  sources: string[];
+  niveaux: { couleur: "vert" | "faible" | "orange" | "rouge"; texte: string }[];
+}
+
+/** Une modification de règle dans la page « Historique des règles ». */
+export interface EntreeHistoriqueRegle extends HistoriqueRegle {
+  regle: { code: string; nom: string; schema: ParametreSchema[] };
+}
+
 export interface RegleConfig {
   code: string;
   nom: string;
@@ -208,6 +220,7 @@ export interface RegleConfig {
   defauts: ValeursRegle;
   personnalisee: boolean;
   schema: ParametreSchema[];
+  formule?: FormuleRegle;
   modifie_par: string | null;
   modifie_le: string | null;
   historique: HistoriqueRegle[];

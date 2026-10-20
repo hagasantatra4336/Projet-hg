@@ -44,7 +44,7 @@ class AnomalieAnalyseur
         $c = $this->baissesCa->analyser($date, $centreId);
 
         // Critères de risque R1, R2, R3, R5, R6, R7 (base d'analyse risque). Une base vide n'a aucun effet.
-        $r = $this->risque->analyser($date, $centreId);
+        $risque = $this->risque->analyser($date, $centreId);
 
         // Règles personnalisées ACTIVES (brouillons et règles désactivées sont ignorés). Une règle en erreur
         // (colonne supprimée, indicateur désactivé...) ne bloque ni les autres règles ni l'analyse.
@@ -55,15 +55,15 @@ class AnomalieAnalyseur
                 continue;
             }
             try {
-                $r = $this->personnalisees->analyser($regle, $date, $centreId);
+                $resultat = $this->personnalisees->analyser($regle, $date, $centreId);
             } catch (Throwable $e) {
                 report($e);
                 $detailPerso[$regle->code] = ['erreur' => $e->getMessage()];
                 continue;
             }
-            $detailPerso[$regle->code] = $r;
+            $detailPerso[$regle->code] = $resultat;
             foreach ($p as $k => $v) {
-                $p[$k] += $r[$k];
+                $p[$k] += $resultat[$k];
             }
         }
 
@@ -75,11 +75,11 @@ class AnomalieAnalyseur
             'baisse_ca' => $c,
             'desactivees' => array_keys(array_filter(['defaillance' => $d['desactivee'] ?? false, 'baisse_ca' => $c['desactivee'] ?? false])),
             'personnalisees' => $detailPerso,
-            'risque' => $r,
-            'analyses' => $d['analyses'] + $c['analyses'] + $p['analyses'] + $r['analyses'],
-            'crees' => $d['crees'] + $c['crees'] + $p['crees'] + $r['crees'],
-            'mis_a_jour' => $d['mis_a_jour'] + $c['mis_a_jour'] + $p['mis_a_jour'] + $r['mis_a_jour'],
-            'regularisees' => $d['regularisees'] + $c['regularisees'] + $p['regularisees'] + $r['regularisees'],
+            'risque' => $risque,
+            'analyses' => $d['analyses'] + $c['analyses'] + $p['analyses'] + $risque['analyses'],
+            'crees' => $d['crees'] + $c['crees'] + $p['crees'] + $risque['crees'],
+            'mis_a_jour' => $d['mis_a_jour'] + $c['mis_a_jour'] + $p['mis_a_jour'] + $risque['mis_a_jour'],
+            'regularisees' => $d['regularisees'] + $c['regularisees'] + $p['regularisees'] + $risque['regularisees'],
         ];
     }
 }

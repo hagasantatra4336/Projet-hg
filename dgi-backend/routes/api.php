@@ -97,7 +97,8 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('/regles-personnalisees/{regle}/simuler', [ReglePersonnaliseeController::class, 'simuler'])->middleware('throttle:20,1');
         Route::post('/regles-personnalisees/{regle}/activer', [ReglePersonnaliseeController::class, 'activer']);
         Route::post('/regles-personnalisees/{regle}/desactiver', [ReglePersonnaliseeController::class, 'desactiver']);
-    });
+        Route::get('/regles/historique', [RegleController::class, 'historique']);
+        });
 
     // Section Administration — gestion des utilisateurs : superadmin, central, admin
     // (l'admin est limité à son propre centre : voir UserController)

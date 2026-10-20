@@ -87,7 +87,7 @@ class AuthController extends Controller
             ], 422);
         }
 
-        if (! Hash::check($data['otp_code'], $state['otp'])) {
+        if (! $this->otpMatches($data['email'], $data['otp_code'], $state['otp'])) {
             $state['attempts']++;
             $this->saveState($data['email'], $state);
 
@@ -99,7 +99,7 @@ class AuthController extends Controller
 
         $state['verified'] = true;
         $state['otp'] = null;
-        $state['setup'] = Hash::make($setupToken);
+        $state['setup'] = hash('sha256', $setupToken); // jeton aléatoire de 40 car. : SHA-256 suffit
         $state['expires_at'] = now()->addMinutes(self::SETUP_TTL_MINUTES)->timestamp;
         $this->saveState($data['email'], $state);
 
@@ -139,7 +139,7 @@ class AuthController extends Controller
         $valid = $state
             && $state['verified']
             && $state['setup']
-            && Hash::check($data['setup_token'], $state['setup']);
+            && hash_equals($state['setup'], hash('sha256', $data['setup_token']));
 
         if (! $valid || User::where('email', $data['email'])->exists()) {
             return response()->json([
@@ -214,7 +214,7 @@ class AuthController extends Controller
             ], 422);
         }
 
-        if (! Hash::check($data['otp_code'], $state['otp'])) {
+        if (! $this->otpMatches($data['email'], $data['otp_code'], $state['otp'])) {
             $state['attempts']++;
             Cache::put($key, $state, Carbon::createFromTimestamp($state['expires_at']));
 
@@ -286,7 +286,7 @@ class AuthController extends Controller
         $code = $this->generateCode();
 
         $this->saveState($email, $profile + [
-            'otp' => Hash::make($code),
+            'otp' => $this->hashOtp($email, $code),
             'verified' => false,
             'setup' => null,
             'attempts' => 0,
@@ -304,12 +304,27 @@ class AuthController extends Controller
 
         Cache::put($this->loginKey($user->email), [
             'user_id' => $user->id,
-            'otp' => Hash::make($code),
+            'otp' => $this->hashOtp($user->email, $code),
             'attempts' => 0,
             'expires_at' => $expiresAt->timestamp,
         ], $expiresAt);
 
         return $this->deliverOtp($user->email, (string) $user->nom, $code, 'connexion', $successMessage);
+    }
+
+    /**
+     * Empreinte de l'OTP : HMAC-SHA256 lié à l'e-mail et à APP_KEY (quelques microsecondes).
+     * bcrypt (≈ 300 ms par appel) n'apporte rien ici : le code n'a que 10^6 valeurs, la vraie
+     * protection est la limite de 5 tentatives + la durée de vie de 10 minutes.
+     */
+    private function hashOtp(string $email, string $code): string
+    {
+        return hash_hmac('sha256', Str::lower($email) . '|' . $code, (string) config('app.key'));
+    }
+
+    private function otpMatches(string $email, string $code, string $expectedHash): bool
+    {
+        return hash_equals($expectedHash, $this->hashOtp($email, $code));
     }
 
     private function generateCode(): string

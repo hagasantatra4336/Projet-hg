@@ -3,7 +3,8 @@ import api from "../services/api";
 import type { Role } from "../types";
 
 const INTERVALLE_MS = 5 * 60 * 1000;
-// Mêmes rôles que la route /defaillances/analyser (un agent ne peut pas lancer l'analyse).
+// La route /defaillances/auto est ouverte à tous les rôles authentifiés
+// (contrairement à /defaillances/analyser : superadmin, central, admin uniquement).
 const ROLES_AUTORISES: Role[] = ["superadmin", "central", "admin", "agent"];
 
 /**

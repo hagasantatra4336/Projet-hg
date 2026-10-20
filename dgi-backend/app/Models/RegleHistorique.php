@@ -20,4 +20,9 @@ class RegleHistorique extends Model
     {
         return $this->belongsTo(User::class);
     }
+
+    public function regle(): BelongsTo
+    {
+        return $this->belongsTo(Regle::class);
+    }
 }

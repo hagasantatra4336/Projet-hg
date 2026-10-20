@@ -6,6 +6,7 @@ const TITLES: Record<string, string> = {
   "/admin/centres": "Centres",
   "/admin/fonctions": "Fonctions & rôles",
   "/admin/regles": "Règles de détection",
+  "/admin/regles/historique": "Historique des règles",
   "/admin/regles-personnalisees": "Règles personnalisées",
 };
 

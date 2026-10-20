@@ -99,11 +99,13 @@ return [
             'sslmode' => env('DB_SSLMODE', 'prefer'),
         ],
 
-        // Base PostgreSQL SOURCE : base externe (lecture) d'où l'on récupère les déclarations à analyser.
+        // Base SOURCE : base externe (lecture seule) d'où l'on récupère les déclarations à analyser.
         // Distincte de la base de l'application. En test : SOURCE_DB_DATABASE=dgi_source_test
         // (créée par « php artisan dgi:source-test-db »). En production : idéalement un compte en lecture seule.
+        // PostgreSQL par défaut ; Oracle (yajra/laravel-oci8) avec SOURCE_DB_DRIVER=oracle
+        // (port 1521, charset AL32UTF8 pour les accents, SOURCE_DB_SERVICE_NAME=true si DATABASE est un nom de service, sinon un SID).
         'source' => [
-            'driver' => 'pgsql',
+            'driver' => env('SOURCE_DB_DRIVER', 'pgsql'),
             'url' => env('SOURCE_DB_URL'),
             'host' => env('SOURCE_DB_HOST', '127.0.0.1'),
             'port' => env('SOURCE_DB_PORT', '5432'),
@@ -115,6 +117,7 @@ return [
             'prefix_indexes' => true,
             'search_path' => env('SOURCE_DB_SCHEMA', 'public'),
             'sslmode' => env('SOURCE_DB_SSLMODE', 'prefer'),
+            'service_name' => env('SOURCE_DB_SERVICE_NAME', false), // Oracle uniquement
         ],
 
         'sqlsrv' => [
