@@ -63,7 +63,9 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/defaillances', [DefaillanceController::class, 'index']);
     Route::get('/defaillances/summary', [DefaillanceController::class, 'summary']);
     Route::patch('/defaillances/{alerte}', [DefaillanceController::class, 'update']);
-
+    Route::post('/defaillances/{alerte}/prendre', [DefaillanceController::class, 'prendre']);
+    Route::post('/defaillances/{alerte}/liberer', [DefaillanceController::class, 'liberer']);
+    Route::get('/defaillances/{alerte}/dossier', [DefaillanceController::class, 'dossier']);
     // Fiche d'un contribuable (informations, alertes, historique des déclarations) : même filtrage par centre
     Route::get('/contribuables/{contribuable}', [ContribuableController::class, 'show']);
 

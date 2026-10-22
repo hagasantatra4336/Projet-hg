@@ -12,6 +12,8 @@ import ReglesHistoriquePage from "./pages/Admin/ReglesHistoriquePage";
 import ReglesPersonnaliseesPage from "./pages/Admin/ReglesPersonnaliseesPage";
 import DashboardPage from "./pages/DashboardPage";
 import DefaillancesPage from "./pages/DefaillancesPage";
+import TraitementsPage from "./pages/TraitementsPage";
+import DossierTraitementPage from "./pages/DossierTraitementPage";
 import ProfilePage from "./pages/ProfilePage";
 import ProfileWaitingPage from "./pages/ProfileWaitingPage";
 import ConfirmChangePage from "./pages/ConfirmChangePage";
@@ -34,6 +36,10 @@ export default function App() {
           <Route path="/profile/attente" element={<ProfileWaitingPage />} />
           {/* Défaillances de déclaration : tous les rôles (filtrées par centre côté API) */}
           <Route path="/defaillances" element={<DefaillancesPage />} />
+          {/* Dossiers de traitement : en cours de traitement et traitements effectués */}
+          <Route path="/traitements" element={<TraitementsPage />} />
+          {/* Page de traitement d'un dossier (alerte) */}
+          <Route path="/defaillances/:id/traitement" element={<DossierTraitementPage />} />
 
           {/* Section Administration : utilisateurs + centres + fonctions */}
           <Route element={<ProtectedRoute roles={["superadmin", "central", "admin"]} />}>

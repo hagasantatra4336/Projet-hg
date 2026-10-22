@@ -34,6 +34,8 @@ class Alerte extends Model
         'commentaire',
         'traite_par',
         'traite_le',
+        'pris_par',
+        'pris_le',
     ];
 
     protected function casts(): array
@@ -46,6 +48,7 @@ class Alerte extends Model
             'date_limite' => 'date',
             'details' => 'array',
             'traite_le' => 'datetime',
+            'pris_le' => 'datetime',
         ];
     }
 
@@ -57,5 +60,10 @@ class Alerte extends Model
     public function traitePar(): BelongsTo
     {
         return $this->belongsTo(User::class, 'traite_par');
+    }
+
+    public function prisPar(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'pris_par');
     }
 }

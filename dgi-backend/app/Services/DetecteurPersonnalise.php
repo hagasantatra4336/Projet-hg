@@ -108,6 +108,7 @@ class DetecteurPersonnalise
                     $alerte->statut = Alerte::A_TRAITER;
                     $alerte->traite_par = null;
                     $alerte->traite_le = null;
+                    $alerte->forceFill(['pris_par' => null, 'pris_le' => null]);
                 }
 
                 $alerte->save();
@@ -126,7 +127,7 @@ class DetecteurPersonnalise
 
             foreach ($ouvertes as $a) {
                 if (! isset($actuelles[$a->contribuable_id . '|' . $a->type_impot . '|' . $a->annee_fiscale . '|' . $a->mois])) {
-                    $a->update(['statut' => Alerte::REGULARISEE]);
+                    $a->forceFill(['statut' => Alerte::REGULARISEE, 'pris_par' => null, 'pris_le' => null])->save();
                     $stats['regularisees']++;
                 }
             }

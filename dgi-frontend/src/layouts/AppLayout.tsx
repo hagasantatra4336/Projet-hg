@@ -129,6 +129,11 @@ export default function AppLayout() {
             <span>Défaillances</span>
           </NavLink>
 
+          <NavLink to="/traitements" className={linkClass}>
+            <IconBriefcase />
+            <span>Traitements</span>
+          </NavLink>
+
           {adminItems.length > 0 && (
             <div>
               <button

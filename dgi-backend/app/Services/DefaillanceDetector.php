@@ -139,6 +139,7 @@ class DefaillanceDetector
                     $alerte->statut = Alerte::A_TRAITER;
                     $alerte->traite_par = null;
                     $alerte->traite_le = null;
+                    $alerte->forceFill(['pris_par' => null, 'pris_le' => null]);
                 }
 
                 $alerte->save();
@@ -160,7 +161,7 @@ class DefaillanceDetector
 
             foreach ($ouvertes as $a) {
                 if (! isset($actuelles[$a->contribuable_id . '|' . $a->type_impot . '|' . $a->annee_fiscale])) {
-                    $a->update(['statut' => Alerte::REGULARISEE]);
+                    $a->forceFill(['statut' => Alerte::REGULARISEE, 'pris_par' => null, 'pris_le' => null])->save();
                     $stats['regularisees']++;
                 }
             }

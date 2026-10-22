@@ -55,7 +55,7 @@ export interface Paginated<T> {
 
 export type Regle = "defaillance" | "baisse_ca" | "r1" | "r2" | "r3" | "r5" | "r6" | "r7";
 export type NiveauRisque = "faible" | "moyen" | "eleve";
-export type StatutAlerte = "a_traiter" | "traitee" | "regularisee";
+export type StatutAlerte = "a_traiter" | "en_traitement" | "traitee" | "regularisee";
 
 export const TYPES_IMPOT = ["TVA", "IR", "IS", "IRSA"] as const;
 
@@ -101,6 +101,7 @@ export const NIVEAU_LABELS: Record<NiveauRisque, string> = {
 
 export const STATUT_LABELS: Record<StatutAlerte, string> = {
   a_traiter: "À traiter",
+  en_traitement: "En traitement",
   traitee: "Traitée",
   regularisee: "Régularisée",
 };
@@ -122,10 +123,15 @@ export interface Defaillance {
   commentaire: string | null;
   traite_par: string | null;
   traite_le: string | null;
+  // verrou de traitement : dossier pris par un agent (statut « en_traitement »)
+  pris_par?: string | null;
+  pris_le?: string | null;
+  pris_par_moi?: boolean;
 }
 
 export interface DefaillanceSummary {
   a_traiter: number;
+  en_traitement: number;
   eleve: number;
   moyen: number;
   faible: number;
@@ -135,6 +141,21 @@ export interface DefaillanceSummary {
 }
 
 export type AlerteContribuable = Omit<Defaillance, "contribuable">;
+
+/** Une ligne de la base d'analyse risque (une année, ou un mois pour la TVA). */
+export interface LigneBaseRisque {
+  annee: number;
+  mois: number;
+  valeurs: Record<string, number | null>;
+}
+
+/** Dossier de traitement d'une alerte : l'alerte, les valeurs qui l'expliquent, la formule de sa règle. */
+export interface DossierAlerte {
+  alerte: Defaillance;
+  indicateurs: Record<"IR" | "TVA" | "RECOUPEMENT" | "DAU", LigneBaseRisque[]>;
+  formule: FormuleRegle | null;
+  verrou_minutes: number;
+}
 
 export const ETAT_LABELS: Record<number, string> = { 1: "Actif", 2: "Bloqué", 3: "Cessation", 4: "Radié" };
 

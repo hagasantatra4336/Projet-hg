@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type ChangeEvent, type FormEvent } from "react";
+import { useNavigate } from "react-router-dom";
 import api, { getErrorMessage } from "../services/api";
 import { useAuth } from "../context/AuthContext";
 import {
@@ -15,7 +16,6 @@ import {
   type StatutAlerte,
 } from "../types";
 import {
-  EditButton,
   ErrorBox,
   Field,
   Modal,
@@ -100,12 +100,10 @@ export default function DefaillancesPage() {
   const [dir, setDir] = useState<"asc" | "desc">("desc");
   const [page, setPage] = useState<number>(1);
 
-  // Traitement d'une alerte (EXF-008)
-  const [selected, setSelected] = useState<Defaillance | null>(null);
-  const [formStatut, setFormStatut] = useState<"a_traiter" | "traitee">("a_traiter");
-  const [formCommentaire, setFormCommentaire] = useState<string>("");
-  const [formError, setFormError] = useState<string>("");
-  const [saving, setSaving] = useState<boolean>(false);
+  // Traitement d'une alerte (EXF-008) : « Traiter » prend le dossier puis ouvre la page de traitement
+  const navigate = useNavigate();
+  const [priseId, setPriseId] = useState<number | null>(null);
+  const [priseErreur, setPriseErreur] = useState<string>("");
 
   // Lancer l'analyse
   const [analyseOpen, setAnalyseOpen] = useState<boolean>(false);
@@ -229,30 +227,27 @@ export default function DefaillancesPage() {
 
   // ---- Traitement d'une alerte ----
 
-  function openTraitement(d: Defaillance) {
-    setSelected(d);
-    setFormStatut(d.statut === "traitee" ? "traitee" : "a_traiter");
-    setFormCommentaire(d.commentaire ?? "");
-    setFormError("");
-  }
+  /**
+   * « Traiter » : prend le dossier (il passe « En traitement » pour les autres utilisateurs) puis ouvre la page de traitement.
+   * Dossier déjà traité ou régularisé : simple consultation. Dossier pris par un autre : refusé (sauf reprise par un responsable).
+   */
+  async function traiter(d: Defaillance, forcer = false) {
+    setPriseErreur("");
 
-  async function handleSave(e: FormEvent) {
-    e.preventDefault();
-    if (!selected) return;
-    setSaving(true);
-    setFormError("");
+    if (d.statut === "traitee" || d.statut === "regularisee") {
+      navigate(`/defaillances/${d.id}/traitement`);
+      return;
+    }
 
+    setPriseId(d.id);
     try {
-      const body: { commentaire: string; statut?: "a_traiter" | "traitee" } = { commentaire: formCommentaire };
-      if (selected.statut !== "regularisee") body.statut = formStatut;
-
-      await api.patch(`/defaillances/${selected.id}`, body);
-      setSelected(null);
-      reload();
+      await api.post(`/defaillances/${d.id}/prendre`, forcer ? { forcer: true } : {});
+      navigate(`/defaillances/${d.id}/traitement`);
     } catch (err) {
-      setFormError(getErrorMessage(err, "Enregistrement impossible."));
+      setPriseErreur(getErrorMessage(err, "Impossible de prendre ce dossier."));
+      reload(); // l'état du dossier a changé : la liste est mise à jour
     } finally {
-      setSaving(false);
+      setPriseId(null);
     }
   }
 
@@ -381,6 +376,7 @@ export default function DefaillancesPage() {
         <div className="rounded-xl bg-white p-4 border border-line">
           <p className="text-xs text-slate-500">Alertes à traiter</p>
           <p className="text-3xl font-semibold text-brand-blue">{summary ? summary.a_traiter : "—"}</p>
+          {summary && summary.en_traitement > 0 && <p className="text-xs text-slate-500">+ {summary.en_traitement} en traitement</p>}
         </div>
         {cards.map((c) => (
           <button
@@ -501,6 +497,7 @@ export default function DefaillancesPage() {
         </div>
 
         <ErrorBox message={error} />
+        <ErrorBox message={priseErreur} />
 
         <div className="overflow-x-auto">
           <table className="w-full min-w-[980px] text-left text-sm">
@@ -563,10 +560,44 @@ export default function DefaillancesPage() {
                         {d.traite_le ? `, le ${formatDate(d.traite_le)}` : ""}
                       </p>
                     )}
+                    {d.statut === "en_traitement" && d.pris_par && (
+                      <p className="mt-1 text-xs text-slate-500">
+                        par {d.pris_par_moi ? "vous" : d.pris_par}
+                        {d.pris_le ? `, depuis ${formatDateHeure(d.pris_le)}` : ""}
+                      </p>
+                    )}
                     {d.commentaire && <p className="mt-1 max-w-[200px] break-words text-xs italic text-slate-500">{d.commentaire}</p>}
                   </td>
                   <td className="px-3 py-3 text-right">
-                    <EditButton onClick={() => openTraitement(d)} label="Traiter l'alerte" />
+                    {d.statut === "en_traitement" && !d.pris_par_moi ? (
+                      <div className="flex flex-col items-end gap-1">
+                        <span className="rounded border border-line bg-slate-50 px-3 py-1.5 text-xs font-medium text-slate-500" title={`Dossier pris par ${d.pris_par ?? "un autre utilisateur"}`}>
+                          En traitement
+                        </span>
+                        {canManage && (
+                          <button
+                            type="button"
+                            className="text-xs font-medium text-brand-blue underline disabled:opacity-50"
+                            disabled={priseId === d.id}
+                            onClick={() => {
+                              if (window.confirm(`Ce dossier est pris par ${d.pris_par ?? "un autre utilisateur"}. Le reprendre ?`)) void traiter(d, true);
+                            }}
+                          >
+                            Reprendre
+                          </button>
+                        )}
+                      </div>
+                    ) : (
+                      <button type="button" className={primaryButtonClass + " px-3 py-1.5 text-sm"} disabled={priseId === d.id} onClick={() => void traiter(d)}>
+                        {priseId === d.id
+                          ? "..."
+                          : d.statut === "en_traitement"
+                            ? "Continuer"
+                            : d.statut === "a_traiter"
+                              ? "Traiter"
+                              : "Voir le dossier"}
+                      </button>
+                    )}
                   </td>
                 </tr>
               ))}
@@ -631,66 +662,6 @@ export default function DefaillancesPage() {
           </div>
         )}
       </section>
-
-      {/* Traiter une alerte */}
-      {selected && (
-        <Modal title="Traiter l'alerte" onClose={() => setSelected(null)}>
-          <form onSubmit={handleSave} className="space-y-4">
-            <div className="rounded-lg bg-slate-50 p-3 text-sm">
-              <p className="font-semibold text-brand-blue">
-                {selected.contribuable.nom} <span className="font-normal text-slate-500">({selected.contribuable.nif})</span>
-              </p>
-              <p className="mt-1 text-slate-700">{selected.motif}</p>
-              <button
-                type="button"
-                onClick={() => setFicheId(selected.contribuable.id)}
-                className="mt-2 text-xs font-medium text-brand-blue underline"
-              >
-                Voir la fiche du contribuable
-              </button>
-            </div>
-
-            <ErrorBox message={formError} />
-
-            {selected.statut === "regularisee" ? (
-              <p className="text-sm text-slate-600">
-                L'anomalie n'est plus constatée (déclaration déposée ou corrigée) : l'alerte est régularisée. Vous pouvez tout de même ajouter un commentaire.
-              </p>
-            ) : (
-              <Field label="Statut">
-                <select
-                  className={inputClass}
-                  value={formStatut}
-                  onChange={(e) => setFormStatut(e.target.value as "a_traiter" | "traitee")}
-                >
-                  <option value="a_traiter">À traiter</option>
-                  <option value="traitee">Traitée</option>
-                </select>
-              </Field>
-            )}
-
-            <Field label="Commentaire">
-              <textarea
-                className={inputClass}
-                rows={4}
-                maxLength={2000}
-                value={formCommentaire}
-                onChange={(e) => setFormCommentaire(e.target.value)}
-                placeholder="Ex. : contribuable contacté, déclaration attendue avant le 15..."
-              />
-            </Field>
-
-            <div className="flex justify-end gap-3">
-              <button type="button" className={secondaryButtonClass} onClick={() => setSelected(null)} disabled={saving}>
-                Annuler
-              </button>
-              <button type="submit" className={primaryButtonClass} disabled={saving}>
-                {saving ? "Enregistrement..." : "Enregistrer"}
-              </button>
-            </div>
-          </form>
-        </Modal>
-      )}
 
       {/* Lancer l'analyse */}
       {analyseOpen && (

@@ -8,9 +8,11 @@ use App\Models\Alerte;
 use App\Models\Assujettissement;
 use App\Models\Contribuable;
 use App\Models\Declaration;
+use App\Models\User;
 use App\Services\AnomalieAnalyseur;
 use App\Services\DefaillanceDetector;
 use App\Services\ReglesDetection;
+use App\Services\VerrouAlerte;
 use DateTimeImmutable;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -44,7 +46,7 @@ class ContribuableController extends Controller
         $jour = $aujourdhui->format('Y-m-d');
 
         // Alertes (toutes, de la plus récente à la plus ancienne)
-        $requeteAlertes = $contribuable->alertes()->with('traitePar');
+        $requeteAlertes = $contribuable->alertes()->with(['traitePar', 'prisPar']);
         ReglesDetection::limiterAlertes($requeteAlertes); // règles désactivées ou impôts décochés : alertes masquées
         $alertes = $requeteAlertes->orderByDesc('annee_fiscale')->orderByDesc('mois')->orderByDesc('id')->get();
 
@@ -185,23 +187,7 @@ class ContribuableController extends Controller
                 'actif' => $a->actif,
                 'exonere' => $a->exonere,
             ])->values(),
-            'alertes' => $alertes->map(fn (Alerte $a) => [
-                'id' => $a->id,
-                'regle' => $a->regle,
-                'type_impot' => $a->type_impot,
-                'annee_fiscale' => $a->annee_fiscale,
-                'mois' => $a->mois,
-                'date_limite' => $a->date_limite?->toDateString(),
-                'periodes_manquees' => $a->periodes_manquees,
-                'periodes_declarees' => $a->periodes_declarees,
-                'niveau' => $a->niveau,
-                'motif' => $a->motif,
-                'details' => $a->details,
-                'statut' => $a->statut,
-                'commentaire' => $a->commentaire,
-                'traite_par' => $a->traitePar?->nom,
-                'traite_le' => $a->traite_le?->toIso8601String(),
-            ])->values(),
+            'alertes' => $alertes->map(fn (Alerte $a) => $this->presentAlerte($a, $me))->values(),
             'historique' => [
                 'mensuel' => ['periodes' => $periodes, 'impots' => $lignesMensuelles],
                 'annuel' => ['annees' => $annees, 'impots' => $lignesAnnuelles],
@@ -218,5 +204,32 @@ class ContribuableController extends Controller
 
         return (int) $contribuable->declarations()->whereIn('type_impot', $impotsMensuels)->where('mois', '>', 0)
             ->selectRaw('max(annee_fiscale * 100 + mois) as dernier')->value('dernier');
+    }
+
+    /** Une alerte de la fiche, avec l'état du verrou de traitement (pris_par/pris_le → « en_traitement »). */
+    private function presentAlerte(Alerte $a, User $me): array
+    {
+        $pris = VerrouAlerte::verrouille($a);
+
+        return [
+            'id' => $a->id,
+            'regle' => $a->regle,
+            'type_impot' => $a->type_impot,
+            'annee_fiscale' => $a->annee_fiscale,
+            'mois' => $a->mois,
+            'date_limite' => $a->date_limite?->toDateString(),
+            'periodes_manquees' => $a->periodes_manquees,
+            'periodes_declarees' => $a->periodes_declarees,
+            'niveau' => $a->niveau,
+            'motif' => $a->motif,
+            'details' => $a->details,
+            'statut' => $pris ? 'en_traitement' : $a->statut,
+            'commentaire' => $a->commentaire,
+            'traite_par' => $a->traitePar?->nom,
+            'traite_le' => $a->traite_le?->toIso8601String(),
+            'pris_par' => $pris ? $a->prisPar?->nom : null,
+            'pris_le' => $pris ? $a->pris_le?->toIso8601String() : null,
+            'pris_par_moi' => $pris && (int) $a->getAttribute('pris_par') === $me->id,
+        ];
     }
 }

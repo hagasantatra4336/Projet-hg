@@ -103,7 +103,11 @@ return [
         // Distincte de la base de l'application. En test : SOURCE_DB_DATABASE=dgi_source_test
         // (créée par « php artisan dgi:source-test-db »). En production : idéalement un compte en lecture seule.
         // PostgreSQL par défaut ; Oracle (yajra/laravel-oci8) avec SOURCE_DB_DRIVER=oracle
-        // (port 1521, charset AL32UTF8 pour les accents, SOURCE_DB_SERVICE_NAME=true si DATABASE est un nom de service, sinon un SID).
+        // (port 1521, SOURCE_DB_CHARSET=AL32UTF8 pour les accents). Connexion par NOM DE SERVICE :
+        // SOURCE_DB_SERVICE_NAME=FREEPDB1 (le nom lui-même, pas « true »). Connexion par SID : laisser
+        // SOURCE_DB_SERVICE_NAME vide et mettre le SID dans SOURCE_DB_DATABASE.
+        // Oracle : les noms de tables et colonnes sont mis en MAJUSCULES par le pilote (excel_declaration_ir -> EXCEL_DECLARATION_IR)
+        // et lus dans le schéma du compte connecté (SOURCE_DB_SCHEMA ne sert qu'à PostgreSQL).
         'source' => [
             'driver' => env('SOURCE_DB_DRIVER', 'pgsql'),
             'url' => env('SOURCE_DB_URL'),

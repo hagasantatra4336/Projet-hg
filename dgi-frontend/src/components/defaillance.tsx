@@ -70,6 +70,7 @@ const NIVEAU_BADGE: Record<NiveauRisque, string> = {
 
 const STATUT_BADGE: Record<StatutAlerte, string> = {
   a_traiter: "bg-blue-100 text-blue-800",
+  en_traitement: "bg-amber-100 text-amber-800",
   traitee: "bg-leaf-100 text-brand-blue",
   regularisee: "bg-slate-100 text-slate-600",
 };
@@ -161,7 +162,7 @@ export function PeriodeAnomalie({ a }: { a: PeriodeAlerte }) {
 //  Fiche contribuable (fenêtre)
 // ---------------------------------------------------------------------
 
-function EtatBadge({ fiche }: { fiche: ContribuableFiche["contribuable"] }) {
+export function EtatBadge({ fiche }: { fiche: ContribuableFiche["contribuable"] }) {
   if (fiche.etat === null) return null;
 
   const style =
@@ -225,7 +226,7 @@ function Cellule({ c, baisse }: { c: CelluleDeclaration; baisse: boolean }) {
   );
 }
 
-function Matrice({
+export function Matrice({
   titre,
   entetes,
   lignes,
