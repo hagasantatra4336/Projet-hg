@@ -314,7 +314,8 @@ class SourceImportTest extends TestCase
         $this->sourceContribuable('9100000002', 'Centre Nord', 'Beta SA');
 
         // Alpha déclare la TVA de janvier à août 2026, puis plus rien (septembre et octobre manquants).
-        // Beta déclare septembre et octobre : leurs dates limites sont ainsi connues du détecteur.
+        // Beta déclare septembre et octobre (sans effet sur la détection : les dates limites sont
+        // désormais celles du calendrier fiscal officiel, pas celles lues dans les déclarations).
         foreach (range(1, 8) as $m) {
             $this->sourceTva('9100000001', 2026, $m, 1000, sprintf('2026-%02d-15', $m + 1));
         }
@@ -340,5 +341,32 @@ class SourceImportTest extends TestCase
         $this->assertSame(Alerte::A_TRAITER, $alerte->statut);
         $this->assertSame([9, 10], $alerte->details['mois_manquants']);
         $this->assertSame('historique', $alerte->details['origine_obligation']); // obligation déduite des déclarations
+    }
+
+    /** [AJOUT] Une période n'est jugée qu'une fois son échéance de paiement + 48 h passée (calendrier DGI). */
+    public function test_les_periodes_non_echues_ne_sont_pas_jugees(): void
+    {
+        Centre::create(['nom' => 'Centre Nord']);
+        $this->sourceContribuable('9100000001', 'Centre Nord', 'Alpha SARL');
+
+        // Alpha déclare de janvier à septembre 2026 ; octobre manquant, échéance le 15/11 (+ 48 h)
+        foreach (range(1, 9) as $m) {
+            $this->sourceTva('9100000001', 2026, $m, 1000, sprintf('2026-%02d-15', $m + 1));
+        }
+
+        app(SourceDeclarationImporter::class)->importer();
+
+        // Au 16/11 : l'échéance d'octobre (15/11 + 48 h = 17/11) n'est pas encore passée → aucune alerte
+        $stats = (new DefaillanceDetector())->analyser(new DateTimeImmutable('2026-11-16'));
+        $this->assertSame(0, $stats['crees']);
+        $this->assertSame(0, Alerte::count());
+
+        // Au 18/11 : la fenêtre d'octobre est ouverte → alerte créée pour le seul mois d'octobre
+        $stats = (new DefaillanceDetector())->analyser(new DateTimeImmutable('2026-11-18'));
+        $this->assertSame(1, $stats['crees']);
+
+        $alerte = Alerte::firstOrFail();
+        $this->assertSame([10], $alerte->details['mois_manquants']);
+        $this->assertSame('2026-11-15', $alerte->date_limite->toDateString());
     }
 }

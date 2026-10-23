@@ -18,8 +18,9 @@ use Illuminate\Support\Facades\DB;
  *          mensuelle (TVA, IRSA), 1 déclaration pour une périodicité annuelle (IR, IS) ;
  *        - à défaut d'assujettissement connu pour cet impôt : déduites de sa première déclaration ;
  *        - jamais après la date de cessation ou de radiation du contribuable ;
- *   2. on ne retient que les périodes dont la DATE LIMITE est dépassée (la date limite d'une période est celle
- *      indiquée dans les déclarations déposées pour cet impôt et cette période : la plus tardive) ;
+ *   2. on ne retient que les périodes dont la DATE LIMITE DE PAIEMENT du calendrier fiscal officiel DGI
+ *      (config « echeances », ex. TVA/IRSA : le 15 du mois suivant) + le délai d'analyse (48 h) est dépassée :
+ *      les déclarations peuvent encore être déposées ou corrigées jusqu'à l'échéance, on ne juge pas avant ;
  *   3. celles qui n'ont pas de déclaration sont des « défauts de dépôt ».
  * Une alerte est créée par (contribuable, impôt, exercice) avec le score R4 (sur 5) :
  *   déclaration annuelle non déposée = 5 ; mois de TVA non déposés dans l'exercice : 1-4 → 2, 5-9 → 3, 10-12 → 4.
@@ -83,17 +84,9 @@ class DefaillanceDetector
             }
         }
 
-        // Dates limites connues : [impôt][année][mois] = date (la plus tardive indiquée)
-        $echeances = [];
-        $rows = Declaration::query()->whereIn('type_impot', $cfg['impots'])->whereNotNull('date_limite')
-            ->where('annee_fiscale', '>=', $anneeMin)
-            ->selectRaw('type_impot, annee_fiscale, mois, max(date_limite) as echeance')
-            ->groupBy('type_impot', 'annee_fiscale', 'mois')->get();
-        foreach ($rows as $r) {
-            $echeances[$r->type_impot][(int) $r->annee_fiscale][(int) $r->mois] = substr((string) $r->echeance, 0, 10);
-        }
-
-        $trouvees = self::detecter($assujs, $declares, $premieres, $echeances, $contribuables, $aujourdhui, $cfg);
+        // [AJOUT] Dates limites de paiement : prises dans le calendrier fiscal officiel DGI (CalendrierFiscal),
+        // construites dans detecter() pour les seules périodes obligées (avant : lues dans les déclarations).
+        $trouvees = self::detecter($assujs, $declares, $premieres, $contribuables, $aujourdhui, $cfg);
 
         // Couples (contribuable, impôt) examinés
         $paires = [];
@@ -177,7 +170,6 @@ class DefaillanceDetector
      *                                                         annee_fiscale, periodicite, date_debut, date_fin, actif, exonere)
      * @param array<int, array<string, array<int, array<int, bool>>>> $declares  [contribuable][impôt][année][mois] = true
      * @param array<int, array<string, int>> $premieres        [contribuable][impôt] = année × 100 + mois de la première déclaration
-     * @param array<string, array<int, array<int, string>>> $echeances  [impôt][année][mois] = date limite « AAAA-MM-JJ »
      * @param array<int, array{fin: string|null}> $contribuables  date de cessation ou de radiation (la plus ancienne)
      * @param array<string, mixed> $cfg
      * @return array<int, array<string, mixed>>
@@ -186,7 +178,6 @@ class DefaillanceDetector
         array $assujs,
         array $declares,
         array $premieres,
-        array $echeances,
         array $contribuables,
         string $aujourdhui,
         array $cfg
@@ -242,7 +233,13 @@ class DefaillanceDetector
 
                 $deposees = array_keys($declares[$cid][$impot][$annee] ?? []);
 
-                $trouvee = self::evaluer($cid, $impot, $annee, $periodicite, $obligees, $deposees, $echeances[$impot][$annee] ?? [], $aujourdhui, $cfg);
+                // [AJOUT] Dates limites de paiement officielles (calendrier DGI) des périodes obligées
+                $echeancesAnnee = [];
+                foreach ($obligees as $m) {
+                    $echeancesAnnee[$m] = CalendrierFiscal::dateLimite($impot, $annee, $m)?->format('Y-m-d');
+                }
+
+                $trouvee = self::evaluer($cid, $impot, $annee, $periodicite, $obligees, $deposees, $echeancesAnnee, $aujourdhui, $cfg);
 
                 if ($trouvee !== null) {
                     $trouvee['details']['origine_obligation'] = $origine;
@@ -297,7 +294,7 @@ class DefaillanceDetector
      *
      * @param array<int, int>    $obligees  mois à déclarer (0 = déclaration annuelle)
      * @param array<int, int>    $deposees  mois déclarés
-     * @param array<int, string> $echeancesAnnee  mois => date limite « AAAA-MM-JJ »
+     * @param array<int, string> $echeancesAnnee  mois => date limite de paiement officielle « AAAA-MM-JJ »
      * @param array<string, mixed> $cfg
      * @return array<string, mixed>|null
      */
@@ -312,10 +309,21 @@ class DefaillanceDetector
         string $aujourdhui,
         array $cfg
     ): ?array {
-        // Périodes dont la date limite est dépassée (strictement avant aujourd'hui) ; sans date limite connue : on ne peut pas conclure
+        // [MODIFIÉ] Périodes dont l'échéance de paiement + délai d'analyse (48 h, config « echeances »)
+        // est passée : on ne juge pas une période tant que dépositions et corrections sont encore possibles.
+        // Impôt absent du calendrier (pas de date limite) : impossible de conclure.
+        $delaiHeures = (int) config('anomalies.echeances.delai_analyse_heures', 48);
         $dues = array_values(array_filter(
             $obligees,
-            fn (int $m) => isset($echeancesAnnee[$m]) && $echeancesAnnee[$m] < $aujourdhui
+            function (int $m) use ($echeancesAnnee, $aujourdhui, $delaiHeures): bool {
+                if (! isset($echeancesAnnee[$m])) {
+                    return false;
+                }
+
+                $jugement = (new DateTimeImmutable($echeancesAnnee[$m]))->modify(sprintf('+%d hours', $delaiHeures));
+
+                return $jugement->format('Y-m-d') <= $aujourdhui;
+            }
         ));
 
         $manquantes = array_values(array_diff($dues, $deposees));

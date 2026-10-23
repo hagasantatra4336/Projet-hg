@@ -30,6 +30,27 @@ return [
         'score_eleve' => (int) env('ANOMALIES_DEFAILLANCE_SCORE_ELEVE', 5),
     ],
 
+    // Calendrier fiscal officiel DGI (« Échéances fiscales » du Calendrier 2026, impots.mg).
+    // Une période n'est JUGÉE qu'à partir de sa date limite de paiement + delai_analyse_heures (48 h) :
+    // les déclarations peuvent encore être déposées ou corrigées jusqu'à l'échéance, les juger avant
+    // fausserait l'analyse. C'est ce calendrier (et non les dates limites lues dans les déclarations)
+    // qui décide si une période peut être analysée.
+    'echeances' => [
+        // Délai d'attente après la date limite avant de juger une période (en heures)
+        'delai_analyse_heures' => (int) env('ANOMALIES_DELAI_ANALYSE_HEURES', 48),
+
+        // Date limite de paiement par impôt :
+        //  - mensuelle : jour « jour » du mois SUIVANT la période (TVA, IRSA : le 15)
+        //  - annuelle  : date fixe « date » de l'année SUIVANT l'exercice (mois 0)
+        // IS : 31 mars à confirmer par l'encadrant DGI (le calendrier officiel ne cite que les acomptes)
+        'impots' => [
+            'TVA' => ['periodicite' => 'mensuelle', 'jour' => 15],
+            'IRSA' => ['periodicite' => 'mensuelle', 'jour' => 15],
+            'IS' => ['periodicite' => 'annuelle', 'date' => '03-31'],
+            'IR' => ['periodicite' => 'annuelle', 'date' => '05-15'],
+        ],
+    ],
+
     // Baisse du chiffre d'affaires déclaré : TVA = même mois de l'année précédente ; IR / IS = année précédente
     'baisse_ca' => [
         // Impôts dont la déclaration comporte un chiffre d'affaires

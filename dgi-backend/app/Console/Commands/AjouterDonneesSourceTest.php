@@ -9,7 +9,7 @@ use Illuminate\Support\Facades\Schema;
 use Throwable;
 
 /**
- * AJOUTE des contribuables et déclarations simulés dans la base source de test, sans rien supprimer
+ * AJOUTE des contribuables et déclarations TVA simulés dans la base source de test, sans rien supprimer
  * (contrairement à dgi:source-test-db --reset). Chaque exécution crée de nouveaux NIF « NIF-AJT-00001 », « -00002 »…
  *
  *   php artisan dgi:source-test-data                         # 20 contribuables, 6 scénarios en rotation
@@ -17,7 +17,11 @@ use Throwable;
  *   php artisan dgi:source-test-data --contribuables=5 --manques=3 --serie=9   # cas précis : 9 mois déclarés puis 3 manqués
  *   php artisan dgi:source-test-data --centre="Centre Nord"  # tous dans ce centre
  *
- * La table doit exister (créée par php artisan dgi:source-test-db). Données fictives uniquement.
+ * [CORRECTION] La commande écrit désormais dans les vraies tables source (info_contribuable + declaration_tva),
+ * dont les noms et colonnes sont lus dans config/dgi.php (dgi.source.contribuables / dgi.source.declarations.TVA).
+ * Avant, elle lisait l'ancienne config à table unique (dgi.source.table), qui n'existe plus.
+ * Seule la TVA (mensuelle) est générée : pas d'IRSA dans la source actuelle.
+ * Données fictives uniquement.
  */
 class AjouterDonneesSourceTest extends Command
 {
@@ -25,16 +29,18 @@ class AjouterDonneesSourceTest extends Command
         {--contribuables=20 : Nombre de contribuables à ajouter (1 à 500)}
         {--manques= : Mois manqués jusqu\'au mois de référence, pour TOUS les ajoutés (0 à 24)}
         {--serie= : Mois déclarés avant l\'interruption, pour TOUS les ajoutés (1 à 36)}
-        {--centre= : Nom d\'un centre existant (défaut : répartition sur tous les centres)}
-        {--sans-irsa : Ne génère pas d\'IRSA (TVA seulement)}';
+        {--centre= : Nom d\'un centre existant (défaut : répartition sur tous les centres)}';
 
-    protected $description = 'Ajoute des déclarations simulées dans la base source de test (sans rien supprimer)';
+    protected $description = 'Ajoute des déclarations TVA simulées dans la base source de test (sans rien supprimer)';
 
     public function handle(): int
     {
         $connexion = (string) config('dgi.source.connection');
-        $table = (string) config('dgi.source.table');
-        $c = (array) config('dgi.source.colonnes');
+        $tableContrib = (string) config('dgi.source.contribuables.table');
+        $cc = (array) config('dgi.source.contribuables.colonnes');
+        $tableTva = (string) config('dgi.source.declarations.TVA.table');
+        $ct = (array) config('dgi.source.declarations.TVA.colonnes');
+        $ligneCa = (int) config('dgi.source.declarations.TVA.ligne_ca', 170);
 
         $nombre = (int) $this->option('contribuables');
         if ($nombre < 1 || $nombre > 500) {
@@ -74,21 +80,26 @@ class AjouterDonneesSourceTest extends Command
         }
 
         try {
-            if (! Schema::connection($connexion)->hasTable($table)) {
-                $this->error("La table « {$table} » n'existe pas : lancez d'abord  php artisan dgi:source-test-db");
+            foreach ([$tableContrib, $tableTva] as $table) {
+                if ($table === '' || ! Schema::connection($connexion)->hasTable($table)) {
+                    $this->error("La table « {$table} » n'existe pas dans la connexion « {$connexion} » : vérifiez config/dgi.php.");
 
-                return self::FAILURE;
+                    return self::FAILURE;
+                }
             }
 
             $cx = DB::connection($connexion);
-            $dernier = (string) $cx->table($table)->where($c['nif'], 'like', 'NIF-AJT-%')->max($c['nif']);
+            $dernier = (string) $cx->table($tableContrib)->where($cc['nif'], 'like', 'NIF-AJT-%')->max($cc['nif']);
             $debut = preg_match('/(\d+)$/', $dernier, $m) ? (int) $m[1] + 1 : 1;
 
-            $lignes = $this->generer($centres, $debut, $nombre, $manques, $serie, ! $this->option('sans-irsa'), $c);
+            [$contribuables, $declarations] = $this->generer($centres, $debut, $nombre, $manques, $serie, $cc, $ct, $ligneCa);
 
-            DB::connection($connexion)->transaction(function () use ($cx, $table, $lignes) {
-                foreach (array_chunk($lignes, 500) as $lot) {
-                    $cx->table($table)->insertOrIgnore($lot);
+            $cx->transaction(function () use ($cx, $tableContrib, $tableTva, $contribuables, $declarations) {
+                foreach (array_chunk($contribuables, 500) as $lot) {
+                    $cx->table($tableContrib)->insertOrIgnore($lot);
+                }
+                foreach (array_chunk($declarations, 500) as $lot) {
+                    $cx->table($tableTva)->insertOrIgnore($lot);
                 }
             });
         } catch (Throwable $e) {
@@ -97,8 +108,8 @@ class AjouterDonneesSourceTest extends Command
             return self::FAILURE;
         }
 
-        $this->info(sprintf('%d contribuable(s) ajouté(s) (%s à %s), %d ligne(s) de déclaration.',
-            $nombre, sprintf('NIF-AJT-%05d', $debut), sprintf('NIF-AJT-%05d', $debut + $nombre - 1), count($lignes)));
+        $this->info(sprintf('%d contribuable(s) ajouté(s) (%s à %s), %d ligne(s) de déclaration TVA.',
+            $nombre, sprintf('NIF-AJT-%05d', $debut), sprintf('NIF-AJT-%05d', $debut + $nombre - 1), count($declarations)));
         $this->line('Pour les analyser :  php artisan dgi:importer-source --analyser');
 
         return self::SUCCESS;
@@ -118,45 +129,48 @@ class AjouterDonneesSourceTest extends Command
 
     /**
      * @param array<int, string> $centres
-     * @param array<string, string> $c  mapping des colonnes
+     * @param array<string, string|null> $cc  colonnes de info_contribuable
+     * @param array<string, string|null> $ct  colonnes de la table TVA
      *
-     * @return array<int, array<string, mixed>>
+     * @return array{0: array<int, array<string, mixed>>, 1: array<int, array<string, mixed>>}
      */
-    private function generer(array $centres, int $debut, int $nombre, ?int $manquesFixes, ?int $serieFixe, bool $irsa, array $c): array
+    private function generer(array $centres, int $debut, int $nombre, ?int $manquesFixes, ?int $serieFixe, array $cc, array $ct, int $ligneCa): array
     {
         $ref = now()->startOfMonth()->subMonthNoOverflow(); // dernier mois attendu
         // [mois manqués, mois déclarés avant] : régulier | 1/8 | 2/7 | 4/10 | 3/3 (pas « habituel ») | 1/12 (très régulier)
         $scenarios = [[0, 12], [1, 8], [2, 7], [4, 10], [3, 3], [1, 12]];
-        $lignes = [];
-
-        $ligne = fn (string $nif, string $nom, string $centre, string $impot, string $periode, $montant, ?string $depot) => [
-            $c['nif'] => $nif, $c['nom'] => $nom, $c['centre'] => $centre, $c['type_impot'] => $impot,
-            $c['periode'] => $periode, $c['montant'] => $montant, $c['date_depot'] => $depot,
-        ];
+        $contribuables = [];
+        $declarations = [];
 
         for ($j = 0; $j < $nombre; $j++) {
             $numero = $debut + $j;
             $nif = sprintf('NIF-AJT-%05d', $numero);
-            $nom = sprintf('Contribuable ajouté anonyme %05d', $numero);
-            $centre = $centres[$j % count($centres)];
             [$manques, $serie] = $manquesFixes !== null ? [$manquesFixes, $serieFixe] : $scenarios[$j % 6];
             $base = random_int(2_000_000, 40_000_000);
 
+            $contribuables[] = [
+                $cc['nif'] => $nif,
+                $cc['nom'] => sprintf('Contribuable ajouté anonyme %05d', $numero),
+                $cc['centre'] => $centres[$j % count($centres)],
+                $cc['etat'] => 1,
+            ];
+
             for ($k = $manques; $k < $manques + $serie; $k++) {
                 $mois = $ref->copy()->subMonthsNoOverflow($k);
-                $lignes[] = $ligne($nif, $nom, $centre, 'TVA', $mois->format('Y-m'), round($base * random_int(85, 115) / 100, 2),
-                    $mois->copy()->addMonthNoOverflow()->day(random_int(5, 15))->toDateString());
-            }
+                $suivant = $mois->copy()->addMonthNoOverflow();
 
-            if ($irsa && $j % 3 === 2) {
-                for ($k = 0; $k < 12; $k++) {
-                    $mois = $ref->copy()->subMonthsNoOverflow($k);
-                    $lignes[] = $ligne($nif, $nom, $centre, 'IRSA', $mois->format('Y-m'), round(($base / 4) * random_int(85, 115) / 100, 2),
-                        $mois->copy()->addMonthNoOverflow()->day(random_int(5, 15))->toDateString());
-                }
+                $declarations[] = [
+                    $ct['nif'] => $nif,
+                    $ct['annee'] => $mois->year,
+                    $ct['mois'] => $mois->month,
+                    $ct['ligne'] => $ligneCa,
+                    $ct['montant'] => round($base * random_int(85, 115) / 100, 2),
+                    $ct['date_limite'] => $suivant->copy()->day(15)->toDateString(),
+                    $ct['date_depot'] => $suivant->copy()->day(random_int(5, 15))->toDateString(),
+                ];
             }
         }
 
-        return $lignes;
+        return [$contribuables, $declarations];
     }
 }

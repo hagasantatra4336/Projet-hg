@@ -60,6 +60,12 @@ class BaisseCaDetector
 
         $lignes = [];
         foreach ($query->cursor() as $row) {
+            // [AJOUT] Période non échue (échéance de paiement + 48 h non atteinte) : le CA peut encore
+            // être corrigé jusqu'à l'échéance, on ne la juge pas (calendrier CalendrierFiscal).
+            if (! CalendrierFiscal::analysable($row->type_impot, (int) $row->annee_fiscale, (int) $row->mois, $date)) {
+                continue;
+            }
+
             $lignes[] = [
                 'contribuable_id' => (int) $row->contribuable_id,
                 'type_impot' => $row->type_impot,
