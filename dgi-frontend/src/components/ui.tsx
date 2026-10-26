@@ -4,20 +4,20 @@ import { ROLE_LABELS } from "../types";
 import { IconEdit, IconTrash } from "./icons";
 
 export const inputClass =
-  "w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-slate-900 placeholder-slate-400 " +
+  "w-full rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-slate-900 placeholder-slate-400 " +
   "focus:outline-none focus:border-brand-blue focus:ring-1 focus:ring-brand-blue transition " +
   "disabled:bg-slate-100 disabled:text-slate-500";
 
 export const primaryButtonClass =
-  "rounded-lg bg-brand-blue text-white font-medium px-4 py-2 " +
+  "rounded-lg bg-brand-blue text-white font-medium px-3 py-1.5 " +
   "hover:bg-brand-blue-light disabled:opacity-50 disabled:cursor-not-allowed transition";
 
 export const secondaryButtonClass =
-  "rounded-lg border border-slate-300 bg-white text-slate-700 font-medium px-4 py-2 " +
+  "rounded-lg border border-slate-300 bg-white text-slate-700 font-medium px-3 py-1.5 " +
   "hover:bg-slate-50 disabled:opacity-50 transition";
 
 export const dangerButtonClass =
-  "rounded-lg bg-red-600 text-white font-medium px-4 py-2 hover:bg-red-700 disabled:opacity-50 transition";
+  "rounded-lg bg-red-600 text-white font-medium px-3 py-1.5 hover:bg-red-700 disabled:opacity-50 transition";
 
 /** Champ mot de passe avec bouton « afficher / masquer ». Accepte les mêmes props qu'un <input>. */
 export function PasswordInput({
@@ -116,8 +116,8 @@ export function Modal({
         if (e.target === e.currentTarget) onClose();
       }}
     >
-      <div className="w-full max-w-lg max-h-[90vh] overflow-y-auto bg-white rounded-xl border border-line shadow-xl p-6">
-        <div className="flex items-center justify-between mb-5 border-b border-line pb-3">
+      <div className="w-full max-w-lg max-h-[90vh] overflow-y-auto bg-white rounded-xl border border-line shadow-xl p-5">
+        <div className="flex items-center justify-between mb-4 border-b border-line pb-2.5">
           <h2 className="text-lg font-semibold text-brand-blue">{title}</h2>
           <button
             type="button"
@@ -168,9 +168,9 @@ export function EditButton({ onClick, label = "Modifier" }: { onClick: () => voi
       onClick={onClick}
       title={label}
       aria-label={label}
-      className="inline-flex h-9 w-9 items-center justify-center rounded-lg text-brand-blue transition hover:bg-slate-100 focus:outline-none focus:ring-2 focus:ring-brand-blue"
+      className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-brand-blue transition hover:bg-slate-100 focus:outline-none focus:ring-2 focus:ring-brand-blue"
     >
-      <IconEdit className="h-[18px] w-[18px]" />
+      <IconEdit className="h-4 w-4" />
     </button>
   );
 }
@@ -183,9 +183,9 @@ export function DeleteButton({ onClick, label = "Supprimer" }: { onClick: () => 
       onClick={onClick}
       title={label}
       aria-label={label}
-      className="inline-flex h-9 w-9 items-center justify-center rounded-lg text-red-600 transition hover:bg-red-50 focus:outline-none focus:ring-2 focus:ring-red-300"
+      className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-red-600 transition hover:bg-red-50 focus:outline-none focus:ring-2 focus:ring-red-300"
     >
-      <IconTrash className="h-[18px] w-[18px]" />
+      <IconTrash className="h-4 w-4" />
     </button>
   );
 }

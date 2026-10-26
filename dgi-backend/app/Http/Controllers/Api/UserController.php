@@ -30,7 +30,9 @@ class UserController extends Controller
         $query = User::with(['centre', 'fonction'])->orderBy('nom');
 
         if ($me->role === Role::Admin) {
-            $query->where('centre_id', $this->ownCentreId($me));
+            // Le chef de centre ne voit que les agents de son centre (il ne gère que ce niveau).
+            $query->where('centre_id', $this->ownCentreId($me))
+                ->whereHas('fonction', fn ($q) => $q->where('role', Role::Agent->value));
         } elseif ($request->filled('centre_id')) {
             $query->where('centre_id', (int) $request->input('centre_id'));
         }

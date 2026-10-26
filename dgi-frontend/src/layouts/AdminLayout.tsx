@@ -3,6 +3,7 @@ import { Outlet, useLocation } from "react-router-dom";
 // La navigation entre les 3 pages est dans la sidebar (AppLayout) : ici on affiche seulement le titre de la page.
 const TITLES: Record<string, string> = {
   "/admin/utilisateurs": "Utilisateurs",
+  "/admin/demandes": "Demandes d'inscription",
   "/admin/centres": "Centres",
   "/admin/fonctions": "Fonctions & rôles",
   "/admin/regles": "Règles de détection",

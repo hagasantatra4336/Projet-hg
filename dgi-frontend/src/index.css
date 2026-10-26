@@ -3,6 +3,11 @@
 @tailwind utilities;
 
 @layer base {
+  html {
+    /* Base compacte mais lisible : toutes les tailles rem de Tailwind suivent cette valeur. */
+    font-size: 15px;
+  }
+
   html,
   body,
   #root {

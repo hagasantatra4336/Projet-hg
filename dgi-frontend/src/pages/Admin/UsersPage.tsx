@@ -236,25 +236,25 @@ export default function UsersPage() {
         <table className="w-full text-sm">
           <thead className="border-b border-line bg-slate-50 text-left text-slate-600">
             <tr>
-              <th className="px-4 py-3 font-semibold">Nom</th>
-              <th className="px-4 py-3 font-semibold">IM</th>
-              <th className="px-4 py-3 font-semibold">Téléphone</th>
-              <th className="px-4 py-3 font-semibold">Centre</th>
-              <th className="px-4 py-3 font-semibold">Fonction</th>
-              <th className="px-4 py-3" />
+              <th className="px-3 py-2 font-semibold">Nom</th>
+              <th className="px-3 py-2 font-semibold">IM</th>
+              <th className="px-3 py-2 font-semibold">Téléphone</th>
+              <th className="px-3 py-2 font-semibold">Centre</th>
+              <th className="px-3 py-2 font-semibold">Fonction</th>
+              <th className="sticky right-0 z-10 w-[92px] border-l border-line bg-slate-50 px-3 py-2" />
             </tr>
           </thead>
           <tbody className="divide-y divide-line">
             {loading && (
               <tr>
-                <td colSpan={6} className="px-4 py-6 text-center text-slate-500">
+                <td colSpan={6} className="px-3 py-4 text-center text-slate-500">
                   Chargement...
                 </td>
               </tr>
             )}
             {!loading && users.length === 0 && (
               <tr>
-                <td colSpan={6} className="px-4 py-6 text-center text-slate-500">
+                <td colSpan={6} className="px-3 py-4 text-center text-slate-500">
                   Aucun utilisateur.
                 </td>
               </tr>
@@ -262,18 +262,18 @@ export default function UsersPage() {
             {!loading &&
               users.map((u) => (
                 <tr key={u.id}>
-                  <td className="px-4 py-3">
+                  <td className="px-3 py-2">
                     <div className="font-medium text-brand-blue">{u.nom}</div>
                     <div className="text-xs text-slate-500">{u.email}</div>
                   </td>
-                  <td className="px-4 py-3 text-slate-600">{u.im ?? "—"}</td>
-                  <td className="px-4 py-3 text-slate-600">{u.telephone ?? "—"}</td>
-                  <td className="px-4 py-3 text-slate-600">{u.centre?.nom ?? "—"}</td>
-                  <td className="px-4 py-3">
+                  <td className="px-3 py-2 text-slate-600">{u.im ?? "—"}</td>
+                  <td className="px-3 py-2 text-slate-600">{u.telephone ?? "—"}</td>
+                  <td className="px-3 py-2 text-slate-600">{u.centre?.nom ?? "—"}</td>
+                  <td className="px-3 py-2">
                     <div className="text-slate-700 mb-1">{u.fonction?.nom ?? "—"}</div>
                     <RoleBadge role={u.role} />
                   </td>
-                  <td className="px-4 py-3 text-right whitespace-nowrap">
+                  <td className="sticky right-0 z-[1] border-l border-line bg-white px-3 py-2 text-right whitespace-nowrap">
                     {canManage(me, u) && (
                       <>
                         <EditButton onClick={() => openEdit(u)} />

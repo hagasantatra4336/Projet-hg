@@ -120,35 +120,35 @@ export default function FonctionsPage() {
         <table className="w-full text-sm">
           <thead className="border-b border-line bg-slate-50 text-left text-slate-600">
             <tr>
-              <th className="px-4 py-3 font-semibold">Fonction</th>
-              <th className="px-4 py-3 font-semibold">Rôle</th>
-              <th className="px-4 py-3 font-semibold">Utilisateurs</th>
-              <th className="px-4 py-3" />
+              <th className="px-3 py-2 font-semibold">Fonction</th>
+              <th className="px-3 py-2 font-semibold">Rôle</th>
+              <th className="px-3 py-2 font-semibold">Utilisateurs</th>
+              <th className="sticky right-0 z-10 w-[92px] border-l border-line bg-slate-50 px-3 py-2" />
             </tr>
           </thead>
           <tbody className="divide-y divide-line">
             {loading && (
               <tr>
-                <td colSpan={4} className="px-4 py-6 text-center text-slate-500">
+                <td colSpan={4} className="px-3 py-4 text-center text-slate-500">
                   Chargement...
                 </td>
               </tr>
             )}
             {!loading && fonctions.length === 0 && (
               <tr>
-                <td colSpan={4} className="px-4 py-6 text-center text-slate-500">
+                <td colSpan={4} className="px-3 py-4 text-center text-slate-500">
                   Aucune fonction.
                 </td>
               </tr>
             )}
             {fonctions.map((f) => (
               <tr key={f.id}>
-                <td className="px-4 py-3 font-medium text-brand-blue">{f.nom}</td>
-                <td className="px-4 py-3">
+                <td className="px-3 py-2 font-medium text-brand-blue">{f.nom}</td>
+                <td className="px-3 py-2">
                   <RoleBadge role={f.role} />
                 </td>
-                <td className="px-4 py-3 text-slate-600">{f.users_count ?? 0}</td>
-                <td className="px-4 py-3 text-right whitespace-nowrap">
+                <td className="px-3 py-2 text-slate-600">{f.users_count ?? 0}</td>
+                <td className="sticky right-0 z-[1] border-l border-line bg-white px-3 py-2 text-right whitespace-nowrap">
                   <EditButton onClick={() => openEdit(f)} />
                   <DeleteButton onClick={() => setToDelete(f)} />
                 </td>

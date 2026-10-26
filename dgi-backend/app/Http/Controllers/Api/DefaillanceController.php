@@ -44,32 +44,16 @@ class DefaillanceController extends Controller
             'search' => ['nullable', 'string', 'max:100'],
             'sort' => ['nullable', Rule::in(['niveau', 'type_impot', 'annee_fiscale', 'traite_le'])],
             'dir' => ['nullable', Rule::in(['asc', 'desc'])],
+            'grouper' => ['nullable', 'boolean'],
         ]);
 
+        // Vue groupée (une ligne par contribuable) : demandée par la page Anomalies et la page Traitements.
+        if ($request->boolean('grouper')) {
+            return $this->indexGroupes($request, $data);
+        }
+
         $query = $this->scopedQuery($request)->with(['contribuable.centre', 'traitePar']);
-
-        foreach (['regle', 'niveau', 'type_impot', 'annee_fiscale'] as $champ) {
-            if (! empty($data[$champ])) {
-                $query->where('alertes.' . $champ, $data[$champ]);
-            }
-        }
-
-        // « À traiter » = dossiers LIBRES ; « En traitement » = dossiers pris par un agent
-        if (($data['statut'] ?? '') === Alerte::A_TRAITER) {
-            VerrouAlerte::libres($query);
-        } elseif (($data['statut'] ?? '') === 'en_traitement') {
-            VerrouAlerte::verrouillees($query);
-        } elseif (! empty($data['statut'])) {
-            $query->where('alertes.statut', $data['statut']);
-        }
-
-        if (! empty($data['search'])) {
-            $term = '%' . trim($data['search']) . '%';
-            $query->whereHas('contribuable', function ($q) use ($term) {
-                // ILIKE : insensible à la casse (PostgreSQL)
-                $q->where('nom', 'ilike', $term)->orWhere('nif', 'ilike', $term);
-            });
-        }
+        $this->appliquerFiltres($query, $data);
 
         // Tri par défaut : les plus risquées d'abord, puis les plus récentes.
         $dir = ($data['dir'] ?? 'desc') === 'asc' ? 'asc' : 'desc';
@@ -87,6 +71,152 @@ class DefaillanceController extends Controller
         $noms = $this->nomsPreneurs($page->getCollection());
 
         return response()->json($page->through(fn (Alerte $a) => $this->present($a, $noms, $request->user())));
+    }
+
+    /**
+     * Vue groupée : un « dossier contribuable » par ligne, contenant toutes ses anomalies visibles.
+     * Les filtres portent sur les alertes : un contribuable n'apparaît que s'il a au moins une alerte correspondante,
+     * et la ligne ne détaille que ces alertes.
+     *
+     * @param array<string, mixed> $data
+     */
+    private function indexGroupes(Request $request, array $data): JsonResponse
+    {
+        $base = $this->scopedQuery($request);
+        $this->appliquerFiltres($base, $data);
+
+        $dir = ($data['dir'] ?? 'desc') === 'asc' ? 'asc' : 'desc';
+        $sort = $data['sort'] ?? 'niveau';
+
+        $groupes = (clone $base)
+            ->selectRaw("alertes.contribuable_id, "
+                . "MAX(CASE alertes.niveau WHEN 'eleve' THEN 3 WHEN 'moyen' THEN 2 ELSE 1 END) as rang, "
+                . 'MAX(alertes.annee_fiscale) as annee_max, MAX(alertes.traite_le) as traite_max, MAX(alertes.type_impot) as impot_max')
+            ->groupBy('alertes.contribuable_id');
+
+        match ($sort) {
+            'annee_fiscale' => $groupes->orderBy('annee_max', $dir),
+            'traite_le' => $groupes->orderBy('traite_max', $dir),
+            'type_impot' => $groupes->orderBy('impot_max', $dir),
+            default => $groupes->orderBy('rang', $dir)->orderBy('annee_max', 'desc'),
+        };
+        $groupes->orderBy('alertes.contribuable_id');
+
+        $page = $groupes->paginate(10);
+        $ids = array_map(fn ($id) => (int) $id, array_column($page->items(), 'contribuable_id'));
+
+        $alertes = $ids === [] ? collect() : (clone $base)
+            ->whereIn('alertes.contribuable_id', $ids)
+            ->with(['contribuable.centre', 'traitePar'])
+            ->orderByRaw("CASE alertes.niveau WHEN 'eleve' THEN 3 WHEN 'moyen' THEN 2 ELSE 1 END DESC")
+            ->orderByDesc('alertes.annee_fiscale')
+            ->orderByDesc('alertes.id')
+            ->get()
+            ->groupBy(fn (Alerte $a) => (int) $a->contribuable_id);
+
+        $noms = $this->nomsPreneurs($alertes->flatten());
+
+        return response()->json($page->through(
+            fn ($row) => $this->presentGroupe($alertes->get((int) $row->contribuable_id, collect()), $noms, $request->user())
+        ));
+    }
+
+    /** Filtres communs aux vues simple et groupée. @param array<string, mixed> $data */
+    private function appliquerFiltres(Builder $query, array $data): void
+    {
+        foreach (['regle', 'niveau', 'type_impot', 'annee_fiscale'] as $champ) {
+            if (! empty($data[$champ])) {
+                $query->where('alertes.' . $champ, $data[$champ]);
+            }
+        }
+
+        // « À traiter » = dossiers LIBRES ; « En traitement » = dossiers pris par un agent
+        if (($data['statut'] ?? '') === Alerte::A_TRAITER) {
+            VerrouAlerte::libres($query);
+        } elseif (($data['statut'] ?? '') === 'en_traitement') {
+            VerrouAlerte::verrouillees($query);
+        } elseif (! empty($data['statut'])) {
+            $query->where('alertes.statut', $data['statut']);
+        }
+
+        if (! empty($data['search'])) {
+            $term = '%' . mb_strtolower(trim($data['search'])) . '%';
+            $query->whereHas('contribuable', function ($q) use ($term) {
+                // LOWER + LIKE : insensible à la casse, quel que soit le SGBD (Oracle, PostgreSQL, SQLite)
+                $q->where(fn ($x) => $x->whereRaw('LOWER(nom) LIKE ?', [$term])->orWhereRaw('LOWER(nif) LIKE ?', [$term]));
+            });
+        }
+    }
+
+    /** Toutes les alertes visibles d'un contribuable (même périmètre que les listes). */
+    private function requeteGroupe(Request $request, Alerte $alerte): Builder
+    {
+        return $this->scopedQuery($request)->where('alertes.contribuable_id', $alerte->contribuable_id);
+    }
+
+    /**
+     * Présentation d'un dossier contribuable : ses alertes et l'état agrégé (niveau maximal, statut, verrou).
+     *
+     * @param \Illuminate\Support\Collection<int, Alerte> $alertes
+     * @param array<int, string> $noms
+     * @return array<string, mixed>|null
+     */
+    private function presentGroupe($alertes, array $noms, ?User $me): ?array
+    {
+        if ($alertes->isEmpty()) {
+            return null;
+        }
+
+        $presentes = $alertes->map(fn (Alerte $a) => $this->present($a, $noms, $me))->values();
+        $rang = ['faible' => 1, 'moyen' => 2, 'eleve' => 3];
+        $niveau = $presentes->sortByDesc(fn ($p) => $rang[$p['niveau']] ?? 0)->first()['niveau'];
+        $statuts = $presentes->pluck('statut')->unique()->values();
+
+        $statut = $statuts->contains('en_traitement')
+            ? 'en_traitement'
+            : ($statuts->every(fn ($s) => in_array($s, [Alerte::TRAITEE, Alerte::REGULARISEE], true))
+                ? ($statuts->contains(Alerte::TRAITEE) ? Alerte::TRAITEE : Alerte::REGULARISEE)
+                : Alerte::A_TRAITER);
+
+        $verrouillees = $presentes->filter(fn ($p) => $p['statut'] === 'en_traitement');
+        $pris = $verrouillees->first();
+        $traitees = $presentes->filter(fn ($p) => $p['traite_le'] !== null)->sortByDesc('traite_le');
+
+        // Dossier à ouvrir : une anomalie libre de préférence, sinon la plus risquée
+        $representant = $presentes->first(fn ($p) => $p['statut'] === Alerte::A_TRAITER && empty($p['pris_par']))
+            ?? $presentes->first(fn ($p) => $p['statut'] === Alerte::A_TRAITER)
+            ?? $presentes->first();
+
+        return [
+            'contribuable' => $presentes->first()['contribuable'],
+            'alertes' => $presentes->all(),
+            'representant_id' => $representant['id'],
+            'niveau' => $niveau,
+            'statut' => $statut,
+            'pris_par' => $pris['pris_par'] ?? null,
+            'pris_le' => $pris['pris_le'] ?? null,
+            'pris_par_moi' => $verrouillees->isNotEmpty() && $verrouillees->every(fn ($p) => $p['pris_par_moi']),
+            'traite_par' => $traitees->first()['traite_par'] ?? null,
+            'traite_le' => $traitees->first()['traite_le'] ?? null,
+            'commentaire' => $presentes->first(fn ($p) => ! empty($p['commentaire']))['commentaire'] ?? null,
+            'nb_alertes' => $presentes->count(),
+            'regles' => $presentes->pluck('regle')->unique()->values()->all(),
+            'types_impot' => $presentes->pluck('type_impot')->unique()->values()->all(),
+            'annees' => $presentes->pluck('annee_fiscale')->unique()->sort()->values()->all(),
+        ];
+    }
+
+    /** Le dossier contribuable complet, pour les actions et la page de traitement. @return array<string, mixed> */
+    private function presentGroupeComplet(Request $request, Alerte $alerte): array
+    {
+        $alertes = $this->requeteGroupe($request, $alerte)
+            ->with(['contribuable.centre', 'traitePar'])
+            ->orderByRaw("CASE alertes.niveau WHEN 'eleve' THEN 3 WHEN 'moyen' THEN 2 ELSE 1 END DESC")
+            ->orderByDesc('alertes.annee_fiscale')
+            ->orderByDesc('alertes.id')
+            ->get();
+
+        return $this->presentGroupe($alertes, $this->nomsPreneurs($alertes), $request->user()) ?? [];
     }
 
     /** Compteurs pour les cartes du haut de page (alertes à traiter par niveau + totaux). */
@@ -116,12 +246,18 @@ class DefaillanceController extends Controller
         $summary['en_traitement'] = 0;
         $pris = $this->scopedQuery($request);
         VerrouAlerte::verrouillees($pris);
-        foreach ($pris->selectRaw('alertes.niveau, count(*) as total')->groupBy('alertes.niveau')->get() as $r) {
+        foreach ((clone $pris)->selectRaw('alertes.niveau, count(*) as total')->groupBy('alertes.niveau')->get() as $r) {
             $n = (int) $r->total;
             $summary['a_traiter'] -= $n;
             $summary[$r->niveau] -= $n;
             $summary['en_traitement'] += $n;
         }
+
+        // Une ligne par contribuable dans les listes groupées : compteurs de dossiers pour la page Traitements
+        $summary['dossiers_en_traitement'] = (clone $pris)->distinct()->count('alertes.contribuable_id');
+        $summary['dossiers_traites'] = $this->scopedQuery($request)
+            ->where('alertes.statut', Alerte::TRAITEE)
+            ->distinct()->count('alertes.contribuable_id');
 
         return response()->json($summary + [
             'derniere_analyse' => Cache::get(AnomalieAnalyseur::CACHE_DERNIERE_ANALYSE),
@@ -137,7 +273,12 @@ class DefaillanceController extends Controller
         $data = $request->validate([
             'statut' => ['sometimes', Rule::in([Alerte::A_TRAITER, Alerte::TRAITEE])],
             'commentaire' => ['nullable', 'string', 'max:2000'],
+            'groupe' => ['sometimes', 'boolean'],
         ]);
+
+        if ($request->boolean('groupe')) {
+            return $this->updateGroupe($request, $alerte, $data, $me);
+        }
 
         // Dossier pris par un autre utilisateur : modification refusée (sauf admin, central, superadmin)
         if (VerrouAlerte::verrouille($alerte) && (int) $alerte->getAttribute('pris_par') !== $me->id && ! $this->peutReprendre($me)) {
@@ -173,6 +314,59 @@ class DefaillanceController extends Controller
     }
 
     /**
+     * Mise à jour du dossier contribuable : le statut et le commentaire s'appliquent à toutes ses anomalies
+     * non régularisées. Un dossier pris par un autre agent est refusé, sauf pour un admin/central/superadmin.
+     *
+     * @param array<string, mixed> $data
+     */
+    private function updateGroupe(Request $request, Alerte $alerte, array $data, User $me): JsonResponse
+    {
+        $alertes = $this->requeteGroupe($request, $alerte)->get();
+
+        foreach ($alertes as $a) {
+            if (VerrouAlerte::verrouille($a) && (int) $a->getAttribute('pris_par') !== $me->id && ! $this->peutReprendre($me)) {
+                return response()->json(['message' => 'Ce dossier est en cours de traitement par ' . $this->nomPreneur($a) . '.'], 423);
+            }
+        }
+
+        $modifiables = $alertes->reject(fn (Alerte $a) => $a->statut === Alerte::REGULARISEE);
+
+        if (array_key_exists('statut', $data) && $modifiables->isEmpty()) {
+            return response()->json([
+                'message' => "Cette alerte est régularisée (l'anomalie n'est plus constatée) : son statut ne peut pas être modifié.",
+            ], 422);
+        }
+
+        $changerCommentaire = array_key_exists('commentaire', $data);
+        $commentaire = $changerCommentaire && trim((string) $data['commentaire']) !== '' ? trim((string) $data['commentaire']) : null;
+
+        foreach ($modifiables as $a) {
+            if ($changerCommentaire) {
+                $a->commentaire = $commentaire;
+            }
+
+            if (array_key_exists('statut', $data) && $data['statut'] !== $a->statut) {
+                $a->statut = $data['statut'];
+                $a->traite_par = $data['statut'] === Alerte::TRAITEE ? $me->id : null;
+                $a->traite_le = $data['statut'] === Alerte::TRAITEE ? now() : null;
+            }
+
+            // Le verrou suit le traitement : prolongé pendant le travail, levé quand le dossier est clos ou rouvert
+            if ($a->statut !== Alerte::A_TRAITER || array_key_exists('statut', $data)) {
+                $a->forceFill(['pris_par' => null, 'pris_le' => null]);
+            } elseif ((int) $a->getAttribute('pris_par') === $me->id) {
+                $a->forceFill(['pris_le' => now()]);
+            }
+
+            $a->save();
+        }
+
+        $alerte = $alerte->fresh(['contribuable.centre', 'traitePar']);
+
+        return response()->json($this->present($alerte, [], $me) + ['groupe' => $this->presentGroupeComplet($request, $alerte)]);
+    }
+
+    /**
      * « Traiter » : PREND le dossier. L'opération est atomique (deux agents cliquant en même temps : un seul gagne).
      * Dossier déjà pris par un autre : 409, sauf si un admin, central ou superadmin envoie « forcer » (reprise).
      */
@@ -182,6 +376,10 @@ class DefaillanceController extends Controller
         $this->assertAccess($me, $alerte);
 
         $forcer = $request->boolean('forcer') && $this->peutReprendre($me);
+
+        if ($request->boolean('groupe')) {
+            return $this->prendreGroupe($request, $alerte, $me, $forcer);
+        }
 
         $n = Alerte::query()->whereKey($alerte->id)->where('statut', Alerte::A_TRAITER)
             ->where(function ($q) use ($me, $forcer) {
@@ -207,11 +405,65 @@ class DefaillanceController extends Controller
         return response()->json($this->present($alerte, [], $me));
     }
 
+    /** Prend toutes les anomalies encore « à traiter » du contribuable : le dossier devient « En traitement ». */
+    private function prendreGroupe(Request $request, Alerte $alerte, User $me, bool $forcer): JsonResponse
+    {
+        $alertes = $this->requeteGroupe($request, $alerte)->get();
+        $aTraiter = $alertes->filter(fn (Alerte $a) => $a->statut === Alerte::A_TRAITER);
+
+        if ($aTraiter->isEmpty()) {
+            $alerte = $alerte->fresh(['contribuable.centre', 'traitePar']);
+
+            return response()->json([
+                'message' => "Ce dossier ne contient plus d'anomalie à traiter.",
+                'alerte' => $this->present($alerte, [], $me),
+                'groupe' => $this->presentGroupeComplet($request, $alerte),
+            ], 422);
+        }
+
+        if (! $forcer) {
+            $bloquee = $aTraiter->first(
+                fn (Alerte $a) => VerrouAlerte::verrouille($a) && (int) $a->getAttribute('pris_par') !== $me->id
+            );
+
+            if ($bloquee !== null) {
+                $alerte = $alerte->fresh(['contribuable.centre', 'traitePar']);
+
+                return response()->json([
+                    'message' => 'Ce dossier est en cours de traitement par ' . $this->nomPreneur($bloquee) . '.',
+                    'alerte' => $this->present($alerte, [], $me),
+                    'groupe' => $this->presentGroupeComplet($request, $alerte),
+                ], 409);
+            }
+        }
+
+        Alerte::query()->whereKey($aTraiter->pluck('id')->all())->update(['pris_par' => $me->id, 'pris_le' => now()]);
+
+        $alerte = $alerte->fresh(['contribuable.centre', 'traitePar']);
+
+        return response()->json($this->present($alerte, [], $me) + ['groupe' => $this->presentGroupeComplet($request, $alerte)]);
+    }
+
     /** Libère un dossier pris (par son propriétaire, ou un admin, central, superadmin) : il redevient « À traiter » pour tous. */
     public function liberer(Request $request, Alerte $alerte): JsonResponse
     {
         $me = $request->user();
         $this->assertAccess($me, $alerte);
+
+        if ($request->boolean('groupe')) {
+            $alertes = $this->requeteGroupe($request, $alerte)->get();
+
+            foreach ($alertes as $a) {
+                if (VerrouAlerte::verrouille($a) && (int) $a->getAttribute('pris_par') !== $me->id && ! $this->peutReprendre($me)) {
+                    return response()->json(['message' => 'Ce dossier est en cours de traitement par ' . $this->nomPreneur($a) . '.'], 423);
+                }
+            }
+
+            Alerte::query()->whereKey($alertes->pluck('id')->all())->update(['pris_par' => null, 'pris_le' => null]);
+            $alerte = $alerte->fresh(['contribuable.centre', 'traitePar']);
+
+            return response()->json($this->present($alerte, [], $me) + ['groupe' => $this->presentGroupeComplet($request, $alerte)]);
+        }
 
         if (VerrouAlerte::verrouille($alerte) && (int) $alerte->getAttribute('pris_par') !== $me->id && ! $this->peutReprendre($me)) {
             return response()->json(['message' => 'Ce dossier est en cours de traitement par ' . $this->nomPreneur($alerte) . '.'], 423);
@@ -256,10 +508,21 @@ class DefaillanceController extends Controller
             $formule = FormulesRegles::pour($alerte->regle, ReglesDetection::parametres($alerte->regle));
         }
 
+        // Dossier contribuable : toutes ses anomalies visibles et la formule de chacune.
+        $groupe = $this->presentGroupeComplet($request, $alerte);
+        $formules = [];
+        foreach ($groupe['regles'] ?? [] as $code) {
+            if (in_array($code, ReglesDetection::CODES, true)) {
+                $formules[$code] = FormulesRegles::pour($code, ReglesDetection::parametres($code));
+            }
+        }
+
         return response()->json([
             'alerte' => $this->present($alerte, [], $me),
             'indicateurs' => $indicateurs,
             'formule' => $formule,
+            'formules' => $formules,
+            'groupe' => $groupe,
             'verrou_minutes' => VerrouAlerte::DUREE_MINUTES,
         ]);
     }

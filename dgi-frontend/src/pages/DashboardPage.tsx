@@ -67,14 +67,14 @@ function StatsCard({ stats }: { stats: Stat[] }) {
         <div
           key={s.label}
           style={{ animationDelay: `${i * 80}ms` }}
-          className="dash-rise group relative flex items-center gap-3 overflow-hidden rounded-xl border border-line bg-white p-4 transition duration-300 hover:-translate-y-1 hover:shadow-lg"
+          className="dash-rise group relative flex items-center gap-3 overflow-hidden rounded-xl border border-line bg-white p-3 transition duration-300 hover:-translate-y-1 hover:shadow-lg"
         >
-          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-brand-blue text-white transition duration-300 group-hover:scale-110 group-hover:rotate-3">
+          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-brand-blue text-white transition duration-300 group-hover:scale-110 group-hover:rotate-3">
             {s.icon}
           </span>
           <div className="min-w-0">
             <p className="text-xs text-slate-500">{s.label}</p>
-            <p className="truncate text-2xl font-semibold tabular-nums text-brand-blue">
+            <p className="truncate text-xl font-semibold tabular-nums text-brand-blue">
               <StatValue value={s.value} />
             </p>
           </div>
@@ -101,7 +101,7 @@ function initials(name?: string | null): string {
 }
 
 function Avatar({ name, size = "md" }: { name?: string | null; size?: "md" | "lg" }) {
-  const dims = size === "lg" ? "h-14 w-14 text-lg" : "h-9 w-9 text-xs";
+  const dims = size === "lg" ? "h-12 w-12 text-base" : "h-8 w-8 text-xs";
   return (
     <span
       aria-hidden="true"
@@ -118,7 +118,7 @@ function SkeletonRows() {
       {Array.from({ length: 6 }, (_, i) => (
         <tr key={i} className="border-t border-line">
           {Array.from({ length: 6 }, (_, j) => (
-            <td key={j} className="px-4 py-4">
+            <td key={j} className="px-3 py-2.5">
               <span
                 className="block h-4 animate-pulse rounded bg-slate-100"
                 style={{ width: `${55 + ((i + j) % 4) * 12}%` }}
@@ -206,7 +206,7 @@ export default function DashboardPage() {
       <style>{ANIMATIONS}</style>
 
       {/* En-tête de bienvenue */}
-      <header className="dash-rise relative overflow-hidden rounded-xl bg-brand-blue px-5 py-4 text-white sm:px-6">
+      <header className="dash-rise relative overflow-hidden rounded-xl bg-brand-blue px-4 py-3 text-white sm:px-5">
         <span aria-hidden="true" className="pointer-events-none absolute -right-8 -top-12 h-36 w-36 rounded-full bg-white/10" />
         <span aria-hidden="true" className="pointer-events-none absolute -bottom-14 right-20 h-28 w-28 rounded-full bg-white/5" />
         <div className="relative flex items-center gap-3">
@@ -217,7 +217,7 @@ export default function DashboardPage() {
             {initials(user?.nom)}
           </span>
           <div className="min-w-0">
-            <h1 className="truncate text-lg font-semibold tracking-tight sm:text-xl">Bonjour {user?.nom}</h1>
+            <h1 className="truncate text-base font-semibold tracking-tight sm:text-lg">Bonjour {user?.nom}</h1>
             <div className="mt-1 flex flex-wrap items-center gap-1.5 text-xs">
               {role && (
                 <span className="rounded-full bg-white/15 px-2.5 py-0.5 font-medium">{ROLE_LABELS[role]}</span>
@@ -238,14 +238,14 @@ export default function DashboardPage() {
         <>
           <AgentAlertes />
           <section className="dash-rise overflow-hidden rounded-2xl border border-line bg-white" style={{ animationDelay: "120ms" }}>
-            <div className="flex items-center gap-4 border-b border-line bg-slate-50 px-6 py-5">
+            <div className="flex items-center gap-3 border-b border-line bg-slate-50 px-5 py-4">
               <Avatar name={user?.nom} size="lg" />
               <div className="min-w-0">
-                <h2 className="text-lg font-semibold text-brand-blue">Mon compte</h2>
+                <h2 className="text-base font-semibold text-brand-blue">Mon compte</h2>
                 <p className="truncate text-sm text-slate-500">{user?.email}</p>
               </div>
             </div>
-            <dl className="grid gap-4 p-6 text-sm sm:grid-cols-2">
+            <dl className="grid gap-3 p-5 text-sm sm:grid-cols-2">
               {[
                 ["E-mail", user?.email],
                 ["IM", user?.im],
@@ -254,14 +254,14 @@ export default function DashboardPage() {
               ].map(([k, v]) => (
                 <div
                   key={k}
-                  className="rounded-xl border border-line p-4 transition duration-200 hover:-translate-y-0.5 hover:border-brand-blue hover:shadow-md"
+                  className="rounded-xl border border-line p-3 transition duration-200 hover:-translate-y-0.5 hover:border-brand-blue hover:shadow-md"
                 >
                   <dt className="text-slate-500">{k}</dt>
                   <dd className="mt-1 break-words text-base font-medium text-brand-blue">{v || "—"}</dd>
                 </div>
               ))}
             </dl>
-            <div className="px-6 pb-6">
+            <div className="px-5 pb-5">
               <Link
                 to="/profile"
                 className={`${primaryButtonClass} group inline-flex items-center gap-1`}
@@ -281,13 +281,13 @@ export default function DashboardPage() {
             style={{ animationDelay: "200ms" }}
           >
             {/* Barre de titre + recherche */}
-            <div className="flex flex-col gap-4 border-b border-line p-5 sm:flex-row sm:items-center sm:justify-between sm:p-6">
+            <div className="flex flex-col gap-3 border-b border-line p-4 sm:flex-row sm:items-center sm:justify-between sm:p-5">
               <div className="flex items-center gap-3">
-                <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-brand-blue text-white">
+                <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-brand-blue text-white">
                   <IconUsers className="h-5 w-5" />
                 </span>
                 <div>
-                  <h2 className="text-lg font-semibold text-brand-blue">Tous les utilisateurs</h2>
+                  <h2 className="text-base font-semibold text-brand-blue">Tous les utilisateurs</h2>
                   <p className="text-sm text-slate-500">Comptes actifs de votre périmètre</p>
                 </div>
               </div>
@@ -299,7 +299,7 @@ export default function DashboardPage() {
                     onChange={(e) => setSearchInput(e.target.value)}
                     placeholder="Rechercher..."
                     aria-label="Rechercher un utilisateur"
-                    className="w-full rounded-full border border-slate-300 bg-slate-50 py-2.5 pl-10 pr-9 text-sm placeholder-slate-400 transition focus:border-brand-blue focus:bg-white focus:outline-none focus:ring-2 focus:ring-brand-blue/30"
+                    className="w-full rounded-full border border-slate-300 bg-slate-50 py-2 pl-9 pr-9 text-sm placeholder-slate-400 transition focus:border-brand-blue focus:bg-white focus:outline-none focus:ring-2 focus:ring-brand-blue/30"
                   />
                   {searchInput && (
                     <button
@@ -328,11 +328,11 @@ export default function DashboardPage() {
 
             {/* Tableau */}
             <div className="max-h-[640px] overflow-auto">
-              <table className="w-full min-w-[760px] text-left text-sm">
+              <table className="w-full min-w-[680px] text-left text-sm">
                 <thead className="sticky top-0 z-10">
                   <tr className="border-b-2 border-brand-blue bg-slate-50 text-slate-600">
                     {["Nom", "Centre", "Téléphone", "E-mail", "Fonction", "Rôle"].map((h) => (
-                      <th key={h} className="whitespace-nowrap px-4 py-3 text-xs font-semibold tracking-wide">
+                      <th key={h} className="whitespace-nowrap px-3 py-2 text-xs font-semibold tracking-wide">
                         {h}
                       </th>
                     ))}
@@ -344,7 +344,7 @@ export default function DashboardPage() {
                       key={u.id}
                       className="group border-t border-line transition-colors even:bg-slate-50/60 hover:bg-slate-100"
                     >
-                      <td className="relative px-4 py-3">
+                      <td className="relative px-3 py-2">
                         {/* Repère d'accent visible au survol */}
                         <span className="absolute inset-y-0 left-0 w-1 scale-y-0 bg-brand-blue transition-transform duration-200 group-hover:scale-y-100" />
                         <div className="flex items-center gap-3">
@@ -352,18 +352,18 @@ export default function DashboardPage() {
                           <span className="font-medium text-brand-blue">{u.nom}</span>
                         </div>
                       </td>
-                      <td className="px-4 py-3 text-slate-700">{u.centre?.nom ?? "—"}</td>
-                      <td className="whitespace-nowrap px-4 py-3 tabular-nums text-slate-700">{u.telephone ?? "—"}</td>
-                      <td className="px-4 py-3 text-slate-700">{u.email}</td>
-                      <td className="px-4 py-3 text-slate-700">{u.fonction?.nom ?? "—"}</td>
-                      <td className="px-4 py-3">
+                      <td className="px-3 py-2 text-slate-700">{u.centre?.nom ?? "—"}</td>
+                      <td className="whitespace-nowrap px-3 py-2 tabular-nums text-slate-700">{u.telephone ?? "—"}</td>
+                      <td className="px-3 py-2 text-slate-700">{u.email}</td>
+                      <td className="px-3 py-2 text-slate-700">{u.fonction?.nom ?? "—"}</td>
+                      <td className="px-3 py-2">
                         <RoleBadge role={u.role} />
                       </td>
                     </tr>
                   ))}
                   {data && data.data.length === 0 && (
                     <tr>
-                      <td colSpan={6} className="px-4 py-14 text-center">
+                      <td colSpan={6} className="px-3 py-10 text-center">
                         <span className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-slate-100 text-slate-400">
                           <IconSearch className="h-5 w-5" />
                         </span>

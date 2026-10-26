@@ -46,6 +46,14 @@ export const IconUsers = (p: IconProps) => (
   </Svg>
 );
 
+export const IconUserPlus = (p: IconProps) => (
+  <Svg {...p}>
+    <circle cx="9" cy="8" r="3.5" />
+    <path d="M2.5 20c0-3.6 2.9-6 6.5-6s6.5 2.4 6.5 6" />
+    <path d="M19 8v6M16 11h6" />
+  </Svg>
+);
+
 export const IconUser = (p: IconProps) => (
   <Svg {...p}>
     <circle cx="12" cy="8" r="4" />

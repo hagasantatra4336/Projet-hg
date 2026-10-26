@@ -1,15 +1,30 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { Link, useNavigate } from "react-router-dom";
+import { isAxiosError } from "axios";
 import api, { getErrorMessage } from "../../services/api";
 import { useAuth } from "../../context/AuthContext";
 import { PasswordInput } from "../../components/ui";
 import AuthLayout from "../../components/AuthLayout";
 import CentreSelect, { type CentreOption } from "../../components/CentreSelect";
-import type { AppUser } from "../../types";
+import {
+  clearPendingSignup,
+  loadPendingSignup,
+  savePendingSignup,
+  updatePendingSignup,
+} from "../../services/signupRequest";
+import type { AppUser, NiveauApprobation, Role, StatutDemande } from "../../types";
 
 const STEP_INFOS = 1;
-const STEP_OTP = 2;
-const STEP_PASSWORD = 3;
+const STEP_ATTENTE = 2;
+const STEP_OTP = 3;
+const STEP_PASSWORD = 4;
+
+const POLL_MS = 4000;
+const RESEND_COOLDOWN_SECONDS = 60;
+
+interface SignupCentre extends CentreOption {
+  a_chef?: boolean;
+}
 
 interface InfosForm {
   nom: string;
@@ -22,8 +37,8 @@ interface InfosForm {
 }
 
 interface SignupOptions {
-  centres: CentreOption[];
-  fonctions: { id: number; nom: string }[];
+  centres: SignupCentre[];
+  fonctions: { id: number; nom: string; role: Role }[];
 }
 
 interface PasswordForm {
@@ -31,14 +46,51 @@ interface PasswordForm {
   password_confirmation: string;
 }
 
-interface OtpSentResponse {
+interface Approbateur {
+  niveau: NiveauApprobation | null;
+  centre: string | null;
+}
+
+interface RegisterResponse {
   message: string;
-  debug_otp?: string; // renvoyé par l'API uniquement en mode développement (APP_DEBUG=true)
+  request_id: string;
+  statut: StatutDemande;
+  nom: string;
+  email: string;
+  approbateur?: Approbateur;
+  expires_at?: string | null;
+  otp_expires_at?: string | null;
+  code_verifie?: boolean;
+}
+
+interface StatusResponse {
+  statut: StatutDemande;
+  nom?: string;
+  email?: string;
+  centre?: { id: number; nom: string } | null;
+  fonction?: string | null;
+  niveau_approbation?: NiveauApprobation | null;
+  approbateur?: string | null;
+  motif_refus?: string | null;
+  expires_at?: string | null;
+  otp_expires_at?: string | null;
+  code_verifie?: boolean;
+  renvoi_possible?: boolean;
+  secondes_avant_renvoi?: number;
+  message?: string;
+}
+
+interface OtpResponse {
+  message: string;
+  otp_expires_at?: string | null;
+  debug_otp?: string;
+  retry_after?: number;
 }
 
 interface VerifyOtpResponse {
   message?: string;
   setup_token: string;
+  email: string;
 }
 
 interface SetPasswordResponse {
@@ -47,7 +99,7 @@ interface SetPasswordResponse {
 }
 
 function StepIndicator({ step }: { step: number }) {
-  const steps = [1, 2, 3];
+  const steps = [1, 2, 3, 4];
   return (
     <div className="mb-6 mt-5 flex items-center">
       {steps.map((s, i) => (
@@ -67,6 +119,24 @@ function StepIndicator({ step }: { step: number }) {
   );
 }
 
+function formatCountdown(seconds: number): string {
+  const m = Math.floor(seconds / 60);
+  const s = seconds % 60;
+  return `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
+}
+
+function libelleApprobateur(approbateur: Approbateur | null): string {
+  switch (approbateur?.niveau) {
+    case "chef":
+      return approbateur.centre ? `le chef du centre ${approbateur.centre}` : "le chef de votre centre";
+    case "central":
+    case "superadmin":
+      return "l'administration centrale";
+    default:
+      return "le responsable de votre centre";
+  }
+}
+
 const inputClass =
   "w-full rounded-xl border border-gray-200 bg-gray-50/70 px-4 py-3 text-sm text-gray-800 placeholder-gray-400 " +
   "focus:bg-white focus:outline-none focus:ring-2 focus:ring-brand-green/60 focus:border-brand-green transition";
@@ -83,10 +153,14 @@ const infoClass = "mb-5 rounded-xl border-l-4 border-brand-green bg-brand-green/
 export default function SignupPage() {
   const navigate = useNavigate();
   const { login } = useAuth();
-  const [step, setStep] = useState<number>(STEP_INFOS);
+  const [initial] = useState(() => loadPendingSignup());
+
+  const [step, setStep] = useState<number>(() =>
+    initial ? (initial.setup_token ? STEP_PASSWORD : STEP_ATTENTE) : STEP_INFOS
+  );
   const [form, setForm] = useState<InfosForm>({
-    nom: "",
-    email: "",
+    nom: initial?.nom ?? "",
+    email: initial?.email ?? "",
     im: "",
     fonction_id: "",
     centre_id: "",
@@ -94,12 +168,21 @@ export default function SignupPage() {
     adresse: "",
   });
   const [options, setOptions] = useState<SignupOptions>({ centres: [], fonctions: [] });
+  const [requestId, setRequestId] = useState<string>(initial?.request_id ?? "");
+  const [statut, setStatut] = useState<StatutDemande>(initial?.setup_token ? "approuvee" : "en_attente");
+  const [approbateur, setApprobateur] = useState<Approbateur | null>(initial?.approbateur ?? null);
+  const [approuvePar, setApprouvePar] = useState<string>("");
+  const [motifRefus, setMotifRefus] = useState<string>("");
   const [otp, setOtp] = useState<string>("");
-  const [setupToken, setSetupToken] = useState<string>("");
+  const [otpExpiresAt, setOtpExpiresAt] = useState<string | null>(initial?.otp_expires_at ?? null);
+  const [codeVerifie, setCodeVerifie] = useState<boolean>(Boolean(initial?.setup_token));
+  const [setupToken, setSetupToken] = useState<string>(initial?.setup_token ?? "");
   const [passwords, setPasswords] = useState<PasswordForm>({
     password: "",
     password_confirmation: "",
   });
+  const [resendAt, setResendAt] = useState<number>(0);
+  const [now, setNow] = useState<number>(() => Date.now());
   const [error, setError] = useState<string>("");
   const [info, setInfo] = useState<string>("");
   const [loading, setLoading] = useState<boolean>(false);
@@ -112,21 +195,97 @@ export default function SignupPage() {
       .catch((err) => setError(getErrorMessage(err, "Impossible de charger les centres et fonctions.")));
   }, []);
 
+  // Suivi de la demande : toutes les 4 s tant qu'elle est en attente d'approbation.
+  useEffect(() => {
+    if (!requestId || statut !== "en_attente" || setupToken) return;
+
+    let stopped = false;
+
+    const verifier = async () => {
+      try {
+        const res = await api.get<StatusResponse>(`/register/status/${requestId}`);
+        if (stopped) return;
+
+        setStatut(res.data.statut);
+        setApprobateur((prev) => ({
+          niveau: res.data.niveau_approbation ?? prev?.niveau ?? null,
+          centre: res.data.centre?.nom ?? prev?.centre ?? null,
+        }));
+
+        if (res.data.statut === "approuvee") {
+          setOtpExpiresAt(res.data.otp_expires_at ?? null);
+          setCodeVerifie(Boolean(res.data.code_verifie));
+          setApprouvePar(res.data.approbateur ?? "");
+          updatePendingSignup({ otp_expires_at: res.data.otp_expires_at ?? null });
+          setResendAt(Date.now() + (res.data.secondes_avant_renvoi ?? 0) * 1000);
+          setStep(STEP_OTP);
+        } else if (["refusee", "annulee", "expiree", "introuvable"].includes(res.data.statut)) {
+          setMotifRefus(res.data.motif_refus ?? res.data.message ?? "");
+        }
+      } catch (err) {
+        if (stopped) return;
+        if (isAxiosError(err) && err.response?.status === 404) {
+          setStatut("introuvable");
+          setMotifRefus("Demande introuvable ou expirée.");
+        }
+        // autre erreur (réseau) : on réessaie au prochain passage
+      }
+    };
+
+    void verifier();
+    const timer = window.setInterval(() => void verifier(), POLL_MS);
+    return () => {
+      stopped = true;
+      window.clearInterval(timer);
+    };
+  }, [requestId, statut, setupToken]);
+
+  // Compte à rebours du code (5 minutes) et du délai de renvoi.
+  useEffect(() => {
+    if (step !== STEP_OTP) return;
+    const timer = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(timer);
+  }, [step]);
+
   async function handleStep1(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setError("");
     setInfo("");
     setLoading(true);
     try {
-      const res = await api.post<OtpSentResponse>("/register", {
+      const res = await api.post<RegisterResponse>("/register", {
         ...form,
         centre_id: Number(form.centre_id),
         fonction_id: Number(form.fonction_id),
       });
-      if (res.data.debug_otp) {
-        setInfo(`Mode développement — code : ${res.data.debug_otp}`);
+
+      const centreNom =
+        options.centres.find((c) => String(c.id) === form.centre_id)?.nom ??
+        res.data.approbateur?.centre ??
+        null;
+      const approbateurRecu = res.data.approbateur ?? { niveau: null, centre: centreNom };
+
+      savePendingSignup({
+        request_id: res.data.request_id,
+        email: res.data.email,
+        nom: res.data.nom,
+        approbateur: approbateurRecu,
+        otp_expires_at: res.data.otp_expires_at ?? null,
+      });
+
+      setRequestId(res.data.request_id);
+      setStatut(res.data.statut);
+      setApprobateur(approbateurRecu);
+      setCodeVerifie(Boolean(res.data.code_verifie));
+      setOtpExpiresAt(res.data.otp_expires_at ?? null);
+      setInfo(res.data.message);
+
+      if (res.data.statut === "approuvee") {
+        setResendAt(Date.now() + RESEND_COOLDOWN_SECONDS * 1000);
+        setStep(STEP_OTP);
+      } else {
+        setStep(STEP_ATTENTE);
       }
-      setStep(STEP_OTP);
     } catch (err) {
       setError(getErrorMessage(err, "Erreur lors de l'inscription."));
     } finally {
@@ -134,17 +293,18 @@ export default function SignupPage() {
     }
   }
 
-  async function handleStep2(e: FormEvent<HTMLFormElement>) {
+  async function handleStep3(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setError("");
     setInfo("");
     setLoading(true);
     try {
       const res = await api.post<VerifyOtpResponse>("/register/verify-otp", {
-        email: form.email,
+        request_id: requestId,
         otp_code: otp,
       });
       setSetupToken(res.data.setup_token);
+      updatePendingSignup({ setup_token: res.data.setup_token });
       setStep(STEP_PASSWORD);
     } catch (err) {
       setError(getErrorMessage(err, "Code invalide ou expiré."));
@@ -158,20 +318,28 @@ export default function SignupPage() {
     setInfo("");
     setLoading(true);
     try {
-      const res = await api.post<OtpSentResponse>("/register/resend-otp", { email: form.email });
+      const res = await api.post<OtpResponse>("/register/resend-otp", { request_id: requestId });
+      setOtpExpiresAt(res.data.otp_expires_at ?? null);
+      setCodeVerifie(false);
+      setResendAt(Date.now() + RESEND_COOLDOWN_SECONDS * 1000);
+      updatePendingSignup({ otp_expires_at: res.data.otp_expires_at ?? null });
       setInfo(
         res.data.debug_otp
           ? `Mode développement — nouveau code : ${res.data.debug_otp}`
-          : "Un nouveau code a été envoyé."
+          : res.data.message
       );
     } catch (err) {
+      const retryAfter = isAxiosError<{ retry_after?: number }>(err)
+        ? err.response?.data?.retry_after
+        : undefined;
+      if (retryAfter) setResendAt(Date.now() + retryAfter * 1000);
       setError(getErrorMessage(err, "Impossible de renvoyer le code."));
     } finally {
       setLoading(false);
     }
   }
 
-  async function handleStep3(e: FormEvent<HTMLFormElement>) {
+  async function handleStep4(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setError("");
     setInfo("");
@@ -182,6 +350,7 @@ export default function SignupPage() {
         setup_token: setupToken,
         ...passwords,
       });
+      clearPendingSignup();
       login(res.data.token, res.data.user);
       navigate("/dashboard");
     } catch (err) {
@@ -191,10 +360,65 @@ export default function SignupPage() {
     }
   }
 
+  async function handleCancel() {
+    setError("");
+    setLoading(true);
+    try {
+      await api.post("/register/cancel", { request_id: requestId });
+      recommencer();
+    } catch (err) {
+      setError(getErrorMessage(err, "Impossible d'annuler la demande."));
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  function recommencer() {
+    clearPendingSignup();
+    setRequestId("");
+    setStatut("en_attente");
+    setApprobateur(null);
+    setApprouvePar("");
+    setMotifRefus("");
+    setOtp("");
+    setOtpExpiresAt(null);
+    setCodeVerifie(false);
+    setSetupToken("");
+    setPasswords({ password: "", password_confirmation: "" });
+    setResendAt(0);
+    setError("");
+    setInfo("");
+    setStep(STEP_INFOS);
+  }
+
+  const secondesCode = otpExpiresAt
+    ? Math.max(0, Math.floor((new Date(otpExpiresAt).getTime() - now) / 1000))
+    : 0;
+  const codeExpire = !otpExpiresAt || secondesCode <= 0;
+  const attenteRenvoi = Math.max(0, Math.ceil((resendAt - now) / 1000));
+
+  const centreChoisi = options.centres.find((c) => String(c.id) === form.centre_id);
+  const fonctionChoisie = options.fonctions.find((f) => String(f.id) === form.fonction_id);
+  const refusee = ["refusee", "annulee", "expiree", "introuvable"].includes(statut);
+
+  // L'approbateur dépend de la fonction choisie (agent → chef du centre, chef/central → administration centrale).
+  const infoApprobation = (() => {
+    if (!fonctionChoisie) {
+      return "L'approbateur dépend de la fonction choisie : un agent est approuvé par le chef de son centre, un chef de centre par l'administration centrale.";
+    }
+    if (fonctionChoisie.role === "agent") {
+      if (!centreChoisi) return "Choisissez aussi votre centre : le chef de ce centre approuvera votre demande.";
+      return centreChoisi.a_chef
+        ? "Votre demande sera soumise au chef de ce centre. Le code de vérification ne sera envoyé qu'après son approbation."
+        : "Aucun chef de centre n'est enregistré pour ce centre : la demande sera transmise à l'administration centrale.";
+    }
+    return "Votre demande sera soumise à l'administration centrale pour approbation.";
+  })();
+
   return (
     <AuthLayout>
       <h1 className="text-2xl font-bold tracking-tight text-brand-blue">Créer un compte</h1>
-      <p className="mt-1 text-sm text-gray-500">Étape {step} sur 3</p>
+      <p className="mt-1 text-sm text-gray-500">Étape {step} sur 4</p>
 
       <StepIndicator step={step} />
 
@@ -259,44 +483,167 @@ export default function SignupPage() {
             value={form.adresse}
             onChange={(e) => setForm({ ...form, adresse: e.target.value })}
           />
+
+          <p className="rounded-xl bg-gray-50 px-4 py-3 text-xs text-gray-600 sm:col-span-2">
+            {infoApprobation}
+          </p>
+
           <button disabled={loading} type="submit" className={`${primaryButtonClass} sm:col-span-2`}>
-            {loading ? "Envoi..." : "Continuer"}
+            {loading ? "Envoi de la demande..." : "Demander la création du compte"}
           </button>
         </form>
       )}
 
+      {step === STEP_ATTENTE && (
+        <div className="space-y-4">
+          {refusee && (
+            <div className="rounded-xl border border-red-200 bg-red-50 p-5 text-center">
+              <h2 className="mb-2 text-lg font-semibold text-red-700">
+                {statut === "refusee"
+                  ? "Demande refusée"
+                  : statut === "annulee"
+                    ? "Demande annulée"
+                    : statut === "introuvable"
+                      ? "Demande introuvable"
+                      : "Demande expirée"}
+              </h2>
+              <p className="mb-4 text-sm text-slate-700">
+                {statut === "refusee"
+                  ? "Votre demande n'a pas été approuvée : aucun compte n'a été créé et aucun code ne vous sera envoyé."
+                  : statut === "annulee"
+                    ? "Cette demande a été annulée."
+                    : statut === "introuvable"
+                      ? "Cette demande n'existe plus. Recommencez l'inscription."
+                      : "La demande n'a pas été approuvée dans le délai de 7 jours."}
+              </p>
+              {motifRefus && (
+                <p className="mb-4 rounded-lg bg-white px-3 py-2 text-sm text-red-700">Motif : {motifRefus}</p>
+              )}
+              <button type="button" onClick={recommencer} className={primaryButtonClass}>
+                Recommencer l'inscription
+              </button>
+            </div>
+          )}
+
+          {!refusee && (
+            <div className="rounded-xl border border-line bg-white p-6 text-center">
+              <div
+                role="status"
+                aria-label="En attente d'approbation"
+                className="mx-auto mb-5 h-12 w-12 animate-spin rounded-full border-4 border-brand-green/30 border-t-brand-blue"
+              />
+              <h2 className="mb-2 text-lg font-semibold text-brand-blue">En attente d'approbation</h2>
+              <p className="text-sm text-gray-600">
+                Votre demande a été envoyée à {libelleApprobateur(approbateur)}.
+                <br />
+                Dès qu'elle est approuvée, un code à 6 chiffres valable <strong>5 minutes</strong> sera envoyé à{" "}
+                <span className="font-semibold text-brand-blue">{form.email}</span>.
+              </p>
+              <p className="mt-3 text-xs text-gray-500">
+                Cette page se met à jour automatiquement. Vous pouvez la fermer : la demande reste valable 7 jours et
+                vous la retrouverez en revenant sur ce navigateur.
+              </p>
+              <button
+                type="button"
+                onClick={handleCancel}
+                disabled={loading}
+                className="mt-5 text-sm font-medium text-gray-500 hover:text-red-600 hover:underline disabled:opacity-50"
+              >
+                Annuler la demande
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+
       {step === STEP_OTP && (
-        <form onSubmit={handleStep2} className="space-y-4">
-          <p className="rounded-xl bg-gray-50 px-4 py-3 text-center text-sm text-gray-600">
-            Code à 6 chiffres envoyé à <span className="font-semibold text-brand-blue">{form.email}</span>.
-            <br />
-            Valable 10 minutes.
-          </p>
-          <input
-            className={`${inputClass} text-center tracking-[0.5em] text-xl font-semibold`}
-            placeholder="------"
-            maxLength={6}
-            value={otp}
-            onChange={(e) => setOtp(e.target.value.replace(/\D/g, ""))}
-            required
-          />
-          <button disabled={loading} type="submit" className={primaryButtonClass}>
-            {loading ? "Vérification..." : "Vérifier le code"}
+        <form onSubmit={handleStep3} className="space-y-4">
+          <div className="rounded-xl bg-gray-50 px-4 py-3 text-center text-sm text-gray-600">
+            {codeVerifie && !setupToken ? (
+              <p>
+                Votre e-mail a déjà été vérifié sur un autre appareil. Recevez un nouveau code pour définir votre mot
+                de passe ici.
+              </p>
+            ) : (
+              <p>
+                Code à 6 chiffres envoyé à{" "}
+                <span className="font-semibold text-brand-blue">{form.email}</span>.
+                <br />
+                Valable <strong>5 minutes</strong>
+                {!codeExpire && (
+                  <>
+                    {" "}
+                    — encore <span className="font-mono font-semibold text-brand-blue">{formatCountdown(secondesCode)}</span>
+                  </>
+                )}
+              </p>
+            )}
+            {approuvePar && (
+              <p className="mt-1 text-xs text-gray-500">
+                Demande approuvée par{" "}
+                {approbateur?.niveau === "superadmin" ? "l'administration centrale" : approuvePar}.
+              </p>
+            )}
+          </div>
+
+          {codeExpire && !(codeVerifie && !setupToken) && (
+            <p className="rounded-xl border-l-4 border-amber-400 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+              Le code a expiré. Demandez un nouveau code ci-dessous.
+            </p>
+          )}
+
+          {!(codeVerifie && !setupToken) && (
+            <input
+              className={`${inputClass} text-center tracking-[0.5em] text-xl font-semibold`}
+              placeholder="------"
+              maxLength={6}
+              inputMode="numeric"
+              autoComplete="one-time-code"
+              value={otp}
+              onChange={(e) => setOtp(e.target.value.replace(/\D/g, ""))}
+              disabled={codeExpire}
+              required
+            />
+          )}
+
+          {!(codeVerifie && !setupToken) && (
+            <button disabled={loading || codeExpire} type="submit" className={primaryButtonClass}>
+              {loading ? "Vérification..." : "Vérifier le code"}
+            </button>
+          )}
+
+          <button
+            type="button"
+            onClick={handleResendOtp}
+            disabled={loading || attenteRenvoi > 0}
+            className={linkButtonClass}
+          >
+            {attenteRenvoi > 0 ? `Renvoyer le code (dans ${attenteRenvoi} s)` : "Renvoyer le code"}
           </button>
-          <button type="button" onClick={handleResendOtp} disabled={loading} className={linkButtonClass}>
-            Renvoyer le code
+          <button
+            type="button"
+            onClick={recommencer}
+            disabled={loading}
+            className="w-full text-sm text-gray-500 hover:text-brand-blue hover:underline disabled:opacity-50"
+          >
+            Recommencer l'inscription
           </button>
         </form>
       )}
 
       {step === STEP_PASSWORD && (
-        <form onSubmit={handleStep3} className="space-y-4">
+        <form onSubmit={handleStep4} className="space-y-4">
+          <p className="rounded-xl bg-gray-50 px-4 py-3 text-center text-sm text-gray-600">
+            E-mail vérifié pour <span className="font-semibold text-brand-blue">{form.email}</span>. Choisissez votre
+            mot de passe pour activer le compte.
+          </p>
           <PasswordInput
             className={inputClass}
             placeholder="Mot de passe"
             value={passwords.password}
             onChange={(e) => setPasswords({ ...passwords, password: e.target.value })}
             minLength={8}
+            autoComplete="new-password"
             required
           />
           <PasswordInput
@@ -307,11 +654,20 @@ export default function SignupPage() {
               setPasswords({ ...passwords, password_confirmation: e.target.value })
             }
             minLength={8}
+            autoComplete="new-password"
             required
           />
           <p className="text-xs text-gray-500">8 caractères minimum.</p>
           <button disabled={loading} type="submit" className={primaryButtonClass}>
             {loading ? "Création..." : "Créer mon compte"}
+          </button>
+          <button
+            type="button"
+            onClick={recommencer}
+            disabled={loading}
+            className="w-full text-sm text-gray-500 hover:text-brand-blue hover:underline disabled:opacity-50"
+          >
+            Recommencer l'inscription
           </button>
         </form>
       )}

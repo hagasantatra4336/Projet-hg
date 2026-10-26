@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import api, { getErrorMessage } from "../services/api";
 import { useAuth } from "../context/AuthContext";
-import type { ContribuableFiche, Defaillance, DossierAlerte, LigneBaseRisque } from "../types";
+import { REGLE_LABELS, type ContribuableFiche, type DossierAlerte, type GroupeAlerte, type LigneBaseRisque } from "../types";
 import { ErrorBox, inputClass, primaryButtonClass, secondaryButtonClass } from "../components/ui";
 import {
   EtatBadge,
@@ -99,25 +99,38 @@ function TableauSource({ titre, lignes, parMois }: { titre: string; lignes: Lign
   );
 }
 
-function Bandeau({ dossier, moi, canManage, onReprendre, busy }: { dossier: DossierAlerte; moi: boolean; canManage: boolean; onReprendre: () => void; busy: boolean }) {
-  const a = dossier.alerte;
+function Bandeau({
+  groupe,
+  verrouMinutes,
+  canManage,
+  onReprendre,
+  busy,
+}: {
+  groupe: GroupeAlerte;
+  verrouMinutes: number;
+  canManage: boolean;
+  onReprendre: () => void;
+  busy: boolean;
+}) {
+  const anomalies = `${groupe.nb_alertes} anomalie${groupe.nb_alertes > 1 ? "s" : ""}`;
 
-  if (a.statut === "en_traitement" && moi) {
+  if (groupe.statut === "en_traitement" && groupe.pris_par_moi) {
     return (
       <p className="rounded-xl border border-brand-green/60 bg-leaf-50 px-4 py-3 text-sm text-brand-blue">
-        Ce dossier est <strong>réservé pour vous</strong>{a.pris_le ? ` depuis ${formatDateHeure(a.pris_le)}` : ""}. Les autres utilisateurs le voient « En
-        traitement » et ne peuvent pas le prendre. Pensez à le marquer comme traité, ou à le libérer ; sans activité, il est libéré
-        automatiquement après {Math.round(dossier.verrou_minutes / 60)} h.
+        Ce dossier ({anomalies}) est <strong>réservé pour vous</strong>
+        {groupe.pris_le ? ` depuis ${formatDateHeure(groupe.pris_le)}` : ""}. Les autres utilisateurs le voient « En traitement » et ne
+        peuvent pas le prendre. Pensez à le marquer comme traité, ou à le libérer ; sans activité, il est libéré automatiquement après{" "}
+        {Math.round(verrouMinutes / 60)} h.
       </p>
     );
   }
 
-  if (a.statut === "en_traitement") {
+  if (groupe.statut === "en_traitement") {
     return (
       <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">
         <p>
-          Dossier <strong>en cours de traitement par {a.pris_par ?? "un autre utilisateur"}</strong>
-          {a.pris_le ? ` depuis ${formatDateHeure(a.pris_le)}` : ""}. Vous pouvez le consulter, pas le traiter.
+          Dossier ({anomalies}) <strong>en cours de traitement par {groupe.pris_par ?? "un autre utilisateur"}</strong>
+          {groupe.pris_le ? ` depuis ${formatDateHeure(groupe.pris_le)}` : ""}. Vous pouvez le consulter, pas le traiter.
         </p>
         {canManage && (
           <button type="button" className={secondaryButtonClass} disabled={busy} onClick={onReprendre}>
@@ -128,31 +141,32 @@ function Bandeau({ dossier, moi, canManage, onReprendre, busy }: { dossier: Doss
     );
   }
 
-  if (a.statut === "traitee") {
+  if (groupe.statut === "traitee") {
     return (
       <p className="rounded-xl border border-line bg-slate-50 px-4 py-3 text-sm text-slate-700">
-        Dossier traité{a.traite_par ? ` par ${a.traite_par}` : ""}
-        {a.traite_le ? `, le ${formatDate(a.traite_le)}` : ""}.
+        Dossier traité ({anomalies}){groupe.traite_par ? ` par ${groupe.traite_par}` : ""}
+        {groupe.traite_le ? `, le ${formatDate(groupe.traite_le)}` : ""}.
       </p>
     );
   }
 
-  if (a.statut === "regularisee") {
+  if (groupe.statut === "regularisee") {
     return (
       <p className="rounded-xl border border-line bg-slate-50 px-4 py-3 text-sm text-slate-700">
-        L'anomalie n'est plus constatée (déclaration déposée ou corrigée) : l'alerte est régularisée.
+        Les anomalies de ce dossier ne sont plus constatées (déclarations déposées ou corrigées) : elles sont régularisées.
       </p>
     );
   }
 
   return (
     <p className="rounded-xl border border-line bg-slate-50 px-4 py-3 text-sm text-slate-700">
-      Ce dossier n'est pris par personne. Cliquez sur « Prendre le dossier » pour le traiter : il passera « En traitement » pour les autres.
+      Ce dossier ({anomalies}) n'est pris par personne. Cliquez sur « Prendre le dossier » pour le traiter : il passera « En traitement »
+      pour les autres.
     </p>
   );
 }
 
-/** Page de traitement d'un dossier : tout ce qui concerne l'alerte (valeurs, formule, autres alertes, historique) et les actions. */
+/** Page de traitement d'un dossier contribuable : toutes ses anomalies (valeurs, formules), son historique et les actions. */
 export default function DossierTraitementPage() {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -170,7 +184,7 @@ export default function DossierTraitementPage() {
     try {
       const res = await api.get<DossierAlerte>(`/defaillances/${id}/dossier`);
       setDossier(res.data);
-      setCommentaire((c) => (c === "" ? (res.data.alerte.commentaire ?? "") : c));
+      setCommentaire((c) => (c === "" ? (res.data.groupe.commentaire ?? "") : c));
       setError("");
 
       const f = await api.get<ContribuableFiche>(`/contribuables/${res.data.alerte.contribuable.id}`);
@@ -184,14 +198,13 @@ export default function DossierTraitementPage() {
     void charger();
   }, [charger]);
 
-  const moi = dossier?.alerte.pris_par_moi === true;
-  const enTraitementParMoi = dossier?.alerte.statut === "en_traitement" && moi;
+  const enTraitementParMoi = dossier?.groupe.statut === "en_traitement" && dossier.groupe.pris_par_moi;
 
   // Tant que la page est ouverte, le verrou est prolongé
   useEffect(() => {
     if (!enTraitementParMoi) return;
     const t = setInterval(() => {
-      api.post(`/defaillances/${id}/prendre`).catch(() => undefined);
+      api.post(`/defaillances/${id}/prendre`, { groupe: true }).catch(() => undefined);
     }, HEARTBEAT_MS);
     return () => clearInterval(t);
   }, [enTraitementParMoi, id]);
@@ -213,33 +226,33 @@ export default function DossierTraitementPage() {
 
   const prendre = (forcer = false) =>
     action(async () => {
-      await api.post(`/defaillances/${id}/prendre`, forcer ? { forcer: true } : {});
+      await api.post(`/defaillances/${id}/prendre`, { groupe: true, ...(forcer ? { forcer: true } : {}) });
       await charger();
-    }, "Dossier pris : il est « En traitement » pour les autres utilisateurs.");
+    }, "Dossier pris : toutes ses anomalies sont « En traitement » pour les autres utilisateurs.");
 
   const enregistrer = () =>
     action(async () => {
-      await api.patch(`/defaillances/${id}`, { commentaire });
+      await api.patch(`/defaillances/${id}`, { groupe: true, commentaire });
       await charger();
-    }, "Commentaire enregistré.");
+    }, "Commentaire enregistré sur toutes les anomalies du dossier.");
 
   const marquerTraite = () =>
     action(async () => {
-      await api.patch(`/defaillances/${id}`, { statut: "traitee", commentaire });
+      await api.patch(`/defaillances/${id}`, { groupe: true, statut: "traitee", commentaire });
       navigate("/defaillances");
     });
 
   const liberer = () =>
     action(async () => {
-      await api.post(`/defaillances/${id}/liberer`);
+      await api.post(`/defaillances/${id}/liberer`, { groupe: true });
       navigate("/defaillances");
     });
 
   const rouvrir = () =>
     action(async () => {
-      await api.patch(`/defaillances/${id}`, { statut: "a_traiter" });
+      await api.patch(`/defaillances/${id}`, { groupe: true, statut: "a_traiter" });
       await charger();
-    }, "Dossier rouvert : il est de nouveau à traiter.");
+    }, "Dossier rouvert : ses anomalies non régularisées sont de nouveau à traiter.");
 
   if (!dossier) {
     return (
@@ -253,12 +266,10 @@ export default function DossierTraitementPage() {
     );
   }
 
-  const a: Defaillance = dossier.alerte;
-  const autres = (fiche?.alertes ?? []).filter((x) => x.id !== a.id);
+  const groupe = dossier.groupe;
   const baisses = new Set((fiche?.alertes ?? []).filter((x) => x.regle === "baisse_ca").map((x) => `${x.type_impot}|${x.annee_fiscale}|${x.mois}`));
-  const indicateursAlerte = Object.entries(a.details?.indicateurs ?? {});
   const aDesDonnees = SOURCES.some((s) => dossier.indicateurs[s.cle].length > 0);
-  const lectureSeule = !(a.statut === "en_traitement" && moi);
+  const lectureSeule = !(groupe.statut === "en_traitement" && groupe.pris_par_moi);
 
   return (
     <div className="space-y-5">
@@ -269,68 +280,97 @@ export default function DossierTraitementPage() {
       {/* En-tête */}
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h1 className="text-xl font-semibold text-brand-blue">{a.contribuable.nom}</h1>
+          <h1 className="text-xl font-semibold text-brand-blue">{groupe.contribuable.nom}</h1>
           <p className="mt-0.5 flex flex-wrap items-center gap-2 text-sm text-slate-500">
             <span>
-              NIF {a.contribuable.nif} · {a.contribuable.centre ?? "Aucun centre"}
+              NIF {groupe.contribuable.nif} · {groupe.contribuable.centre ?? "Aucun centre"}
             </span>
             {fiche && <EtatBadge fiche={fiche.contribuable} />}
           </p>
+          <p className="mt-1 text-xs text-slate-500">
+            Dossier unique · {groupe.nb_alertes} anomalie{groupe.nb_alertes > 1 ? "s" : ""} ·{" "}
+            {groupe.types_impot.join(" / ")} · exercice{groupe.annees.length > 1 ? "s" : ""} {groupe.annees.join(", ")}
+          </p>
         </div>
-        <StatutBadge statut={a.statut} />
+        <StatutBadge statut={groupe.statut} />
       </div>
 
-      <Bandeau dossier={dossier} moi={moi} canManage={canManage} busy={busy} onReprendre={() => void prendre(true)} />
+      <Bandeau
+        groupe={groupe}
+        verrouMinutes={dossier.verrou_minutes}
+        canManage={canManage}
+        busy={busy}
+        onReprendre={() => void prendre(true)}
+      />
       <ErrorBox message={error} />
       {message && <p className="rounded-lg border border-brand-green/60 bg-leaf-50 px-3 py-2 text-sm text-brand-blue">{message}</p>}
 
-      {/* L'alerte */}
+      {/* Les anomalies du dossier */}
       <section className="rounded-xl border border-line bg-white p-5">
-        <h2 className="text-sm font-semibold text-brand-blue">L'alerte</h2>
-        <div className="mt-3 flex flex-wrap items-center gap-2">
-          <RegleBadge regle={a.regle} />
-          <NiveauBadge niveau={a.niveau} />
-          <span className="text-sm font-medium text-slate-700">{a.type_impot}</span>
-          <span className="text-sm text-slate-500">
-            · {a.regle === "baisse_ca" ? libellePeriode(a.annee_fiscale, a.mois) : `exercice ${a.annee_fiscale}`}
-          </span>
-        </div>
-        <p className="mt-3 text-sm leading-relaxed text-slate-800">{a.motif}</p>
-        <div className="mt-1 text-xs text-slate-500">
-          <PeriodeAnomalie a={a} />
-        </div>
+        <h2 className="text-sm font-semibold text-brand-blue">Anomalies du dossier ({groupe.nb_alertes})</h2>
+        <p className="text-xs text-slate-500">
+          Toutes les anomalies constatées pour ce contribuable. Les commentaires et le statut s'appliquent à l'ensemble du dossier.
+        </p>
+        <ul className="mt-3 space-y-2">
+          {groupe.alertes.map((x) => {
+            const formule = dossier.formules?.[x.regle];
+            const indicateurs = Object.entries(x.details?.indicateurs ?? {});
 
-        {indicateursAlerte.length > 0 && (
-          <dl className="mt-4 grid gap-x-6 gap-y-2 sm:grid-cols-2">
-            {indicateursAlerte.map(([k, v]) => (
-              <div key={k} className="flex justify-between gap-3 border-b border-line pb-1 text-sm">
-                <dt className="text-slate-500">{LIBELLES[k] ?? k.replace(/_/g, " ")}</dt>
-                <dd className="font-medium text-slate-900">{typeof v === "number" ? nombre(v) : String(v ?? "—")}</dd>
-              </div>
-            ))}
-          </dl>
-        )}
-
-        {dossier.formule && dossier.formule.formules.length > 0 && (
-          <details className="mt-4 rounded-lg border border-line bg-slate-50/70 p-3">
-            <summary className="cursor-pointer text-sm font-medium text-brand-blue">Comment cette alerte est calculée</summary>
-            <dl className="mt-3 space-y-2">
-              {dossier.formule.formules.map((f) => (
-                <div key={f.label} className="grid gap-x-4 gap-y-0.5 sm:grid-cols-[11rem_1fr]">
-                  <dt className="text-xs font-medium text-slate-500">{f.label}</dt>
-                  <dd className="text-sm text-slate-800">{f.expr}</dd>
+            return (
+              <li key={x.id} className="rounded-lg border border-line p-3 text-sm">
+                <div className="flex flex-wrap items-center gap-2">
+                  <RegleBadge regle={x.regle} />
+                  <NiveauBadge niveau={x.niveau} />
+                  <StatutBadge statut={x.statut} />
+                  <span className="font-medium text-slate-700">{x.type_impot}</span>
+                  <span className="text-slate-500">
+                    · {x.regle === "baisse_ca" ? libellePeriode(x.annee_fiscale, x.mois) : `exercice ${x.annee_fiscale}`}
+                  </span>
                 </div>
-              ))}
-            </dl>
-          </details>
-        )}
+                <p className="mt-2 text-sm leading-relaxed text-slate-800">{x.motif}</p>
+                <div className="mt-1 text-xs text-slate-500">
+                  <PeriodeAnomalie a={x} />
+                </div>
+
+                {indicateurs.length > 0 && (
+                  <dl className="mt-2 grid gap-x-6 gap-y-1 sm:grid-cols-2">
+                    {indicateurs.map(([k, v]) => (
+                      <div key={k} className="flex justify-between gap-3 border-b border-line pb-1 text-xs">
+                        <dt className="text-slate-500">{LIBELLES[k] ?? k.replace(/_/g, " ")}</dt>
+                        <dd className="font-medium text-slate-900">{typeof v === "number" ? nombre(v) : String(v ?? "—")}</dd>
+                      </div>
+                    ))}
+                  </dl>
+                )}
+
+                {x.commentaire && <p className="mt-2 text-xs italic text-slate-500">Commentaire : {x.commentaire}</p>}
+
+                {formule && formule.formules.length > 0 && (
+                  <details className="mt-2 rounded-lg border border-line bg-slate-50/70 p-2">
+                    <summary className="cursor-pointer text-xs font-medium text-brand-blue">
+                      Comment « {REGLE_LABELS[x.regle] ?? x.regle} » est calculé
+                    </summary>
+                    <dl className="mt-2 space-y-1.5">
+                      {formule.formules.map((f) => (
+                        <div key={f.label} className="grid gap-x-4 gap-y-0.5 sm:grid-cols-[11rem_1fr]">
+                          <dt className="text-xs font-medium text-slate-500">{f.label}</dt>
+                          <dd className="text-sm text-slate-800">{f.expr}</dd>
+                        </div>
+                      ))}
+                    </dl>
+                  </details>
+                )}
+              </li>
+            );
+          })}
+        </ul>
       </section>
 
       {/* Données du dossier */}
       <section className="space-y-4 rounded-xl border border-line bg-white p-5">
         <div>
           <h2 className="text-sm font-semibold text-brand-blue">Données du dossier</h2>
-          <p className="text-xs text-slate-500">Valeurs lues dans les déclarations, le recoupement et la douane, sur l'exercice de l'alerte et les deux précédents.</p>
+          <p className="text-xs text-slate-500">Valeurs lues dans les déclarations, le recoupement et la douane, sur les exercices des anomalies et les deux précédents.</p>
         </div>
         {aDesDonnees ? (
           SOURCES.map((s) => <TableauSource key={s.cle} titre={s.titre} lignes={dossier.indicateurs[s.cle]} parMois={s.parMois} />)
@@ -338,32 +378,6 @@ export default function DossierTraitementPage() {
           <p className="rounded-lg bg-slate-50 p-3 text-sm text-slate-500">
             Aucune donnée dans la base d'analyse risque pour ce contribuable (elle se remplit avec « php artisan dgi:importer-risque »).
           </p>
-        )}
-      </section>
-
-      {/* Autres alertes du contribuable */}
-      <section className="rounded-xl border border-line bg-white p-5">
-        <h2 className="text-sm font-semibold text-brand-blue">Autres alertes de ce contribuable ({autres.length})</h2>
-        {!fiche ? (
-          <p className="mt-2 text-sm text-slate-500">Chargement...</p>
-        ) : autres.length === 0 ? (
-          <p className="mt-2 text-sm text-slate-500">Aucune autre alerte.</p>
-        ) : (
-          <ul className="mt-3 space-y-2">
-            {autres.map((x) => (
-              <li key={x.id} className="rounded-lg border border-line p-3 text-sm">
-                <div className="flex flex-wrap items-center gap-2">
-                  <RegleBadge regle={x.regle} />
-                  <NiveauBadge niveau={x.niveau} />
-                  <StatutBadge statut={x.statut} />
-                  <span className="font-medium text-slate-700">{x.type_impot}</span>
-                  <span className="text-slate-500">· {x.regle === "baisse_ca" ? libellePeriode(x.annee_fiscale, x.mois) : `exercice ${x.annee_fiscale}`}</span>
-                </div>
-                <p className="mt-2 text-xs leading-relaxed text-slate-700">{x.motif}</p>
-                {x.commentaire && <p className="mt-1 text-xs italic text-slate-500">Commentaire : {x.commentaire}</p>}
-              </li>
-            ))}
-          </ul>
         )}
       </section>
 
@@ -429,7 +443,7 @@ export default function DossierTraitementPage() {
         </label>
 
         <div className="mt-4 flex flex-wrap justify-end gap-3">
-          {a.statut === "a_traiter" && (
+          {groupe.statut === "a_traiter" && (
             <button type="button" className={primaryButtonClass} disabled={busy} onClick={() => void prendre()}>
               Prendre le dossier
             </button>
@@ -447,7 +461,7 @@ export default function DossierTraitementPage() {
               </button>
             </>
           )}
-          {a.statut === "traitee" && (
+          {groupe.statut === "traitee" && (
             <button type="button" className={secondaryButtonClass} disabled={busy} onClick={() => void rouvrir()}>
               Rouvrir le dossier
             </button>

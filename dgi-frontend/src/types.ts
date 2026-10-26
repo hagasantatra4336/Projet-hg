@@ -70,6 +70,18 @@ export const REGLE_LABELS: Record<Regle, string> = {
   r7: "Exportations (R7)",
 };
 
+/** Libellés courts, pour afficher plusieurs anomalies dans une même ligne. */
+export const REGLE_COURTS: Record<Regle, string> = {
+  defaillance: "Défaut de dépôt",
+  baisse_ca: "Baisse du CA",
+  r1: "R1 · CA IR / TVA",
+  r2: "R2 · Déficit",
+  r3: "R3 · Crédit TVA",
+  r5: "R5 · Recoupement",
+  r6: "R6 · Importations",
+  r7: "R7 · Exportations",
+};
+
 /** Score maximal de chaque critère de risque R. */
 export const SCORE_MAX_R: Partial<Record<Regle, number>> = { r1: 10, r2: 5, r3: 5, r5: 5, r6: 10, r7: 10 };
 
@@ -137,7 +149,30 @@ export interface DefaillanceSummary {
   faible: number;
   traitees: number;
   regularisees: number;
+  /** Nombre de contribuables (dossiers) dont au moins une anomalie est prise. */
+  dossiers_en_traitement: number;
+  /** Nombre de contribuables (dossiers) ayant au moins une anomalie traitée. */
+  dossiers_traites: number;
   derniere_analyse: { at: string; date: string } | null;
+}
+
+/** Toutes les anomalies d'un contribuable, présentées comme un seul dossier. */
+export interface GroupeAlerte {
+  contribuable: Defaillance["contribuable"];
+  alertes: Defaillance[];
+  representant_id: number;
+  niveau: NiveauRisque;
+  statut: StatutAlerte;
+  pris_par: string | null;
+  pris_le: string | null;
+  pris_par_moi: boolean;
+  traite_par: string | null;
+  traite_le: string | null;
+  commentaire: string | null;
+  nb_alertes: number;
+  regles: string[];
+  types_impot: string[];
+  annees: number[];
 }
 
 export type AlerteContribuable = Omit<Defaillance, "contribuable">;
@@ -154,6 +189,10 @@ export interface DossierAlerte {
   alerte: Defaillance;
   indicateurs: Record<"IR" | "TVA" | "RECOUPEMENT" | "DAU", LigneBaseRisque[]>;
   formule: FormuleRegle | null;
+  /** Formule de chaque règle présente dans le dossier contribuable. */
+  formules?: Partial<Record<Regle, FormuleRegle | null>>;
+  /** Dossier contribuable : toutes ses anomalies. */
+  groupe: GroupeAlerte;
   verrou_minutes: number;
 }
 
@@ -245,4 +284,43 @@ export interface RegleConfig {
   modifie_par: string | null;
   modifie_le: string | null;
   historique: HistoriqueRegle[];
+}
+
+// ---- Demandes d'inscription (approbation selon la fonction demandée) ----
+
+export type StatutDemande =
+  | "en_attente"
+  | "approuvee"
+  | "refusee"
+  | "annulee"
+  | "expiree"
+  | "compte_cree"
+  | "introuvable";
+
+export type NiveauApprobation = "chef" | "central" | "superadmin";
+
+// Le superadmin n'est jamais nommé côté inscription : il est présenté comme l'administration centrale.
+export const NIVEAU_APPROBATION_LABELS: Record<NiveauApprobation, string> = {
+  chef: "Chef de centre",
+  central: "Administration centrale",
+  superadmin: "Administration centrale",
+};
+
+export interface DemandeInscription {
+  id: number;
+  nom: string;
+  email: string;
+  im: string | null;
+  telephone: string | null;
+  adresse: string | null;
+  centre: { id: number; nom: string } | null;
+  fonction: { id: number; nom: string } | null;
+  statut: StatutDemande;
+  niveau_approbation: NiveauApprobation | null;
+  motif_refus: string | null;
+  traite_par: string | null;
+  traite_le: string | null;
+  otp_envoye_le: string | null;
+  created_at: string | null;
+  expires_at: string | null;
 }

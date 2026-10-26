@@ -3,6 +3,7 @@ import api, { getErrorMessage } from "../services/api";
 import {
   ETAT_LABELS,
   NIVEAU_LABELS,
+  REGLE_COURTS,
   REGLE_LABELS,
   SCORE_MAX_R,
   STATUT_LABELS,
@@ -102,11 +103,14 @@ const REGLE_BADGE: Record<Regle, string> = {
   r7: "bg-amber-100 text-amber-900",
 };
 
-/** Type d'anomalie : défaillance de déclaration / baisse du chiffre d'affaires. */
-export function RegleBadge({ regle }: { regle: Regle }) {
+/** Type d'anomalie. `court` : libellé compact pour les dossiers regroupant plusieurs règles. */
+export function RegleBadge({ regle, court = false }: { regle: Regle; court?: boolean }) {
   return (
-    <span className={`inline-block rounded px-2 py-0.5 text-xs font-semibold ${REGLE_BADGE[regle] ?? "bg-slate-100 text-slate-700"}`}>
-      {REGLE_LABELS[regle] ?? regle}
+    <span
+      className={`inline-block rounded px-2 py-0.5 text-xs font-semibold ${REGLE_BADGE[regle] ?? "bg-slate-100 text-slate-700"}`}
+      title={REGLE_LABELS[regle] ?? regle}
+    >
+      {court ? (REGLE_COURTS[regle] ?? REGLE_LABELS[regle] ?? regle) : (REGLE_LABELS[regle] ?? regle)}
     </span>
   );
 }

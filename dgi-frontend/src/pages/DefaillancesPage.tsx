@@ -8,8 +8,8 @@ import {
   STATUT_LABELS,
   TYPES_IMPOT,
   type Centre,
-  type Defaillance,
   type DefaillanceSummary,
+  type GroupeAlerte,
   type NiveauRisque,
   type Paginated,
   type Regle,
@@ -27,7 +27,6 @@ import { IconRefresh, IconSearch, IconUpload } from "../components/icons";
 import {
   ContribuableModal,
   NiveauBadge,
-  PeriodeAnomalie,
   RegleBadge,
   StatutBadge,
   aujourdhui,
@@ -77,7 +76,7 @@ export default function DefaillancesPage() {
   const canManage = role === "superadmin" || role === "central" || role === "admin";
   const canPickCentre = role === "superadmin" || role === "central";
 
-  const [data, setData] = useState<Paginated<Defaillance> | null>(null);
+  const [data, setData] = useState<Paginated<GroupeAlerte> | null>(null);
   const [summary, setSummary] = useState<DefaillanceSummary | null>(null);
   const [centres, setCentres] = useState<Centre[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
@@ -144,11 +143,12 @@ export default function DefaillancesPage() {
     silentRef.current = false;
 
     api
-      .get<Paginated<Defaillance>>("/defaillances", {
+      .get<Paginated<GroupeAlerte>>("/defaillances", {
         params: {
           page,
           sort,
           dir,
+          grouper: 1,
           search: search || undefined,
           regle: filters.regle || undefined,
           niveau: filters.niveau || undefined,
@@ -231,18 +231,20 @@ export default function DefaillancesPage() {
    * « Traiter » : prend le dossier (il passe « En traitement » pour les autres utilisateurs) puis ouvre la page de traitement.
    * Dossier déjà traité ou régularisé : simple consultation. Dossier pris par un autre : refusé (sauf reprise par un responsable).
    */
-  async function traiter(d: Defaillance, forcer = false) {
+  async function traiter(g: GroupeAlerte, forcer = false) {
     setPriseErreur("");
+    const id = g.representant_id;
 
-    if (d.statut === "traitee" || d.statut === "regularisee") {
-      navigate(`/defaillances/${d.id}/traitement`);
+    if (g.statut === "traitee" || g.statut === "regularisee") {
+      navigate(`/defaillances/${id}/traitement`);
       return;
     }
 
-    setPriseId(d.id);
+    setPriseId(id);
     try {
-      await api.post(`/defaillances/${d.id}/prendre`, forcer ? { forcer: true } : {});
-      navigate(`/defaillances/${d.id}/traitement`);
+      // Le dossier est pris en entier : toutes les anomalies du contribuable passent « En traitement ».
+      await api.post(`/defaillances/${id}/prendre`, { groupe: true, ...(forcer ? { forcer: true } : {}) });
+      navigate(`/defaillances/${id}/traitement`);
     } catch (err) {
       setPriseErreur(getErrorMessage(err, "Impossible de prendre ce dossier."));
       reload(); // l'état du dossier a changé : la liste est mise à jour
@@ -334,11 +336,11 @@ export default function DefaillancesPage() {
 
   return (
     <div>
-      <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+      <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight text-brand-blue">Anomalies de déclaration</h1>
+          <h1 className="text-xl font-semibold tracking-tight text-brand-blue">Anomalies de déclaration</h1>
           <p className="text-sm text-slate-500">
-            Défaillances de déclaration et baisses du chiffre d'affaires
+            Toutes les anomalies d'un contribuable réunies en un seul dossier
             {role === "agent" || role === "admin" ? ` · ${user?.centre?.nom ?? "votre centre"}` : ""}
           </p>
           <p className="mt-1 text-xs text-slate-400">
@@ -372,10 +374,10 @@ export default function DefaillancesPage() {
       </div>
 
       {/* Cartes : alertes à traiter par niveau de risque */}
-      <div className="grid gap-3 sm:grid-cols-4">
-        <div className="rounded-xl bg-white p-4 border border-line">
+      <div className="grid gap-2 sm:grid-cols-4">
+        <div className="rounded-xl bg-white p-3 border border-line">
           <p className="text-xs text-slate-500">Alertes à traiter</p>
-          <p className="text-3xl font-semibold text-brand-blue">{summary ? summary.a_traiter : "—"}</p>
+          <p className="text-2xl font-semibold text-brand-blue">{summary ? summary.a_traiter : "—"}</p>
           {summary && summary.en_traitement > 0 && <p className="text-xs text-slate-500">+ {summary.en_traitement} en traitement</p>}
         </div>
         {cards.map((c) => (
@@ -384,12 +386,12 @@ export default function DefaillancesPage() {
             type="button"
             onClick={() => toggleNiveau(c.niveau)}
             aria-pressed={filters.niveau === c.niveau}
-            className={`rounded-xl bg-white p-4 text-left border border-line transition hover:border-brand-blue/40 ${
+            className={`rounded-xl bg-white p-3 text-left border border-line transition hover:border-brand-blue/40 ${
               filters.niveau === c.niveau ? "ring-2 ring-brand-blue" : ""
             }`}
           >
             <p className="text-xs text-slate-500">Risque {NIVEAU_LABELS[c.niveau].toLowerCase()}</p>
-            <p className="flex items-center gap-2 text-3xl font-semibold text-brand-blue">
+            <p className="flex items-center gap-2 text-2xl font-semibold text-brand-blue">
               {c.value ?? "—"}
               <NiveauBadge niveau={c.niveau} />
             </p>
@@ -397,17 +399,17 @@ export default function DefaillancesPage() {
         ))}
       </div>
 
-      <section className="mt-6 rounded-xl bg-white p-5 border border-line sm:p-6">
+      <section className="mt-4 rounded-xl bg-white p-4 border border-line sm:p-5">
         {/* Filtres */}
-        <div className="mb-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-6">
+        <div className="mb-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-6">
           <div className="relative lg:col-span-2">
-            <IconSearch className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+            <IconSearch className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
             <input
               value={searchInput}
               onChange={(e) => setSearchInput(e.target.value)}
               placeholder="Nom ou NIF..."
               aria-label="Rechercher un contribuable"
-              className={`${inputClass} py-2 pl-9 text-sm`}
+              className={`${inputClass} py-1.5 pl-8 text-sm`}
             />
           </div>
 
@@ -500,110 +502,139 @@ export default function DefaillancesPage() {
         <ErrorBox message={priseErreur} />
 
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[980px] text-left text-sm">
+          <table className="w-full min-w-[760px] text-left text-sm">
             <thead>
               <tr className="bg-slate-50 text-xs font-semibold text-slate-600">
-                <th className="px-3 py-3">Contribuable</th>
-                <th className="px-3 py-3">Centre</th>
-                <th className="px-3 py-3">Anomalie</th>
-                <th className="px-3 py-3">
+                <th className="px-2 py-2">Contribuable</th>
+                <th className="px-2 py-2">Anomalie</th>
+                <th className="px-2 py-2">
                   <button type="button" onClick={() => toggleSort("type_impot")} className="hover:text-brand-blue">
                     Impôt{sortMark("type_impot")}
                   </button>
                 </th>
-                <th className="px-3 py-3">
+                <th className="px-2 py-2">
                   <button type="button" onClick={() => toggleSort("annee_fiscale")} className="hover:text-brand-blue">
                     Exercice / période{sortMark("annee_fiscale")}
                   </button>
                 </th>
-                <th className="px-3 py-3">
+                <th className="px-2 py-2">
                   <button type="button" onClick={() => toggleSort("niveau")} className="hover:text-brand-blue">
                     Risque{sortMark("niveau")}
                   </button>
                 </th>
-                <th className="px-3 py-3">Motif</th>
-                <th className="px-3 py-3">Statut</th>
-                <th className="px-3 py-3 text-right">Traiter</th>
+                <th className="px-2 py-2">Motif</th>
+                <th className="px-2 py-2">Statut</th>
+                <th className="sticky right-0 z-10 border-l border-line bg-slate-50 px-2 py-2 text-right">Traiter</th>
               </tr>
             </thead>
             <tbody className={loading ? "opacity-50 transition" : "transition"}>
-              {data?.data.map((d) => (
-                <tr key={d.id} className="border-t border-line hover:bg-slate-50 align-top">
-                  <td className="px-3 py-4">
-                    <button
-                      type="button"
-                      onClick={() => setFicheId(d.contribuable.id)}
-                      className="text-left font-medium text-brand-blue underline-offset-2 hover:underline"
-                      title="Voir la fiche du contribuable"
-                    >
-                      {d.contribuable.nom}
-                    </button>
-                    <p className="text-xs text-slate-500">{d.contribuable.nif}</p>
-                  </td>
-                  <td className="px-3 py-4 text-slate-700">{d.contribuable.centre ?? "—"}</td>
-                  <td className="px-3 py-4">
-                    <RegleBadge regle={d.regle} />
-                  </td>
-                  <td className="px-3 py-4 font-medium text-slate-700">{d.type_impot}</td>
-                  <td className="px-3 py-4 text-slate-700">
-                    <PeriodeAnomalie a={d} />
-                  </td>
-                  <td className="px-3 py-4">
-                    <NiveauBadge niveau={d.niveau} />
-                  </td>
-                  <td className="max-w-xs px-3 py-4 text-xs leading-relaxed text-slate-700">{d.motif}</td>
-                  <td className="px-3 py-4">
-                    <StatutBadge statut={d.statut} />
-                    {d.statut === "traitee" && d.traite_par && (
-                      <p className="mt-1 text-xs text-slate-500">
-                        par {d.traite_par}
-                        {d.traite_le ? `, le ${formatDate(d.traite_le)}` : ""}
-                      </p>
-                    )}
-                    {d.statut === "en_traitement" && d.pris_par && (
-                      <p className="mt-1 text-xs text-slate-500">
-                        par {d.pris_par_moi ? "vous" : d.pris_par}
-                        {d.pris_le ? `, depuis ${formatDateHeure(d.pris_le)}` : ""}
-                      </p>
-                    )}
-                    {d.commentaire && <p className="mt-1 max-w-[200px] break-words text-xs italic text-slate-500">{d.commentaire}</p>}
-                  </td>
-                  <td className="px-3 py-3 text-right">
-                    {d.statut === "en_traitement" && !d.pris_par_moi ? (
-                      <div className="flex flex-col items-end gap-1">
-                        <span className="rounded border border-line bg-slate-50 px-3 py-1.5 text-xs font-medium text-slate-500" title={`Dossier pris par ${d.pris_par ?? "un autre utilisateur"}`}>
-                          En traitement
-                        </span>
-                        {canManage && (
-                          <button
-                            type="button"
-                            className="text-xs font-medium text-brand-blue underline disabled:opacity-50"
-                            disabled={priseId === d.id}
-                            onClick={() => {
-                              if (window.confirm(`Ce dossier est pris par ${d.pris_par ?? "un autre utilisateur"}. Le reprendre ?`)) void traiter(d, true);
-                            }}
-                          >
-                            Reprendre
-                          </button>
-                        )}
-                      </div>
-                    ) : (
-                      <button type="button" className={primaryButtonClass + " px-3 py-1.5 text-sm"} disabled={priseId === d.id} onClick={() => void traiter(d)}>
-                        {priseId === d.id
-                          ? "..."
-                          : d.statut === "en_traitement"
-                            ? "Continuer"
-                            : d.statut === "a_traiter"
-                              ? "Traiter"
-                              : "Voir le dossier"}
+              {data?.data.map((g) => {
+                const principal = g.alertes[0];
+                const motifs = g.alertes.map((a) => `${REGLE_LABELS[a.regle] ?? a.regle} — ${a.motif}`).join(" ");
+
+                return (
+                  <tr key={g.contribuable.id} className="group border-t border-line align-top hover:bg-slate-50">
+                    <td className="px-2 py-2.5">
+                      <button
+                        type="button"
+                        onClick={() => setFicheId(g.contribuable.id)}
+                        className="text-left font-medium text-brand-blue underline-offset-2 hover:underline"
+                        title="Voir la fiche du contribuable"
+                      >
+                        {g.contribuable.nom}
                       </button>
-                    )}
-                  </td>
-                </tr>
-              ))}
+                      <p className="text-xs text-slate-500">
+                        {g.contribuable.nif}
+                        {canPickCentre && g.contribuable.centre ? ` · ${g.contribuable.centre}` : ""}
+                      </p>
+                    </td>
+                    <td className="px-2 py-2.5">
+                      <div className="flex max-w-[230px] flex-wrap gap-1">
+                        {g.alertes.map((a) => (
+                          <RegleBadge key={a.id} regle={a.regle} court />
+                        ))}
+                      </div>
+                      <p className="mt-0.5 text-xs text-slate-500">
+                        {g.nb_alertes} anomalie{g.nb_alertes > 1 ? "s" : ""}
+                      </p>
+                    </td>
+                    <td className="px-2 py-2.5 font-medium text-slate-700">{g.types_impot.join(" / ")}</td>
+                    <td className="px-2 py-2.5 text-slate-700">{g.annees.join(", ")}</td>
+                    <td className="px-2 py-2.5">
+                      <NiveauBadge niveau={g.niveau} />
+                    </td>
+                    <td className="px-2 py-2.5">
+                      <div className="line-clamp-3 max-w-[260px] text-xs leading-snug text-slate-700" title={motifs}>
+                        <span className="font-medium">{REGLE_LABELS[principal.regle] ?? principal.regle}</span> — {principal.motif}
+                      </div>
+                      {g.nb_alertes > 1 && (
+                        <p className="mt-0.5 text-[12px] text-slate-500">
+                          + {g.nb_alertes - 1} autre{g.nb_alertes > 2 ? "s" : ""} anomalie{g.nb_alertes > 2 ? "s" : ""}
+                        </p>
+                      )}
+                    </td>
+                    <td className="px-2 py-2.5">
+                      <StatutBadge statut={g.statut} />
+                      {g.statut === "traitee" && g.traite_par && (
+                        <p className="mt-0.5 text-xs text-slate-500">
+                          par {g.traite_par}
+                          {g.traite_le ? `, le ${formatDate(g.traite_le)}` : ""}
+                        </p>
+                      )}
+                      {g.statut === "en_traitement" && g.pris_par && (
+                        <p className="mt-0.5 text-xs text-slate-500">
+                          par {g.pris_par_moi ? "vous" : g.pris_par}
+                          {g.pris_le ? `, depuis ${formatDateHeure(g.pris_le)}` : ""}
+                        </p>
+                      )}
+                      {g.commentaire && (
+                        <p className="mt-0.5 line-clamp-2 max-w-[160px] break-words text-xs italic text-slate-500" title={g.commentaire}>
+                          {g.commentaire}
+                        </p>
+                      )}
+                    </td>
+                    <td className="sticky right-0 z-[1] border-l border-line bg-white px-2 py-2 text-right group-hover:bg-slate-50">
+                      {g.statut === "en_traitement" && !g.pris_par_moi ? (
+                        <div className="flex flex-col items-end gap-0.5">
+                          <span className="rounded border border-line bg-slate-50 px-2 py-1 text-[12px] font-medium text-slate-500" title={`Dossier pris par ${g.pris_par ?? "un autre utilisateur"}`}>
+                            En traitement
+                          </span>
+                          {canManage && (
+                            <button
+                              type="button"
+                              className="text-xs font-medium text-brand-blue underline disabled:opacity-50"
+                              disabled={priseId === g.representant_id}
+                              onClick={() => {
+                                if (window.confirm(`Ce dossier est pris par ${g.pris_par ?? "un autre utilisateur"}. Le reprendre ?`)) void traiter(g, true);
+                              }}
+                            >
+                              Reprendre
+                            </button>
+                          )}
+                        </div>
+                      ) : (
+                        <button
+                          type="button"
+                          className={primaryButtonClass + " px-2.5 py-1 text-xs"}
+                          disabled={priseId === g.representant_id}
+                          onClick={() => void traiter(g)}
+                        >
+                          {priseId === g.representant_id
+                            ? "..."
+                            : g.statut === "en_traitement"
+                              ? "Continuer"
+                              : g.statut === "a_traiter"
+                                ? "Traiter"
+                                : "Voir le dossier"}
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
               {data && data.data.length === 0 && (
                 <tr>
-                  <td colSpan={9} className="px-3 py-10 text-center text-slate-500">
+                  <td colSpan={8} className="px-2 py-8 text-center text-slate-500">
                     {canManage
                       ? "Aucune alerte. Importez des déclarations puis lancez l'analyse."
                       : "Aucune anomalie pour votre centre."}
@@ -612,7 +643,7 @@ export default function DefaillancesPage() {
               )}
               {!data && loading && (
                 <tr>
-                  <td colSpan={9} className="px-3 py-10 text-center text-slate-500">
+                  <td colSpan={8} className="px-2 py-8 text-center text-slate-500">
                     Chargement...
                   </td>
                 </tr>
@@ -622,9 +653,9 @@ export default function DefaillancesPage() {
         </div>
 
         {data && data.total > 0 && (
-          <div className="mt-4 flex flex-col gap-3 border-t border-line pt-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="mt-3 flex flex-col gap-2 border-t border-line pt-3 sm:flex-row sm:items-center sm:justify-between">
             <p className="text-xs text-slate-500">
-              Affichage de {from} à {to} sur {data.total.toLocaleString("fr-FR")} alertes
+              Affichage de {from} à {to} sur {data.total.toLocaleString("fr-FR")} contribuables
             </p>
             <div className="flex items-center gap-1">
               <button
@@ -642,7 +673,7 @@ export default function DefaillancesPage() {
                   type="button"
                   onClick={() => setPage(n)}
                   aria-current={n === data.current_page ? "page" : undefined}
-                  className={`h-8 min-w-8 rounded-md px-2 text-sm transition ${
+                  className={`h-7 min-w-7 rounded-md px-2 text-sm transition ${
                     n === data.current_page ? "bg-brand-blue font-semibold text-white" : "text-slate-600 hover:bg-slate-100"
                   }`}
                 >
@@ -668,11 +699,12 @@ export default function DefaillancesPage() {
         <Modal title="Lancer l'analyse" onClose={() => setAnalyseOpen(false)}>
           <form onSubmit={handleAnalyse} className="space-y-4">
             <p className="text-sm text-slate-600">
-              Deux règles sont appliquées. <strong>Défaut de dépôt</strong> (critère R4 de la DGI) : un contribuable assujetti
-              qui n'a pas déposé une déclaration dont la date limite est dépassée (score sur 5 : déclaration annuelle non déposée = 5,
-              mois de TVA non déposés dans l'exercice : 1 à 4 = 2, 5 à 9 = 3, 10 à 12 = 4) ; les contribuables en cessation ou radiés
-              sont exclus. <strong>Baisse du chiffre d'affaires</strong> de 30 % ou plus : TVA par rapport au même mois de l'année
-              précédente, IR par rapport à l'exercice précédent. L'analyse tourne aussi automatiquement toutes les 5 minutes.
+              Toutes les règles actives sont appliquées. <strong>Défaut de dépôt</strong> (R4) et <strong>baisse du chiffre
+              d'affaires</strong> partent des déclarations (date limite dépassée ; CA en recul de 30 % ou plus). Les{" "}
+              <strong>critères de risque R1, R2, R3, R5, R6 et R7</strong> recoupent l'IR, la TVA, le recoupement et la douane
+              (écart de CA, série de déficits, crédits de TVA, marchés publics, importations, exportations). Chaque contribuable
+              concerné forme un seul dossier, quel que soit le nombre d'anomalies. L'analyse tourne aussi automatiquement toutes
+              les 5 minutes.
               {role === "admin" ? " L'analyse porte sur votre centre." : " L'analyse porte sur tous les centres."}
             </p>
 

@@ -5,6 +5,7 @@ import ProtectedRoute from "./components/ProtectedRoute";
 import AppLayout from "./layouts/AppLayout";
 import AdminLayout from "./layouts/AdminLayout";
 import UsersPage from "./pages/Admin/UsersPage";
+import DemandesInscriptionPage from "./pages/Admin/DemandesInscriptionPage";
 import CentresPage from "./pages/Admin/CentresPage";
 import FonctionsPage from "./pages/Admin/FonctionsPage";
 import ReglesPage from "./pages/Admin/ReglesPage";
@@ -46,6 +47,8 @@ export default function App() {
             <Route path="/admin" element={<AdminLayout />}>
               <Route index element={<Navigate to="utilisateurs" replace />} />
               <Route path="utilisateurs" element={<UsersPage />} />
+              {/* Demandes d'inscription : approbation avant l'envoi du code OTP */}
+              <Route path="demandes" element={<DemandesInscriptionPage />} />
               <Route element={<ProtectedRoute roles={["superadmin", "central"]} />}>
                 <Route path="centres" element={<CentresPage />} />
                 {/* Règles de détection : réglages modifiables sans toucher au code */}
@@ -61,7 +64,6 @@ export default function App() {
         </Route>
       </Route>
 
-      {/* Toute route inconnue redirige vers le login */}
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );

@@ -87,6 +87,9 @@ class DeclarationDemoSeeder extends Seeder
 
         $this->command?->info(count($jeu['contribuables']) . ' contribuables, ' . count($jeu['assujettissements']) . ' assujettissements et '
             . count($jeu['declarations']) . " déclarations de test créés. Lancez maintenant l'analyse.");
+
+        // Exemples pour les critères de risque R1, R2, R3, R5, R6, R7 (base d'analyse risque).
+        $this->call(AnomaliesRisqueDemoSeeder::class);
     }
 
     /**

@@ -7,12 +7,22 @@
 <body style="margin:0;padding:24px;background:#F8F8F8;font-family:Arial,Helvetica,sans-serif;">
     <div style="max-width:480px;margin:0 auto;background:#ffffff;border-radius:16px;padding:32px;">
         <h1 style="margin:0 0 16px;font-size:20px;color:#212E53;">
-            {{ ($contexte ?? 'inscription') === 'connexion' ? 'Code de connexion' : 'Vérification de votre e-mail' }}
+            @if (($contexte ?? 'inscription') === 'connexion')
+                Code de connexion
+            @elseif (($contexte ?? 'inscription') === 'approbation')
+                Demande de compte approuvée
+            @else
+                Vérification de votre e-mail
+            @endif
         </h1>
 
         <p style="margin:0 0 16px;color:#444444;font-size:14px;">
             Bonjour {{ $nom }},<br>
-            Voici votre code de vérification :
+            @if (($contexte ?? 'inscription') === 'approbation')
+                Votre demande de compte vient d'être approuvée. Voici votre code de vérification :
+            @else
+                Voici votre code de vérification :
+            @endif
         </p>
 
         <p style="margin:0 0 16px;text-align:center;">

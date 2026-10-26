@@ -15,6 +15,7 @@ import {
   IconShield,
   IconSliders,
   IconUser,
+  IconUserPlus,
   IconUsers,
 } from "../components/icons";
 
@@ -28,6 +29,7 @@ interface SubItem {
 // Sous-menu "Administration" : chaque entrée est visible selon le rôle (mêmes règles que les routes).
 const ADMIN_ITEMS: SubItem[] = [
   { to: "/admin/utilisateurs", label: "Utilisateurs", icon: <IconUsers className="h-4 w-4" />, roles: ["superadmin", "central", "admin"] },
+  { to: "/admin/demandes", label: "Demandes d'inscription", icon: <IconUserPlus className="h-4 w-4" />, roles: ["superadmin", "central", "admin"] },
   { to: "/admin/centres", label: "Centres", icon: <IconBuilding className="h-4 w-4" />, roles: ["superadmin", "central"] },
   { to: "/admin/regles", label: "Règles de détection", icon: <IconSliders className="h-4 w-4" />, roles: ["superadmin", "central"] },
   { to: "/admin/fonctions", label: "Fonctions & rôles", icon: <IconBriefcase className="h-4 w-4" />, roles: ["superadmin"] },
@@ -95,15 +97,15 @@ export default function AppLayout() {
       )}
 
       <aside
-        className={`fixed inset-y-0 left-0 z-50 flex w-64 flex-col bg-brand-blue px-3 py-5 shadow-lg transition-transform lg:sticky lg:bottom-auto lg:top-0 lg:h-screen lg:shrink-0 lg:translate-x-0 lg:shadow-none ${
+        className={`fixed inset-y-0 left-0 z-50 flex w-60 flex-col bg-brand-blue px-2.5 py-4 shadow-lg transition-transform lg:sticky lg:bottom-auto lg:top-0 lg:h-screen lg:shrink-0 lg:translate-x-0 lg:shadow-none ${
           mobileOpen ? "translate-x-0" : "-translate-x-full"
         }`}
       >
-        <div className="mb-6 flex items-start justify-between border-b border-white/15 px-2 pb-5">
+        <div className="mb-4 flex items-start justify-between border-b border-white/15 px-2 pb-4">
           <div className="flex display-flex space-x-5">
             <div className="flex items-center gap-3">
-              <img src="/logo-dgi.png" alt="Direction Générale des Impôts" className="h-10 w-auto" />
-              <img src="/logo-mef.png" alt="Ministère de l'Économie et des Finances" className="h-10 w-auto" />
+              <img src="/logo-dgi.png" alt="Direction Générale des Impôts" className="h-9 w-auto" />
+              <img src="/logo-mef.png" alt="Ministère de l'Économie et des Finances" className="h-9 w-auto" />
               
             </div>
             <p className="mt-3 text-sm font-semibold tracking-tight text-white">E-Kajy</p>
@@ -187,8 +189,8 @@ export default function AppLayout() {
         </div>
       </aside>
 
-      <main className="min-w-0 flex-1 px-4 py-6 sm:px-8 lg:py-8">
-        <div className="mx-auto max-w-6xl">
+      <main className="min-w-0 flex-1 px-3 py-4 sm:px-5 lg:py-5">
+        <div className="mx-auto max-w-7xl">
           <Outlet />
         </div>
       </main>

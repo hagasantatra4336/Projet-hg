@@ -2,13 +2,12 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import api, { getErrorMessage } from "../services/api";
 import { useAuth } from "../context/AuthContext";
-import type { Defaillance, DefaillanceSummary, Paginated } from "../types";
+import { REGLE_LABELS, type DefaillanceSummary, type GroupeAlerte, type Paginated } from "../types";
 import { ErrorBox, inputClass, primaryButtonClass } from "../components/ui";
 import { IconSearch } from "../components/icons";
 import {
   ContribuableModal,
   NiveauBadge,
-  PeriodeAnomalie,
   RegleBadge,
   formatDate,
   formatDateHeure,
@@ -39,7 +38,7 @@ export default function TraitementsPage() {
   const canManage = role === "superadmin" || role === "central" || role === "admin";
 
   const [onglet, setOnglet] = useState<Onglet>("en_cours");
-  const [data, setData] = useState<Paginated<Defaillance> | null>(null);
+  const [data, setData] = useState<Paginated<GroupeAlerte> | null>(null);
   const [summary, setSummary] = useState<DefaillanceSummary | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string>("");
@@ -78,9 +77,10 @@ export default function TraitementsPage() {
     silentRef.current = false;
 
     api
-      .get<Paginated<Defaillance>>("/defaillances", {
+      .get<Paginated<GroupeAlerte>>("/defaillances", {
         params: {
           page,
+          grouper: 1,
           search: search || undefined,
           statut: onglet === "en_cours" ? "en_traitement" : "traitee",
           sort: onglet === "en_cours" ? "niveau" : "traite_le",
@@ -121,19 +121,20 @@ export default function TraitementsPage() {
     setActionError("");
   }
 
-  /** Ouvre le dossier ; « Traiter »/« Continuer »/« Reprendre » prend d'abord le dossier (atomique côté API). */
-  async function ouvrir(d: Defaillance, mode: "consulter" | "prendre" | "reprendre") {
+  /** Ouvre le dossier contribuable ; « Traiter »/« Continuer »/« Reprendre » prend d'abord toutes ses anomalies (atomique côté API). */
+  async function ouvrir(d: GroupeAlerte, mode: "consulter" | "prendre" | "reprendre") {
     setActionError("");
+    const id = d.representant_id;
 
     if (mode === "consulter") {
-      navigate(`/defaillances/${d.id}/traitement`);
+      navigate(`/defaillances/${id}/traitement`);
       return;
     }
 
-    setBusyId(d.id);
+    setBusyId(id);
     try {
-      await api.post(`/defaillances/${d.id}/prendre`, mode === "reprendre" ? { forcer: true } : {});
-      navigate(`/defaillances/${d.id}/traitement`);
+      await api.post(`/defaillances/${id}/prendre`, { groupe: true, ...(mode === "reprendre" ? { forcer: true } : {}) });
+      navigate(`/defaillances/${id}/traitement`);
     } catch (err) {
       setActionError(getErrorMessage(err, "Impossible de prendre ce dossier."));
       reload(); // l'état du dossier a changé : les deux listes sont mises à jour
@@ -146,16 +147,16 @@ export default function TraitementsPage() {
   const to = data ? Math.min(data.current_page * 10, data.total) : 0;
 
   const onglets: { cle: Onglet; label: string; n: number | undefined }[] = [
-    { cle: "en_cours", label: "Dossiers en cours", n: summary?.en_traitement },
-    { cle: "effectues", label: "Traitements effectués", n: summary?.traitees },
+    { cle: "en_cours", label: "Dossiers en cours", n: summary?.dossiers_en_traitement },
+    { cle: "effectues", label: "Traitements effectués", n: summary?.dossiers_traites },
   ];
 
   return (
     <div>
-      <div className="mb-6">
-        <h1 className="text-2xl font-semibold tracking-tight text-brand-blue">Traitements</h1>
+      <div className="mb-4">
+        <h1 className="text-xl font-semibold tracking-tight text-brand-blue">Traitements</h1>
         <p className="text-sm text-slate-500">
-          Dossiers pris par les agents (en cours) et traitements effectués
+          Dossiers pris par les agents (en cours) et traitements effectués · une ligne par contribuable
           {role === "agent" || role === "admin" ? ` · ${user?.centre?.nom ?? "votre centre"}` : ""}
         </p>
         <p className="mt-1 text-xs text-slate-400">
@@ -173,26 +174,26 @@ export default function TraitementsPage() {
             role="tab"
             aria-selected={onglet === o.cle}
             onClick={() => changerOnglet(o.cle)}
-            className={`rounded-xl border border-line px-4 py-3 text-left transition ${
+            className={`rounded-xl border border-line px-3 py-2 text-left transition ${
               onglet === o.cle ? "border-brand-blue ring-2 ring-brand-blue" : "bg-white hover:border-brand-blue/40"
             }`}
           >
             <p className="text-xs text-slate-500">{o.label}</p>
-            <p className="text-2xl font-semibold text-brand-blue">{o.n ?? "—"}</p>
+            <p className="text-xl font-semibold text-brand-blue">{o.n ?? "—"}</p>
           </button>
         ))}
       </div>
 
-      <section className="mt-6 rounded-xl bg-white p-5 border border-line sm:p-6">
+      <section className="mt-4 rounded-xl bg-white p-4 border border-line sm:p-5">
         {/* Recherche */}
-        <div className="relative mb-5 sm:max-w-xs">
-          <IconSearch className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+        <div className="relative mb-3 sm:max-w-xs">
+          <IconSearch className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
           <input
             value={searchInput}
             onChange={(e) => setSearchInput(e.target.value)}
             placeholder="Nom ou NIF..."
             aria-label="Rechercher un contribuable"
-            className={`${inputClass} py-2 pl-9 text-sm`}
+            className={`${inputClass} py-1.5 pl-8 text-sm`}
           />
         </div>
 
@@ -200,118 +201,134 @@ export default function TraitementsPage() {
         <ErrorBox message={actionError} />
 
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[900px] text-left text-sm">
+          <table className="w-full min-w-[720px] text-left text-sm">
             <thead>
               <tr className="bg-slate-50 text-xs font-semibold text-slate-600">
-                <th className="px-3 py-3">Contribuable</th>
-                <th className="px-3 py-3">Anomalie</th>
-                <th className="px-3 py-3">Impôt</th>
-                <th className="px-3 py-3">Période</th>
-                <th className="px-3 py-3">Risque</th>
+                <th className="px-2 py-2">Contribuable</th>
+                <th className="px-2 py-2">Anomalie</th>
+                <th className="px-2 py-2">Impôt</th>
+                <th className="px-2 py-2">Exercices</th>
+                <th className="px-2 py-2">Risque</th>
                 {onglet === "en_cours" ? (
                   <>
-                    <th className="px-3 py-3">Pris par</th>
-                    <th className="px-3 py-3 text-right">Action</th>
+                    <th className="px-2 py-2">Pris par</th>
+                    <th className="sticky right-0 z-10 border-l border-line bg-slate-50 px-2 py-2 text-right">Action</th>
                   </>
                 ) : (
                   <>
-                    <th className="px-3 py-3">Traité par</th>
-                    <th className="px-3 py-3">Commentaire</th>
-                    <th className="px-3 py-3 text-right">Dossier</th>
+                    <th className="px-2 py-2">Traité par</th>
+                    <th className="px-2 py-2">Commentaire</th>
+                    <th className="sticky right-0 z-10 border-l border-line bg-slate-50 px-2 py-2 text-right">Dossier</th>
                   </>
                 )}
               </tr>
             </thead>
             <tbody className={loading ? "opacity-50 transition" : "transition"}>
-              {data?.data.map((d) => (
-                <tr key={d.id} className="border-t border-line hover:bg-slate-50 align-top">
-                  <td className="px-3 py-4">
-                    <button
-                      type="button"
-                      onClick={() => setFicheId(d.contribuable.id)}
-                      className="text-left font-medium text-brand-blue underline-offset-2 hover:underline"
-                      title="Voir la fiche du contribuable"
-                    >
-                      {d.contribuable.nom}
-                    </button>
-                    <p className="text-xs text-slate-500">{d.contribuable.nif}</p>
-                    <p className="text-xs text-slate-400">{d.contribuable.centre ?? "—"}</p>
-                  </td>
-                  <td className="px-3 py-4">
-                    <RegleBadge regle={d.regle} />
-                    <p className="mt-1 max-w-[260px] text-xs leading-relaxed text-slate-700">{d.motif}</p>
-                  </td>
-                  <td className="px-3 py-4 font-medium text-slate-700">{d.type_impot}</td>
-                  <td className="px-3 py-4 text-slate-700">
-                    <PeriodeAnomalie a={d} />
-                  </td>
-                  <td className="px-3 py-4">
-                    <NiveauBadge niveau={d.niveau} />
-                  </td>
-                  {onglet === "en_cours" ? (
-                    <>
-                      <td className="px-3 py-4 text-slate-700">
-                        {d.pris_par_moi ? <span className="font-medium text-brand-blue">vous</span> : (d.pris_par ?? "—")}
-                        {d.pris_le && <p className="text-xs text-slate-500">depuis {formatDateHeure(d.pris_le)}</p>}
-                      </td>
-                      <td className="px-3 py-3 text-right">
-                        {d.pris_par_moi ? (
+              {data?.data.map((g) => {
+                const principal = g.alertes[0];
+                const motifs = g.alertes.map((a) => `${REGLE_LABELS[a.regle] ?? a.regle} — ${a.motif}`).join(" ");
+
+                return (
+                  <tr key={g.contribuable.id} className="group border-t border-line hover:bg-slate-50 align-top">
+                    <td className="px-2 py-2.5">
+                      <button
+                        type="button"
+                        onClick={() => setFicheId(g.contribuable.id)}
+                        className="text-left font-medium text-brand-blue underline-offset-2 hover:underline"
+                        title="Voir la fiche du contribuable"
+                      >
+                        {g.contribuable.nom}
+                      </button>
+                      <p className="text-xs text-slate-500">{g.contribuable.nif}</p>
+                      <p className="text-xs text-slate-400">{g.contribuable.centre ?? "—"}</p>
+                    </td>
+                    <td className="px-2 py-2.5">
+                      <div className="flex max-w-[230px] flex-wrap gap-1">
+                        {g.alertes.map((a) => (
+                          <RegleBadge key={a.id} regle={a.regle} court />
+                        ))}
+                      </div>
+                      <div className="mt-1 line-clamp-2 max-w-[230px] text-xs leading-snug text-slate-700" title={motifs}>
+                        {principal?.motif}
+                      </div>
+                      <p className="mt-0.5 text-[12px] text-slate-500">
+                        {g.nb_alertes} anomalie{g.nb_alertes > 1 ? "s" : ""}
+                      </p>
+                    </td>
+                    <td className="px-2 py-2.5 font-medium text-slate-700">{g.types_impot.join(" / ")}</td>
+                    <td className="px-2 py-2.5 text-slate-700">{g.annees.join(", ")}</td>
+                    <td className="px-2 py-2.5">
+                      <NiveauBadge niveau={g.niveau} />
+                    </td>
+                    {onglet === "en_cours" ? (
+                      <>
+                        <td className="px-2 py-2.5 text-slate-700">
+                          {g.pris_par_moi ? <span className="font-medium text-brand-blue">vous</span> : (g.pris_par ?? "—")}
+                          {g.pris_le && <p className="text-xs text-slate-500">depuis {formatDateHeure(g.pris_le)}</p>}
+                        </td>
+                        <td className="sticky right-0 z-[1] border-l border-line bg-white px-2 py-2 text-right group-hover:bg-slate-50">
+                          {g.pris_par_moi ? (
+                            <button
+                              type="button"
+                              className={primaryButtonClass + " px-2.5 py-1 text-xs"}
+                              disabled={busyId === g.representant_id}
+                              onClick={() => void ouvrir(g, "prendre")}
+                            >
+                              {busyId === g.representant_id ? "..." : "Continuer"}
+                            </button>
+                          ) : canManage ? (
+                            <button
+                              type="button"
+                              className={primaryButtonClass + " px-2.5 py-1 text-xs"}
+                              disabled={busyId === g.representant_id}
+                              onClick={() => {
+                                if (window.confirm(`Ce dossier est pris par ${g.pris_par ?? "un autre utilisateur"}. Le reprendre ?`)) {
+                                  void ouvrir(g, "reprendre");
+                                }
+                              }}
+                            >
+                              {busyId === g.representant_id ? "..." : "Reprendre"}
+                            </button>
+                          ) : (
+                            <button
+                              type="button"
+                              className="text-xs font-medium text-brand-blue underline disabled:opacity-50"
+                              disabled={busyId === g.representant_id}
+                              onClick={() => void ouvrir(g, "consulter")}
+                            >
+                              Consulter
+                            </button>
+                          )}
+                        </td>
+                      </>
+                    ) : (
+                      <>
+                        <td className="px-2 py-2.5 text-slate-700">
+                          {g.traite_par ?? "—"}
+                          {g.traite_le && <p className="text-xs text-slate-500">le {formatDate(g.traite_le)}</p>}
+                        </td>
+                        <td className="px-2 py-2.5">
+                          <div className="line-clamp-2 max-w-[180px] text-xs italic text-slate-500" title={g.commentaire ?? undefined}>
+                            {g.commentaire ?? "—"}
+                          </div>
+                        </td>
+                        <td className="sticky right-0 z-[1] border-l border-line bg-white px-2 py-2 text-right group-hover:bg-slate-50">
                           <button
                             type="button"
-                            className={primaryButtonClass + " px-3 py-1.5 text-sm"}
-                            disabled={busyId === d.id}
-                            onClick={() => void ouvrir(d, "prendre")}
+                            className="text-xs font-medium text-brand-blue underline"
+                            onClick={() => void ouvrir(g, "consulter")}
                           >
-                            {busyId === d.id ? "..." : "Continuer"}
+                            Voir le dossier
                           </button>
-                        ) : canManage ? (
-                          <button
-                            type="button"
-                            className={primaryButtonClass + " px-3 py-1.5 text-sm"}
-                            disabled={busyId === d.id}
-                            onClick={() => {
-                              if (window.confirm(`Ce dossier est pris par ${d.pris_par ?? "un autre utilisateur"}. Le reprendre ?`)) {
-                                void ouvrir(d, "reprendre");
-                              }
-                            }}
-                          >
-                            {busyId === d.id ? "..." : "Reprendre"}
-                          </button>
-                        ) : (
-                          <button
-                            type="button"
-                            className="text-xs font-medium text-brand-blue underline disabled:opacity-50"
-                            disabled={busyId === d.id}
-                            onClick={() => void ouvrir(d, "consulter")}
-                          >
-                            Consulter
-                          </button>
-                        )}
-                      </td>
-                    </>
-                  ) : (
-                    <>
-                      <td className="px-3 py-4 text-slate-700">
-                        {d.traite_par ?? "—"}
-                        {d.traite_le && <p className="text-xs text-slate-500">le {formatDate(d.traite_le)}</p>}
-                      </td>
-                      <td className="max-w-xs px-3 py-4 text-xs italic text-slate-500">{d.commentaire ?? "—"}</td>
-                      <td className="px-3 py-3 text-right">
-                        <button
-                          type="button"
-                          className="text-xs font-medium text-brand-blue underline"
-                          onClick={() => void ouvrir(d, "consulter")}
-                        >
-                          Voir le dossier
-                        </button>
-                      </td>
-                    </>
-                  )}
-                </tr>
-              ))}
+                        </td>
+                      </>
+                    )}
+                  </tr>
+                );
+              })}
               {data && data.data.length === 0 && (
                 <tr>
-                  <td colSpan={7} className="px-3 py-10 text-center text-slate-500">
+                  <td colSpan={onglet === "en_cours" ? 7 : 8} className="px-2 py-8 text-center text-slate-500">
                     {onglet === "en_cours"
                       ? "Aucun dossier en cours de traitement : prenez-en un depuis la page Défaillances (bouton « Traiter »)."
                       : "Aucun traitement effectué pour l'instant."}
@@ -320,7 +337,7 @@ export default function TraitementsPage() {
               )}
               {!data && loading && (
                 <tr>
-                  <td colSpan={7} className="px-3 py-10 text-center text-slate-500">
+                  <td colSpan={onglet === "en_cours" ? 7 : 8} className="px-2 py-8 text-center text-slate-500">
                     Chargement...
                   </td>
                 </tr>
