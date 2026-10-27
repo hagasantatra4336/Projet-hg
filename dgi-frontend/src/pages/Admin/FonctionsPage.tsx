@@ -7,6 +7,8 @@ import {
   EditButton,
   ErrorBox,
   Field,
+  FormActions,
+  FormGrid,
   Modal,
   RoleBadge,
   inputClass,
@@ -175,44 +177,59 @@ export default function FonctionsPage() {
       {editing && (
         <Modal title={editing === "new" ? "Nouvelle fonction" : "Modifier la fonction"} onClose={() => setEditing(null)}>
           <ErrorBox message={formError} />
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <Field label="Nom de la fonction">
-              <input
-                className={inputClass}
-                value={form.nom}
-                onChange={(e) => setForm({ ...form, nom: e.target.value })}
+          <form onSubmit={handleSubmit} className="space-y-5">
+            <FormGrid>
+              <Field label="Nom de la fonction" required className="sm:col-span-2">
+                <input
+                  className={inputClass}
+                  value={form.nom}
+                  onChange={(e) => setForm({ ...form, nom: e.target.value })}
+                  placeholder="Ex. : Agent de saisie, Chef de centre..."
+                  required
+                />
+              </Field>
+              <Field
+                label="Rôle associé"
                 required
-              />
-            </Field>
-            <Field label="Rôle associé">
-              <select
-                className={inputClass}
-                value={form.role}
-                onChange={(e) => setForm({ ...form, role: e.target.value as Role })}
+                hint={ROLE_HELP[form.role]}
+                className="sm:col-span-2"
               >
-                {ROLES.map((r) => (
-                  <option key={r} value={r}>
-                    {ROLE_LABELS[r]}
-                  </option>
-                ))}
-              </select>
-            </Field>
-            <p className="text-xs text-slate-500">{ROLE_HELP[form.role]}</p>
-            <div className="flex justify-end gap-3 pt-2">
+                <select
+                  className={inputClass}
+                  value={form.role}
+                  onChange={(e) => setForm({ ...form, role: e.target.value as Role })}
+                >
+                  {ROLES.map((r) => (
+                    <option key={r} value={r}>
+                      {ROLE_LABELS[r]}
+                    </option>
+                  ))}
+                </select>
+              </Field>
+            </FormGrid>
+            <FormActions>
               <button type="button" className={secondaryButtonClass} onClick={() => setEditing(null)}>
                 Annuler
               </button>
               <button type="submit" className={primaryButtonClass} disabled={saving}>
                 {saving ? "Enregistrement..." : "Enregistrer"}
               </button>
-            </div>
+            </FormActions>
           </form>
         </Modal>
       )}
 
       {toDelete && (
         <ConfirmDialog
-          message={`Supprimer la fonction « ${toDelete.nom} » ?`}
+          title="Supprimer la fonction"
+          message={`Supprimer définitivement la fonction « ${toDelete.nom} » ?`}
+          detail={
+            (toDelete.users_count ?? 0) > 0
+              ? `${toDelete.users_count} utilisateur(s) occupent cette fonction : réaffectez-les d'abord, sinon la suppression sera refusée.`
+              : "Cette action est définitive."
+          }
+          confirmLabel="Supprimer"
+          loadingLabel="Suppression..."
           loading={deleting}
           onConfirm={handleDelete}
           onCancel={() => setToDelete(null)}

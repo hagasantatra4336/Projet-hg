@@ -8,6 +8,9 @@ import {
   EditButton,
   ErrorBox,
   Field,
+  FormActions,
+  FormGrid,
+  FormSection,
   Modal,
   PasswordInput,
   RoleBadge,
@@ -15,6 +18,7 @@ import {
   primaryButtonClass,
   secondaryButtonClass,
 } from "../../components/ui";
+import SearchSelect from "../../components/SearchSelect";
 
 interface Options {
   centres: { id: number; nom: string }[];
@@ -208,21 +212,20 @@ export default function UsersPage() {
           onChange={(e) => setSearchInput(e.target.value)}
         />
         {!isAdmin && (
-          <select
-            className={`${inputClass} max-w-[14rem]`}
-            value={centreFilter}
-            onChange={(e) => {
-              setCentreFilter(e.target.value);
-              setPage(1);
-            }}
-          >
-            <option value="">Tous les centres</option>
-            {options.centres.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.nom}
-              </option>
-            ))}
-          </select>
+          <div className="w-full max-w-[16rem]">
+            <SearchSelect
+              options={options.centres.map((c) => ({ value: String(c.id), label: c.nom }))}
+              value={centreFilter}
+              onChange={(v) => {
+                setCentreFilter(v);
+                setPage(1);
+              }}
+              className={inputClass}
+              label="Filtrer par centre"
+              clearLabel="Tous les centres"
+              emptyLabel="Aucun centre trouvé"
+            />
+          </div>
         )}
         <div className="flex-1" />
         <button type="button" className={primaryButtonClass} onClick={openNew}>
@@ -321,104 +324,140 @@ export default function UsersPage() {
           onClose={() => setEditing(null)}
         >
           <ErrorBox message={formError} />
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <Field label="Nom">
-              <input
-                className={inputClass}
-                value={form.nom}
-                onChange={(e) => setForm({ ...form, nom: e.target.value })}
-                required
-              />
-            </Field>
-            <Field label="E-mail">
-              <input
-                className={inputClass}
-                type="email"
-                value={form.email}
-                onChange={(e) => setForm({ ...form, email: e.target.value })}
-                required
-              />
-            </Field>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <Field label="IM (matricule)">
-                <input
-                  className={inputClass}
-                  value={form.im}
-                  onChange={(e) => setForm({ ...form, im: e.target.value })}
-                />
-              </Field>
-              <Field label="Téléphone">
-                <input
-                  className={inputClass}
-                  value={form.telephone}
-                  onChange={(e) => setForm({ ...form, telephone: e.target.value })}
-                />
-              </Field>
-            </div>
-            <Field label="Adresse">
-              <input
-                className={inputClass}
-                value={form.adresse}
-                onChange={(e) => setForm({ ...form, adresse: e.target.value })}
-              />
-            </Field>
-            <Field label="Fonction">
-              <select
-                className={inputClass}
-                value={form.fonction_id}
-                onChange={(e) => setForm({ ...form, fonction_id: e.target.value })}
-                disabled={editing !== "new" && editing.id === me.id}
-                required
-              >
-                <option value="">— Choisir —</option>
-                {options.fonctions.map((f) => (
-                  <option key={f.id} value={f.id}>
-                    {f.nom} ({ROLE_LABELS[f.role]})
-                  </option>
-                ))}
-              </select>
-            </Field>
-            <Field label={needsCentre ? "Centre" : "Centre (facultatif)"}>
-              <select
-                className={inputClass}
-                value={form.centre_id}
-                onChange={(e) => setForm({ ...form, centre_id: e.target.value })}
-                disabled={isAdmin}
-                required={needsCentre}
-              >
-                <option value="">— Aucun —</option>
-                {options.centres.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.nom}
-                  </option>
-                ))}
-              </select>
-            </Field>
-            <Field label={editing === "new" ? "Mot de passe" : "Nouveau mot de passe (laisser vide pour ne pas changer)"}>
-              <PasswordInput
-                className={inputClass}
-                value={form.password}
-                onChange={(e) => setForm({ ...form, password: e.target.value })}
-                minLength={8}
-                required={editing === "new"}
-                autoComplete="new-password"
-              />
-            </Field>
-            <div className="flex justify-end gap-3 pt-2">
+          <form onSubmit={handleSubmit} className="space-y-6">
+            <FormSection title="Identité">
+              <FormGrid>
+                <Field label="Nom" required className="sm:col-span-2">
+                  <input
+                    className={inputClass}
+                    value={form.nom}
+                    onChange={(e) => setForm({ ...form, nom: e.target.value })}
+                    autoComplete="name"
+                    required
+                  />
+                </Field>
+                <Field label="E-mail" required className="sm:col-span-2" hint="Sert d'identifiant de connexion et reçoit les codes de validation.">
+                  <input
+                    className={inputClass}
+                    type="email"
+                    value={form.email}
+                    onChange={(e) => setForm({ ...form, email: e.target.value })}
+                    autoComplete="email"
+                    required
+                  />
+                </Field>
+                <Field label="IM (matricule)" optional>
+                  <input
+                    className={inputClass}
+                    value={form.im}
+                    onChange={(e) => setForm({ ...form, im: e.target.value })}
+                  />
+                </Field>
+                <Field label="Téléphone" optional>
+                  <input
+                    className={inputClass}
+                    value={form.telephone}
+                    onChange={(e) => setForm({ ...form, telephone: e.target.value })}
+                    autoComplete="tel"
+                  />
+                </Field>
+                <Field label="Adresse" optional className="sm:col-span-2">
+                  <input
+                    className={inputClass}
+                    value={form.adresse}
+                    onChange={(e) => setForm({ ...form, adresse: e.target.value })}
+                    autoComplete="street-address"
+                  />
+                </Field>
+              </FormGrid>
+            </FormSection>
+
+            <FormSection title="Accès et sécurité">
+              <FormGrid>
+                <Field
+                  label="Fonction"
+                  required
+                  className="sm:col-span-2"
+                  hint="La fonction détermine le rôle et les droits de l'utilisateur."
+                >
+                  <SearchSelect
+                    options={options.fonctions.map((f) => ({
+                      value: String(f.id),
+                      label: f.nom,
+                      description: ROLE_LABELS[f.role],
+                    }))}
+                    value={form.fonction_id}
+                    onChange={(v) => setForm({ ...form, fonction_id: v })}
+                    className={inputClass}
+                    disabled={editing !== "new" && editing.id === me.id}
+                    required
+                    label="Fonction"
+                    placeholder="— Choisir —"
+                    emptyLabel="Aucune fonction trouvée"
+                  />
+                </Field>
+                <Field
+                  label="Centre"
+                  required={needsCentre}
+                  optional={!needsCentre}
+                  className="sm:col-span-2"
+                  hint={isAdmin ? "Un admin est rattaché à son propre centre." : undefined}
+                >
+                  <SearchSelect
+                    options={options.centres.map((c) => ({ value: String(c.id), label: c.nom }))}
+                    value={form.centre_id}
+                    onChange={(v) => setForm({ ...form, centre_id: v })}
+                    className={inputClass}
+                    disabled={isAdmin}
+                    required={needsCentre}
+                    label="Centre"
+                    placeholder={needsCentre ? "Rechercher un centre..." : "— Aucun —"}
+                    clearLabel={needsCentre ? undefined : "— Aucun —"}
+                    emptyLabel="Aucun centre trouvé"
+                  />
+                </Field>
+                <Field
+                  label="Mot de passe"
+                  required={editing === "new"}
+                  optional={editing !== "new"}
+                  className="sm:col-span-2"
+                  hint={
+                    editing === "new"
+                      ? "8 caractères minimum."
+                      : "Laissez vide pour conserver le mot de passe actuel."
+                  }
+                >
+                  <PasswordInput
+                    className={inputClass}
+                    value={form.password}
+                    onChange={(e) => setForm({ ...form, password: e.target.value })}
+                    minLength={8}
+                    required={editing === "new"}
+                    autoComplete="new-password"
+                  />
+                </Field>
+              </FormGrid>
+            </FormSection>
+
+            <FormActions>
               <button type="button" className={secondaryButtonClass} onClick={() => setEditing(null)}>
                 Annuler
               </button>
               <button type="submit" className={primaryButtonClass} disabled={saving}>
                 {saving ? "Enregistrement..." : "Enregistrer"}
               </button>
-            </div>
+            </FormActions>
           </form>
         </Modal>
       )}
 
       {toDelete && (
         <ConfirmDialog
-          message={`Supprimer l'utilisateur « ${toDelete.nom} » ?`}
+          title="Supprimer l'utilisateur"
+          message={`Supprimer définitivement le compte de « ${toDelete.nom} » ?`}
+          detail="L'utilisateur ne pourra plus se connecter. Ses traitements déjà enregistrés conservent son nom."
+          confirmLabel="Supprimer"
+          loadingLabel="Suppression..."
           loading={deleting}
           onConfirm={handleDelete}
           onCancel={() => setToDelete(null)}

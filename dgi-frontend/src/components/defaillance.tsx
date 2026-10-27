@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import api, { getErrorMessage } from "../services/api";
 import {
   ETAT_LABELS,
@@ -336,6 +337,18 @@ export function ContribuableModal({ id, onClose }: { id: number; onClose: () => 
             ×
           </button>
         </div>
+
+        {fiche && (
+          <p className="-mt-2 mb-4">
+            <Link
+              to={`/contribuables/${id}`}
+              onClick={onClose}
+              className="text-xs font-medium text-brand-blue underline"
+            >
+              Ouvrir la fiche complète (résultat de l'analyse, observations, export PDF) →
+            </Link>
+          </p>
+        )}
 
         <ErrorBox message={error} />
         {!fiche && !error && <p className="py-10 text-center text-sm text-slate-500">Chargement...</p>}

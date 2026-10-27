@@ -120,7 +120,6 @@ export default function LoginPage() {
   return (
     <AuthLayout>
       <h1 className="text-2xl font-bold tracking-tight text-brand-blue">Connexion</h1>
-      <p className="mt-1 text-sm text-gray-500">Accédez à votre espace compte.</p>
 
       <div className="mb-6 mt-5 flex items-center gap-2">
         {[1, 2].map((s) => (

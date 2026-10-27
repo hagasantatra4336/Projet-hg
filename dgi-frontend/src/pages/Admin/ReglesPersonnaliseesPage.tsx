@@ -3,7 +3,16 @@ import { Link } from "react-router-dom";
 import api, { getErrorMessage } from "../../services/api";
 import type { GroupeConditions, ModeleRegle, OptionsReglesPerso, ReglePerso, ResultatSimulation } from "../../typesReglesPerso";
 import { ACTION_LABELS, NIVEAU_REGLE_LABELS, STATUT_REGLE_LABELS } from "../../typesReglesPerso";
-import { ErrorBox, inputClass, primaryButtonClass, secondaryButtonClass } from "../../components/ui";
+import {
+  ConfirmDialog,
+  ErrorBox,
+  Field,
+  FormActions,
+  FormGrid,
+  inputClass,
+  primaryButtonClass,
+  secondaryButtonClass,
+} from "../../components/ui";
 import { formatDateHeure } from "../../components/defaillance";
 import ConditionsEditor, { compter, decrire } from "./reglesPerso/ConditionsEditor";
 import IndicateursSection from "./reglesPerso/IndicateursSection";
@@ -76,91 +85,97 @@ function NouvelleRegle({ options, onCree }: { options: OptionsReglesPerso; onCre
       <h2 className="text-lg font-semibold text-brand-blue">Nouvelle règle à partir d'un modèle</h2>
       <p className="mt-1 text-sm text-slate-600">La règle est créée en brouillon : elle ne produit aucune alerte tant qu'elle n'est pas simulée puis activée. Vous pourrez ensuite modifier ses conditions.</p>
 
-      <form onSubmit={creer} className="mt-4 grid gap-4 md:grid-cols-2">
-        <label className="block text-sm text-slate-700 md:col-span-2">
-          Modèle
-          <select className={inputClass} value={modele.code} onChange={(e) => setModele(options.modeles.find((m) => m.code === e.target.value) ?? options.modeles[0])}>
-            {options.modeles.map((m) => (
-              <option key={m.code} value={m.code}>
-                {m.nom}
-              </option>
-            ))}
-          </select>
-          <span className="mt-1 block text-xs text-slate-500">{modele.description}</span>
-        </label>
+      <form onSubmit={creer} className="mt-5 space-y-4">
+        <FormGrid>
+          <Field label="Modèle" required className="sm:col-span-2" hint={modele.description}>
+            <select className={inputClass} value={modele.code} onChange={(e) => setModele(options.modeles.find((m) => m.code === e.target.value) ?? options.modeles[0])}>
+              {options.modeles.map((m) => (
+                <option key={m.code} value={m.code}>
+                  {m.nom}
+                </option>
+              ))}
+            </select>
+          </Field>
 
-        <label className="block text-sm text-slate-700 md:col-span-2">
-          Nom de la règle
-          <input className={inputClass} value={nom} onChange={(e) => setNom(e.target.value)} required maxLength={150} />
-        </label>
+          <Field label="Nom de la règle" required className="sm:col-span-2" hint="Nom explicite, visible dans la liste des règles et l'historique.">
+            <input
+              className={inputClass}
+              value={nom}
+              onChange={(e) => setNom(e.target.value)}
+              required
+              maxLength={150}
+              placeholder="Ex. : Baisse du chiffre d'affaires sur deux exercices"
+            />
+          </Field>
 
-        {modele.parametres.map((p) => {
-          const libelle: Record<string, string> = {
-            indicateur: "Indicateur",
-            indicateur_b: "Second indicateur",
-            seuil_pct: "Seuil (%)",
-            valeur: "Valeur",
-            comparateur: "Comparateur",
-          };
-          return (
-            <label key={p.cle} className="block text-sm text-slate-700">
-              {libelle[p.cle] ?? p.cle}
-              {p.type === "indicateur" ? (
-                <select className={inputClass} value={String(valeurs[p.cle] ?? "")} onChange={(e) => setValeurs((v) => ({ ...v, [p.cle]: e.target.value }))}>
-                  {options.indicateurs.map((i) => (
-                    <option key={i.code} value={i.code}>
-                      {i.libelle}
-                    </option>
-                  ))}
-                </select>
-              ) : p.type === "choix" ? (
-                <select className={inputClass} value={String(valeurs[p.cle] ?? "")} onChange={(e) => setValeurs((v) => ({ ...v, [p.cle]: e.target.value }))}>
-                  {(p.options ?? []).map((o) => (
-                    <option key={o} value={o}>
-                      {o}
-                    </option>
-                  ))}
-                </select>
-              ) : (
-                <input
-                  type="number"
-                  step="any"
-                  className={inputClass}
-                  min={p.min}
-                  max={p.max}
-                  required
-                  value={String(valeurs[p.cle] ?? "")}
-                  onChange={(e) => setValeurs((v) => ({ ...v, [p.cle]: e.target.value === "" ? "" : Number(e.target.value) }))}
-                />
-              )}
-            </label>
-          );
-        })}
+          {modele.parametres.map((p) => {
+            const libelle: Record<string, string> = {
+              indicateur: "Indicateur",
+              indicateur_b: "Second indicateur",
+              seuil_pct: "Seuil (%)",
+              valeur: "Valeur",
+              comparateur: "Comparateur",
+            };
+            return (
+              <Field key={p.cle} label={libelle[p.cle] ?? p.cle} required={p.type !== "indicateur" && p.type !== "choix"}>
+                {p.type === "indicateur" ? (
+                  <select className={inputClass} value={String(valeurs[p.cle] ?? "")} onChange={(e) => setValeurs((v) => ({ ...v, [p.cle]: e.target.value }))}>
+                    {options.indicateurs.map((i) => (
+                      <option key={i.code} value={i.code}>
+                        {i.libelle}
+                      </option>
+                    ))}
+                  </select>
+                ) : p.type === "choix" ? (
+                  <select className={inputClass} value={String(valeurs[p.cle] ?? "")} onChange={(e) => setValeurs((v) => ({ ...v, [p.cle]: e.target.value }))}>
+                    {(p.options ?? []).map((o) => (
+                      <option key={o} value={o}>
+                        {o}
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <input
+                    type="number"
+                    step="any"
+                    className={inputClass}
+                    min={p.min}
+                    max={p.max}
+                    required
+                    value={String(valeurs[p.cle] ?? "")}
+                    onChange={(e) => setValeurs((v) => ({ ...v, [p.cle]: e.target.value === "" ? "" : Number(e.target.value) }))}
+                  />
+                )}
+              </Field>
+            );
+          })}
 
-        <div className="md:col-span-2">
-          <span className="mb-1 block text-sm text-slate-700">Impôts contrôlés</span>
-          <ImpotsChoix options={options.impots} choisis={impots} onChange={setImpots} />
-        </div>
+          <div className="sm:col-span-2">
+            <span className="mb-1 block text-sm font-medium text-slate-700">
+              Impôts contrôlés <span className="text-red-600" aria-hidden="true">*</span>
+            </span>
+            <ImpotsChoix options={options.impots} choisis={impots} onChange={setImpots} />
+            <span className="mt-1 block text-xs text-slate-500">Au moins un impôt : la règle ne s'applique qu'aux déclarations de ces impôts.</span>
+          </div>
 
-        <label className="block text-sm text-slate-700">
-          Niveau de risque des alertes
-          <select className={inputClass} value={niveau} onChange={(e) => setNiveau(e.target.value)}>
-            {options.niveaux.map((n) => (
-              <option key={n} value={n}>
-                {NIVEAU_REGLE_LABELS[n] ?? n}
-              </option>
-            ))}
-          </select>
-        </label>
+          <Field label="Niveau de risque des alertes" hint="Niveau attribué aux alertes produites par cette règle.">
+            <select className={inputClass} value={niveau} onChange={(e) => setNiveau(e.target.value)}>
+              {options.niveaux.map((n) => (
+                <option key={n} value={n}>
+                  {NIVEAU_REGLE_LABELS[n] ?? n}
+                </option>
+              ))}
+            </select>
+          </Field>
+        </FormGrid>
 
-        <div className="md:col-span-2">
-          <ErrorBox message={error} />
-        </div>
-        <div className="flex justify-end md:col-span-2">
+        <ErrorBox message={error} />
+
+        <FormActions>
           <button type="submit" className={primaryButtonClass} disabled={saving || impots.length === 0}>
             {saving ? "Création..." : "Créer le brouillon"}
           </button>
-        </div>
+        </FormActions>
       </form>
     </section>
   );
@@ -221,6 +236,7 @@ function RegleCard({ regle, options, onChange, onSupprimee }: { regle: ReglePers
   const [busy, setBusy] = useState<string>("");
   const [error, setError] = useState<string>("");
   const [message, setMessage] = useState<string>("");
+  const [aConfirmer, setAConfirmer] = useState<"desactiver" | "supprimer" | null>(null);
 
   useEffect(() => {
     setNom(regle.nom);
@@ -251,18 +267,24 @@ function RegleCard({ regle, options, onChange, onSupprimee }: { regle: ReglePers
   const charger = () => action("detail", async () => (await api.get<ReglePerso>(`/regles-personnalisees/${id}`)).data, "");
   const simuler = () => action("simuler", async () => (await api.post<ReglePerso>(`/regles-personnalisees/${id}/simuler`, {})).data, "Simulation terminée : aucune alerte n'a été créée.");
   const activer = () => action("activer", async () => (await api.post<ReglePerso>(`/regles-personnalisees/${id}/activer`)).data, "Règle activée : elle s'applique à la prochaine analyse.");
-  const desactiver = () => {
-    if (!window.confirm("Désactiver cette règle ? Ses alertes seront masquées (pas supprimées) et plus aucune ne sera créée.")) return;
-    action("desactiver", async () => (await api.post<ReglePerso>(`/regles-personnalisees/${id}/desactiver`)).data, "Règle désactivée.");
-  };
-  const supprimer = async () => {
-    if (!window.confirm("Supprimer définitivement ce brouillon ?")) return;
+  async function confirmerDesactivation() {
+    const ok = await action(
+      "desactiver",
+      async () => (await api.post<ReglePerso>(`/regles-personnalisees/${id}/desactiver`)).data,
+      "Règle désactivée."
+    );
+    if (ok) setAConfirmer(null);
+  }
+  async function confirmerSuppression() {
     const ok = await action("supprimer", async () => {
       await api.delete(`/regles-personnalisees/${id}`);
       return null;
     }, "");
-    if (ok) onSupprimee(id);
-  };
+    if (ok) {
+      setAConfirmer(null);
+      onSupprimee(id);
+    }
+  }
   async function enregistrer(e: FormEvent) {
     e.preventDefault();
     const ok = await action(
@@ -292,18 +314,16 @@ function RegleCard({ regle, options, onChange, onSupprimee }: { regle: ReglePers
 
       {edition && (
         <form onSubmit={enregistrer} className="mt-5 space-y-4">
-          <label className="block text-sm text-slate-700">
-            Nom
+          <Field label="Nom" required>
             <input className={inputClass} value={nom} onChange={(e) => setNom(e.target.value)} required maxLength={150} />
-          </label>
+          </Field>
           <ConditionsEditor groupe={conditions} options={options} onChange={setConditions} total={compter(conditions)} />
           <div>
-            <span className="mb-1 block text-sm text-slate-700">Impôts contrôlés</span>
+            <span className="mb-1 block text-sm font-medium text-slate-700">Impôts contrôlés</span>
             <ImpotsChoix options={options.impots} choisis={impots} onChange={setImpots} />
           </div>
           <div className="grid gap-4 md:grid-cols-2">
-            <label className="block text-sm text-slate-700">
-              Niveau de risque
+            <Field label="Niveau de risque">
               <select className={inputClass} value={niveau} onChange={(e) => setNiveau(e.target.value)}>
                 {options.niveaux.map((n) => (
                   <option key={n} value={n}>
@@ -311,20 +331,19 @@ function RegleCard({ regle, options, onChange, onSupprimee }: { regle: ReglePers
                   </option>
                 ))}
               </select>
-            </label>
-            <label className="block text-sm text-slate-700">
-              Exercices analysés en plus de l'année en cours
+            </Field>
+            <Field label="Exercices analysés en plus de l'année en cours" hint="0 = année en cours seulement (maximum 5).">
               <input type="number" min={0} max={5} className={inputClass} value={fenetre} onChange={(e) => setFenetre(Number(e.target.value))} />
-            </label>
+            </Field>
           </div>
-          <div className="flex justify-end gap-3">
+          <FormActions>
             <button type="button" className={secondaryButtonClass} onClick={() => setEdition(false)}>
               Annuler
             </button>
             <button type="submit" className={primaryButtonClass} disabled={busy !== ""}>
               {busy === "enregistrer" ? "Enregistrement..." : "Enregistrer"}
             </button>
-          </div>
+          </FormActions>
         </form>
       )}
 
@@ -340,7 +359,7 @@ function RegleCard({ regle, options, onChange, onSupprimee }: { regle: ReglePers
           </button>
         )}
         {peutSupprimer && (
-          <button type="button" className={secondaryButtonClass} onClick={supprimer} disabled={busy !== ""}>
+          <button type="button" className={secondaryButtonClass} onClick={() => setAConfirmer("supprimer")} disabled={busy !== ""}>
             Supprimer
           </button>
         )}
@@ -348,7 +367,7 @@ function RegleCard({ regle, options, onChange, onSupprimee }: { regle: ReglePers
           {busy === "simuler" ? "Simulation..." : "Simuler"}
         </button>
         {regle.statut === "active" ? (
-          <button type="button" className={secondaryButtonClass} onClick={desactiver} disabled={busy !== ""}>
+          <button type="button" className={secondaryButtonClass} onClick={() => setAConfirmer("desactiver")} disabled={busy !== ""}>
             Désactiver
           </button>
         ) : (
@@ -377,6 +396,33 @@ function RegleCard({ regle, options, onChange, onSupprimee }: { regle: ReglePers
           )}
         </div>
       </details>
+
+      {aConfirmer === "supprimer" && (
+        <ConfirmDialog
+          title="Supprimer la règle"
+          message={`Supprimer définitivement le brouillon « ${regle.nom} » ?`}
+          detail="La règle et son historique seront supprimés. Cette action est irréversible."
+          confirmLabel="Supprimer"
+          loadingLabel="Suppression..."
+          loading={busy === "supprimer"}
+          onConfirm={() => void confirmerSuppression()}
+          onCancel={() => setAConfirmer(null)}
+        />
+      )}
+
+      {aConfirmer === "desactiver" && (
+        <ConfirmDialog
+          title="Désactiver la règle"
+          message={`Désactiver la règle « ${regle.nom} » ?`}
+          detail="Ses alertes existantes seront masquées (sans être supprimées) et plus aucune ne sera créée jusqu'à réactivation."
+          confirmLabel="Désactiver"
+          loadingLabel="Désactivation..."
+          tone="primary"
+          loading={busy === "desactiver"}
+          onConfirm={() => void confirmerDesactivation()}
+          onCancel={() => setAConfirmer(null)}
+        />
+      )}
     </section>
   );
 }

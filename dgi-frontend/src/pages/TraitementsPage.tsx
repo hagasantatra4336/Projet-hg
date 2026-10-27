@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import api, { getErrorMessage } from "../services/api";
 import { useAuth } from "../context/AuthContext";
 import { REGLE_LABELS, type DefaillanceSummary, type GroupeAlerte, type Paginated } from "../types";
-import { ErrorBox, inputClass, primaryButtonClass } from "../components/ui";
+import { ConfirmDialog, ErrorBox, inputClass, primaryButtonClass } from "../components/ui";
 import { IconSearch } from "../components/icons";
 import {
   ContribuableModal,
@@ -44,6 +44,7 @@ export default function TraitementsPage() {
   const [error, setError] = useState<string>("");
   const [actionError, setActionError] = useState<string>("");
   const [busyId, setBusyId] = useState<number | null>(null);
+  const [aReprendre, setAReprendre] = useState<GroupeAlerte | null>(null);
   const [reloadKey, setReloadKey] = useState<number>(0);
   const silentRef = useRef<boolean>(false);
   const [ficheId, setFicheId] = useState<number | null>(null);
@@ -155,14 +156,6 @@ export default function TraitementsPage() {
     <div>
       <div className="mb-4">
         <h1 className="text-xl font-semibold tracking-tight text-brand-blue">Traitements</h1>
-        <p className="text-sm text-slate-500">
-          Dossiers pris par les agents (en cours) et traitements effectués · une ligne par contribuable
-          {role === "agent" || role === "admin" ? ` · ${user?.centre?.nom ?? "votre centre"}` : ""}
-        </p>
-        <p className="mt-1 text-xs text-slate-400">
-          Un dossier pris depuis la page Défaillances (bouton « Traiter ») apparaît ici jusqu'à sa clôture ; sans activité, le verrou est
-          libéré automatiquement après 4 h.
-        </p>
       </div>
 
       {/* Onglets : en cours / effectués */}
@@ -281,11 +274,7 @@ export default function TraitementsPage() {
                               type="button"
                               className={primaryButtonClass + " px-2.5 py-1 text-xs"}
                               disabled={busyId === g.representant_id}
-                              onClick={() => {
-                                if (window.confirm(`Ce dossier est pris par ${g.pris_par ?? "un autre utilisateur"}. Le reprendre ?`)) {
-                                  void ouvrir(g, "reprendre");
-                                }
-                              }}
+                              onClick={() => setAReprendre(g)}
                             >
                               {busyId === g.representant_id ? "..." : "Reprendre"}
                             </button>
@@ -389,6 +378,24 @@ export default function TraitementsPage() {
       </section>
 
       {ficheId !== null && <ContribuableModal id={ficheId} onClose={() => setFicheId(null)} />}
+
+      {aReprendre && (
+        <ConfirmDialog
+          title="Reprendre le dossier"
+          message={`Ce dossier est déjà pris par ${aReprendre.pris_par ?? "un autre utilisateur"}. Le reprendre ?`}
+          detail="Il passera « En traitement » à votre nom et l'utilisateur précédent ne pourra plus y saisir de commentaire."
+          confirmLabel="Reprendre le dossier"
+          loadingLabel="Reprise..."
+          tone="primary"
+          loading={busyId === aReprendre.representant_id}
+          onConfirm={() => {
+            const dossier = aReprendre;
+            setAReprendre(null);
+            void ouvrir(dossier, "reprendre");
+          }}
+          onCancel={() => setAReprendre(null)}
+        />
+      )}
     </div>
   );
 }

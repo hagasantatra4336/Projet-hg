@@ -16,14 +16,17 @@ import {
   type StatutAlerte,
 } from "../types";
 import {
+  ConfirmDialog,
   ErrorBox,
   Field,
+  FormActions,
   Modal,
   inputClass,
   primaryButtonClass,
   secondaryButtonClass,
 } from "../components/ui";
 import { IconRefresh, IconSearch, IconUpload } from "../components/icons";
+import SearchSelect from "../components/SearchSelect";
 import {
   ContribuableModal,
   NiveauBadge,
@@ -32,7 +35,6 @@ import {
   aujourdhui,
   formatDate,
   formatDateHeure,
-  formatJour,
 } from "../components/defaillance";
 
 // ---------------------------------------------------------------------
@@ -64,7 +66,11 @@ interface ImportResult {
 
 type SortField = "niveau" | "type_impot" | "annee_fiscale";
 
-const selectClass = `${inputClass} py-2 text-sm`;
+// Contrôles de filtre compacts (même hauteur, largeur selon le contenu)
+const filterInput =
+  "rounded-lg border border-slate-300 bg-white px-2 py-1.5 text-xs text-slate-900 placeholder-slate-400 " +
+  "focus:outline-none focus:border-brand-blue focus:ring-1 focus:ring-brand-blue transition " +
+  "disabled:bg-slate-100 disabled:text-slate-500";
 
 // ---------------------------------------------------------------------
 //  Page
@@ -103,6 +109,7 @@ export default function DefaillancesPage() {
   const navigate = useNavigate();
   const [priseId, setPriseId] = useState<number | null>(null);
   const [priseErreur, setPriseErreur] = useState<string>("");
+  const [aReprendre, setAReprendre] = useState<GroupeAlerte | null>(null);
 
   // Lancer l'analyse
   const [analyseOpen, setAnalyseOpen] = useState<boolean>(false);
@@ -201,6 +208,21 @@ export default function DefaillancesPage() {
     setPage(1);
   }
 
+  const filtresActifs =
+    searchInput.trim() !== "" ||
+    filters.regle !== "" ||
+    filters.niveau !== "" ||
+    filters.type_impot !== "" ||
+    filters.statut !== "a_traiter" ||
+    filters.annee_fiscale !== "" ||
+    filters.centre_id !== "";
+
+  function resetFilters() {
+    setSearchInput("");
+    setFilters({ regle: "", niveau: "", type_impot: "", statut: "a_traiter", annee_fiscale: "", centre_id: "" });
+    setPage(1);
+  }
+
   function toggleSort(field: SortField) {
     if (sort === field) {
       setDir((d) => (d === "asc" ? "desc" : "asc"));
@@ -267,6 +289,7 @@ export default function DefaillancesPage() {
       setFilters((f) => ({ ...f, statut: "a_traiter", regle: "", niveau: "", type_impot: "", annee_fiscale: "" }));
       setPage(1);
       reload();
+      window.dispatchEvent(new Event("notifications:maj"));
     } catch (err) {
       setAnalyseError(getErrorMessage(err, "L'analyse a échoué."));
     } finally {
@@ -301,6 +324,7 @@ export default function DefaillancesPage() {
       });
       setImportResult(res.data);
       reload();
+      window.dispatchEvent(new Event("notifications:maj"));
     } catch (err) {
       setImportError(getErrorMessage(err, "Import impossible."));
     } finally {
@@ -339,18 +363,6 @@ export default function DefaillancesPage() {
       <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <h1 className="text-xl font-semibold tracking-tight text-brand-blue">Anomalies de déclaration</h1>
-          <p className="text-sm text-slate-500">
-            Toutes les anomalies d'un contribuable réunies en un seul dossier
-            {role === "agent" || role === "admin" ? ` · ${user?.centre?.nom ?? "votre centre"}` : ""}
-          </p>
-          <p className="mt-1 text-xs text-slate-400">
-            Analyse automatique toutes les minutes
-            {summary
-              ? summary.derniere_analyse
-                ? ` · dernière : ${formatDateHeure(summary.derniere_analyse.at)} (au ${formatJour(summary.derniere_analyse.date)})`
-                : " · aucune analyse effectuée pour l'instant"
-              : ""}
-          </p>
         </div>
 
         {canManage && (
@@ -373,12 +385,17 @@ export default function DefaillancesPage() {
         )}
       </div>
 
-      {/* Cartes : alertes à traiter par niveau de risque */}
+      {/* Cartes : dossiers à traiter et alertes par niveau de risque */}
       <div className="grid gap-2 sm:grid-cols-4">
         <div className="rounded-xl bg-white p-3 border border-line">
-          <p className="text-xs text-slate-500">Alertes à traiter</p>
-          <p className="text-2xl font-semibold text-brand-blue">{summary ? summary.a_traiter : "—"}</p>
-          {summary && summary.en_traitement > 0 && <p className="text-xs text-slate-500">+ {summary.en_traitement} en traitement</p>}
+          <p className="text-xs text-slate-500">Dossiers à traiter</p>
+          <p className="text-2xl font-semibold text-brand-blue">{summary ? summary.dossiers_a_traiter : "—"}</p>
+          {summary && (
+            <p className="text-xs text-slate-500">
+              {summary.a_traiter} alerte{summary.a_traiter > 1 ? "s" : ""}
+              {summary.dossiers_en_traitement > 0 ? ` · ${summary.dossiers_en_traitement} en traitement` : ""}
+            </p>
+          )}
         </div>
         {cards.map((c) => (
           <button
@@ -390,7 +407,7 @@ export default function DefaillancesPage() {
               filters.niveau === c.niveau ? "ring-2 ring-brand-blue" : ""
             }`}
           >
-            <p className="text-xs text-slate-500">Risque {NIVEAU_LABELS[c.niveau].toLowerCase()}</p>
+            <p className="text-xs text-slate-500">Alertes · risque {NIVEAU_LABELS[c.niveau].toLowerCase()}</p>
             <p className="flex items-center gap-2 text-2xl font-semibold text-brand-blue">
               {c.value ?? "—"}
               <NiveauBadge niveau={c.niveau} />
@@ -400,22 +417,23 @@ export default function DefaillancesPage() {
       </div>
 
       <section className="mt-4 rounded-xl bg-white p-4 border border-line sm:p-5">
-        {/* Filtres */}
-        <div className="mb-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-6">
-          <div className="relative lg:col-span-2">
+        {/* Filtres : une seule ligne sur grand écran, retour à la ligne sinon */}
+        <div role="group" aria-label="Filtres des alertes" className="mb-4 flex flex-wrap items-center gap-1.5">
+          <div className="relative w-full sm:w-36 sm:shrink-0">
             <IconSearch className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
             <input
               value={searchInput}
               onChange={(e) => setSearchInput(e.target.value)}
               placeholder="Nom ou NIF..."
               aria-label="Rechercher un contribuable"
-              className={`${inputClass} py-1.5 pl-8 text-sm`}
+              className={`${filterInput} w-full pl-8`}
             />
           </div>
 
           <select
             aria-label="Type d'anomalie"
-            className={selectClass}
+            title="Type d'anomalie"
+            className={`${filterInput} sm:shrink-0`}
             value={filters.regle}
             onChange={(e) => changeFilter("regle", e.target.value as Filters["regle"])}
           >
@@ -429,7 +447,8 @@ export default function DefaillancesPage() {
 
           <select
             aria-label="Niveau de risque"
-            className={selectClass}
+            title="Niveau de risque"
+            className={`${filterInput} sm:shrink-0`}
             value={filters.niveau}
             onChange={(e) => changeFilter("niveau", e.target.value as Filters["niveau"])}
           >
@@ -443,7 +462,8 @@ export default function DefaillancesPage() {
 
           <select
             aria-label="Type d'impôt"
-            className={selectClass}
+            title="Type d'impôt"
+            className={`${filterInput} sm:shrink-0`}
             value={filters.type_impot}
             onChange={(e) => changeFilter("type_impot", e.target.value)}
           >
@@ -457,7 +477,8 @@ export default function DefaillancesPage() {
 
           <select
             aria-label="Statut"
-            className={selectClass}
+            title="Statut"
+            className={`${filterInput} sm:shrink-0`}
             value={filters.statut}
             onChange={(e) => changeFilter("statut", e.target.value as Filters["statut"])}
           >
@@ -475,26 +496,40 @@ export default function DefaillancesPage() {
             max={2100}
             aria-label="Exercice"
             title="Exercice (année fiscale) de l'anomalie"
-            placeholder="Exercice (ex. 2025)"
-            className={selectClass}
+            placeholder="Exercice"
+            className={`${filterInput} w-20 sm:shrink-0`}
             value={filters.annee_fiscale}
             onChange={(e) => changeFilter("annee_fiscale", e.target.value)}
           />
 
           {canPickCentre && (
-            <select
-              aria-label="Centre"
-              className={`${selectClass} lg:col-span-2`}
-              value={filters.centre_id}
-              onChange={(e) => changeFilter("centre_id", e.target.value)}
+            <div className="w-full sm:w-40 sm:shrink-0">
+              <SearchSelect
+                options={centres.map((c) => ({
+                  value: String(c.id),
+                  label: c.nom,
+                  description: c.adresse,
+                }))}
+                value={filters.centre_id}
+                onChange={(v) => changeFilter("centre_id", v)}
+                className={`${filterInput} w-full`}
+                label="Centre"
+                clearLabel="Tous les centres"
+                emptyLabel="Aucun centre trouvé"
+              />
+            </div>
+          )}
+
+          {filtresActifs && (
+            <button
+              type="button"
+              onClick={resetFilters}
+              title="Réinitialiser les filtres"
+              aria-label="Réinitialiser les filtres"
+              className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-slate-300 bg-white text-slate-500 transition hover:border-brand-blue/40 hover:text-brand-blue"
             >
-              <option value="">Tous les centres</option>
-              {centres.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.nom}
-                </option>
-              ))}
-            </select>
+              <IconRefresh className="h-4 w-4" />
+            </button>
           )}
         </div>
 
@@ -604,9 +639,7 @@ export default function DefaillancesPage() {
                               type="button"
                               className="text-xs font-medium text-brand-blue underline disabled:opacity-50"
                               disabled={priseId === g.representant_id}
-                              onClick={() => {
-                                if (window.confirm(`Ce dossier est pris par ${g.pris_par ?? "un autre utilisateur"}. Le reprendre ?`)) void traiter(g, true);
-                              }}
+                              onClick={() => setAReprendre(g)}
                             >
                               Reprendre
                             </button>
@@ -715,7 +748,11 @@ export default function DefaillancesPage() {
               </p>
             )}
 
-            <Field label="Date d'analyse (les dates limites dépassées à cette date sont contrôlées)">
+            <Field
+              label="Date d'analyse"
+              required
+              hint="Les dates limites dépassées à cette date sont contrôlées. Par défaut, aujourd'hui."
+            >
               <input
                 type="date"
                 required
@@ -725,14 +762,14 @@ export default function DefaillancesPage() {
               />
             </Field>
 
-            <div className="flex justify-end gap-3">
+            <FormActions>
               <button type="button" className={secondaryButtonClass} onClick={() => setAnalyseOpen(false)}>
                 Fermer
               </button>
               <button type="submit" className={primaryButtonClass} disabled={analyseRunning || !analysePeriode}>
                 {analyseRunning ? "Analyse en cours..." : "Lancer l'analyse"}
               </button>
-            </div>
+            </FormActions>
           </form>
         </Modal>
       )}
@@ -770,7 +807,7 @@ export default function DefaillancesPage() {
               </div>
             )}
 
-            <Field label="Fichier CSV (5 Mo max)">
+            <Field label="Fichier CSV" required hint="Format CSV séparé par des points-virgules, 5 Mo maximum.">
               <input
                 type="file"
                 accept=".csv,.txt,text/csv"
@@ -779,20 +816,38 @@ export default function DefaillancesPage() {
               />
             </Field>
 
-            <div className="flex justify-end gap-3">
+            <FormActions>
               <button type="button" className={secondaryButtonClass} onClick={() => setImportOpen(false)}>
                 Fermer
               </button>
               <button type="submit" className={primaryButtonClass} disabled={importing || !file}>
                 {importing ? "Import en cours..." : "Importer"}
               </button>
-            </div>
+            </FormActions>
           </form>
         </Modal>
       )}
 
       {/* Fiche contribuable (en dernier : s'affiche au-dessus de la fenêtre « Traiter ») */}
       {ficheId !== null && <ContribuableModal id={ficheId} onClose={() => setFicheId(null)} />}
+
+      {aReprendre && (
+        <ConfirmDialog
+          title="Reprendre le dossier"
+          message={`Ce dossier est déjà pris par ${aReprendre.pris_par ?? "un autre utilisateur"}. Le reprendre ?`}
+          detail="Il passera « En traitement » à votre nom et l'utilisateur précédent ne pourra plus y saisir de commentaire."
+          confirmLabel="Reprendre le dossier"
+          loadingLabel="Reprise..."
+          tone="primary"
+          loading={priseId === aReprendre.representant_id}
+          onConfirm={() => {
+            const dossier = aReprendre;
+            setAReprendre(null);
+            void traiter(dossier, true);
+          }}
+          onCancel={() => setAReprendre(null)}
+        />
+      )}
     </div>
   );
 }

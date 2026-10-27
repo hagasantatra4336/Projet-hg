@@ -254,6 +254,9 @@ class DefaillanceController extends Controller
         }
 
         // Une ligne par contribuable dans les listes groupées : compteurs de dossiers pour la page Traitements
+        $libres = $this->scopedQuery($request);
+        VerrouAlerte::libres($libres);
+        $summary['dossiers_a_traiter'] = $libres->distinct()->count('alertes.contribuable_id');
         $summary['dossiers_en_traitement'] = (clone $pris)->distinct()->count('alertes.contribuable_id');
         $summary['dossiers_traites'] = $this->scopedQuery($request)
             ->where('alertes.statut', Alerte::TRAITEE)

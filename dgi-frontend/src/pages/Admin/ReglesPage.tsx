@@ -2,7 +2,15 @@ import { useEffect, useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
 import api, { getErrorMessage } from "../../services/api";
 import type { FormuleRegle, ParametreSchema, RegleConfig, ValeursRegle } from "../../types";
-import { DeleteButton, ErrorBox, inputClass, primaryButtonClass, secondaryButtonClass } from "../../components/ui";
+import {
+  ConfirmDialog,
+  DeleteButton,
+  ErrorBox,
+  FormActions,
+  inputClass,
+  primaryButtonClass,
+  secondaryButtonClass,
+} from "../../components/ui";
 import { formatDateHeure } from "../../components/defaillance";
 
 type Tranche = (number | "")[];
@@ -181,6 +189,7 @@ function RegleCard({ regle, onChange }: { regle: RegleConfig; onChange: (r: Regl
   const [saving, setSaving] = useState<boolean>(false);
   const [error, setError] = useState<string>("");
   const [message, setMessage] = useState<string>("");
+  const [aReinitialiser, setAReinitialiser] = useState<boolean>(false);
 
   // Recharge le formulaire quand la règle est mise à jour (enregistrement ou réinitialisation)
   useEffect(() => {
@@ -206,7 +215,6 @@ function RegleCard({ regle, onChange }: { regle: RegleConfig; onChange: (r: Regl
   }
 
   async function reinitialiser() {
-    if (!window.confirm("Rétablir les valeurs par défaut et réactiver cette règle ?")) return;
     setSaving(true);
     setError("");
     setMessage("");
@@ -219,6 +227,7 @@ function RegleCard({ regle, onChange }: { regle: RegleConfig; onChange: (r: Regl
       setError(getErrorMessage(err, "Réinitialisation impossible."));
     } finally {
       setSaving(false);
+      setAReinitialiser(false);
     }
   }
 
@@ -260,15 +269,29 @@ function RegleCard({ regle, onChange }: { regle: RegleConfig; onChange: (r: Regl
         <ErrorBox message={error} />
         {message && <p className="rounded-lg border border-brand-green/60 bg-leaf-50 px-3 py-2 text-sm text-brand-blue">{message}</p>}
 
-        <div className="flex flex-wrap justify-end gap-3 border-t border-line pt-4">
-          <button type="button" className={secondaryButtonClass} onClick={reinitialiser} disabled={saving}>
+        <FormActions>
+          <button type="button" className={secondaryButtonClass} onClick={() => setAReinitialiser(true)} disabled={saving}>
             Valeurs par défaut
           </button>
           <button type="submit" className={primaryButtonClass} disabled={saving}>
             {saving ? "Enregistrement..." : "Enregistrer"}
           </button>
-        </div>
+        </FormActions>
       </form>
+
+      {aReinitialiser && (
+        <ConfirmDialog
+          title="Rétablir les valeurs par défaut"
+          message={`Rétablir les réglages d'origine de la règle « ${regle.nom} » et la réactiver ?`}
+          detail="Vos réglages personnalisés seront remplacés et l'activation d'origine rétablie. Cette action s'applique à la prochaine analyse ; elle peut être annulée en réenregistrant vos valeurs."
+          confirmLabel="Rétablir"
+          loadingLabel="Rétablissement..."
+          tone="primary"
+          loading={saving}
+          onConfirm={() => void reinitialiser()}
+          onCancel={() => setAReinitialiser(false)}
+        />
+      )}
     </section>
   );
 }

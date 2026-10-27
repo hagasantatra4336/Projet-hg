@@ -9,6 +9,7 @@ use App\Http\Controllers\Api\DefaillanceController;
 use App\Http\Controllers\Api\DemandeInscriptionController;
 use App\Http\Controllers\Api\FonctionController;
 use App\Http\Controllers\Api\IndicateurController;
+use App\Http\Controllers\Api\NotificationController;
 use App\Http\Controllers\Api\ProfileController;
 use App\Http\Controllers\Api\RegleController;
 use App\Http\Controllers\Api\ReglePersonnaliseeController;
@@ -64,6 +65,9 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/logout', [AuthController::class, 'logout']);
     Route::get('/me', [AuthController::class, 'me']);
 
+    // Compteurs de la navigation (dossiers à traiter, dossiers en cours, demandes à approuver)
+    Route::get('/notifications', NotificationController::class);
+
     // Espace utilisateur : demande de modification de ses infos / mot de passe (→ e-mail de confirmation)
     Route::post('/profile/request-change', [ProfileController::class, 'requestChange'])->middleware('throttle:5,1,profile-change');
     // Annuler la demande en attente (bouton « Annuler » de la page d'attente)
@@ -77,8 +81,13 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/defaillances/{alerte}/prendre', [DefaillanceController::class, 'prendre']);
     Route::post('/defaillances/{alerte}/liberer', [DefaillanceController::class, 'liberer']);
     Route::get('/defaillances/{alerte}/dossier', [DefaillanceController::class, 'dossier']);
-    // Fiche d'un contribuable (informations, alertes, historique des déclarations) : même filtrage par centre
+    // Fiche d'un contribuable (informations, coordonnées, alertes, historique, synthèse, observations) :
+    // même filtrage par centre. Le PDF reprend exactement les mêmes données.
     Route::get('/contribuables/{contribuable}', [ContribuableController::class, 'show']);
+    Route::get('/contribuables/{contribuable}/fiche.pdf', [ContribuableController::class, 'pdf']);
+    Route::patch('/contribuables/{contribuable}/contact', [ContribuableController::class, 'updateContact']);
+    Route::post('/contribuables/{contribuable}/observations', [ContribuableController::class, 'storeObservation'])
+        ->middleware('throttle:30,1,observations');
 
     // Analyse automatique : appelée par le front toutes les 5 min tant qu'une session est ouverte, quel que soit le rôle
     Route::post('/defaillances/auto', AnalyseAutoController::class)->middleware('throttle:100,1,defaillances-auto');

@@ -1,4 +1,4 @@
-import { useState, type InputHTMLAttributes, type ReactNode } from "react";
+import { useState, type ButtonHTMLAttributes, type InputHTMLAttributes, type ReactNode } from "react";
 import type { Role } from "../types";
 import { ROLE_LABELS } from "../types";
 import { IconEdit, IconTrash } from "./icons";
@@ -18,6 +18,43 @@ export const secondaryButtonClass =
 
 export const dangerButtonClass =
   "rounded-lg bg-red-600 text-white font-medium px-3 py-1.5 hover:bg-red-700 disabled:opacity-50 transition";
+
+export type IconButtonTone = "primary" | "neutral" | "danger";
+
+const ICON_BUTTON_TONE: Record<IconButtonTone, string> = {
+  primary: "bg-brand-blue text-white hover:bg-brand-blue-light",
+  neutral: "border border-slate-300 bg-white text-slate-700 hover:bg-slate-50",
+  danger: "border border-red-200 bg-white text-red-600 hover:bg-red-50",
+};
+
+/** Classes d'un bouton carré icône (36 px) — utilisable aussi sur un <Link>. */
+export function iconButtonClass(tone: IconButtonTone = "neutral"): string {
+  return (
+    "inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg transition " +
+    "focus:outline-none focus:ring-2 focus:ring-brand-blue " +
+    "disabled:opacity-50 disabled:cursor-not-allowed " +
+    ICON_BUTTON_TONE[tone]
+  );
+}
+
+/** Bouton icône compact ; l'infobulle et le libellé accessible portent le sens de l'action. */
+export function IconButton({
+  label,
+  tone = "neutral",
+  className = "",
+  type = "button",
+  ...props
+}: ButtonHTMLAttributes<HTMLButtonElement> & { label: string; tone?: IconButtonTone }) {
+  return (
+    <button
+      {...props}
+      type={type}
+      title={label}
+      aria-label={label}
+      className={`${iconButtonClass(tone)} ${className}`}
+    />
+  );
+}
 
 /** Champ mot de passe avec bouton « afficher / masquer ». Accepte les mêmes props qu'un <input>. */
 export function PasswordInput({
@@ -75,12 +112,70 @@ export function ErrorBox({ message }: { message: string }) {
   );
 }
 
-export function Field({ label, children }: { label: string; children: ReactNode }) {
+export function Field({
+  label,
+  children,
+  hint,
+  required,
+  optional,
+  className = "",
+}: {
+  label: string;
+  children: ReactNode;
+  hint?: ReactNode;
+  required?: boolean;
+  optional?: boolean;
+  className?: string;
+}) {
   return (
-    <label className="block">
-      <span className="block text-sm font-medium text-slate-700 mb-1">{label}</span>
+    <label className={`block ${className}`}>
+      <span className="mb-1 flex items-baseline gap-1 text-sm font-medium text-slate-700">
+        <span>{label}</span>
+        {required && (
+          <span className="text-red-600" aria-hidden="true" title="Champ obligatoire">
+            *
+          </span>
+        )}
+        {!required && optional && <span className="text-xs font-normal text-slate-400">facultatif</span>}
+      </span>
       {children}
+      {hint && <span className="mt-1 block text-xs leading-snug text-slate-500">{hint}</span>}
     </label>
+  );
+}
+
+/** Grille de champs : une colonne sur mobile, deux dès 640 px. */
+export function FormGrid({ children, className = "" }: { children: ReactNode; className?: string }) {
+  return <div className={`grid gap-4 sm:grid-cols-2 ${className}`}>{children}</div>;
+}
+
+/** Bloc de formulaire avec un titre de section (au sein d'une même carte ou modale). */
+export function FormSection({
+  title,
+  hint,
+  children,
+}: {
+  title: string;
+  hint?: ReactNode;
+  children: ReactNode;
+}) {
+  return (
+    <fieldset className="space-y-3">
+      <legend className="mb-2 w-full border-b border-line pb-1.5 text-xs font-semibold uppercase tracking-wide text-slate-500">
+        {title}
+      </legend>
+      {hint && <p className="text-xs leading-snug text-slate-500">{hint}</p>}
+      {children}
+    </fieldset>
+  );
+}
+
+/** Barre d'actions d'un formulaire : séparateur, alignement à droite, retour à la ligne sur mobile. */
+export function FormActions({ children, className = "" }: { children: ReactNode; className?: string }) {
+  return (
+    <div className={`mt-6 flex flex-wrap items-center justify-end gap-3 border-t border-line pt-4 ${className}`}>
+      {children}
+    </div>
   );
 }
 
@@ -134,26 +229,81 @@ export function Modal({
   );
 }
 
+/** Boîte de confirmation : suppression (danger) ou action à conséquence (primary). */
 export function ConfirmDialog({
+  title = "Confirmation",
   message,
+  detail,
+  confirmLabel = "Supprimer",
+  loadingLabel,
+  tone = "danger",
   loading,
   onConfirm,
   onCancel,
 }: {
-  message: string;
+  title?: string;
+  message: ReactNode;
+  detail?: ReactNode;
+  confirmLabel?: string;
+  loadingLabel?: string;
+  tone?: "danger" | "primary";
   loading: boolean;
   onConfirm: () => void;
   onCancel: () => void;
 }) {
+  const danger = tone === "danger";
+
   return (
-    <Modal title="Confirmation" onClose={onCancel}>
-      <p className="text-sm text-slate-700 mb-6">{message}</p>
-      <div className="flex justify-end gap-3">
-        <button type="button" className={secondaryButtonClass} onClick={onCancel} disabled={loading}>
+    <Modal title={title} onClose={loading ? () => undefined : onCancel}>
+      <div className="flex items-start gap-4">
+        <span
+          className={`mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-full ${
+            danger ? "bg-red-50 text-red-600" : "bg-brand-blue/10 text-brand-blue"
+          }`}
+          aria-hidden="true"
+        >
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth={1.8}
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            className="h-5 w-5"
+          >
+            {danger ? (
+              <>
+                <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+                <line x1="12" y1="9" x2="12" y2="13" />
+                <line x1="12" y1="17" x2="12.01" y2="17" />
+              </>
+            ) : (
+              <>
+                <circle cx="12" cy="12" r="10" />
+                <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" />
+                <line x1="12" y1="17" x2="12.01" y2="17" />
+              </>
+            )}
+          </svg>
+        </span>
+        <div className="min-w-0 space-y-2">
+          <p className="text-sm leading-relaxed text-slate-700">{message}</p>
+          {detail && <div className="text-xs leading-snug text-slate-500">{detail}</div>}
+        </div>
+      </div>
+
+      <div className="mt-6 flex flex-wrap justify-end gap-3">
+        <button type="button" className={secondaryButtonClass} onClick={onCancel} disabled={loading} autoFocus>
           Annuler
         </button>
-        <button type="button" className={dangerButtonClass} onClick={onConfirm} disabled={loading}>
-          {loading ? "Suppression..." : "Supprimer"}
+        <button
+          type="button"
+          className={danger ? dangerButtonClass : primaryButtonClass}
+          onClick={onConfirm}
+          disabled={loading}
+        >
+          {loading ? (loadingLabel ?? `${confirmLabel}...`) : confirmLabel}
         </button>
       </div>
     </Modal>

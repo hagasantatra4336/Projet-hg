@@ -3,6 +3,7 @@ import { useSearchParams } from "react-router-dom";
 import api, { getErrorMessage } from "../services/api";
 import { primaryButtonClass } from "../components/ui";
 import { LogoBand } from "../components/AuthShell";
+import ThemeToggle from "../components/ThemeToggle";
 
 interface ConfirmResponse {
   message: string;
@@ -41,57 +42,59 @@ export default function ConfirmChangePage() {
 
   return (
     <div className="min-h-screen bg-canvas flex items-center justify-center px-4 py-10">
-      <div className="w-full max-w-md overflow-hidden rounded-xl border border-line bg-white text-center">
-        <LogoBand />
-        <div className="p-8">
-        <h1 className="text-xl font-semibold tracking-tight text-brand-blue mb-4">Confirmation des modifications</h1>
+      <div className="w-full max-w-md">
+        <div className="mb-3 flex justify-end">
+          <ThemeToggle />
+        </div>
 
-        {!token && (
-          <p className="text-sm text-red-700">Lien incomplet. Utilisez le lien reçu par e-mail.</p>
-        )}
+        <div className="overflow-hidden rounded-xl border border-line bg-white text-center">
+          <LogoBand />
+          <div className="p-8">
+            <h1 className="mb-4 text-xl font-semibold tracking-tight text-brand-blue">Confirmation des modifications</h1>
 
-        {token && (status === "idle" || status === "loading") && (
-          <>
-            <p className="text-sm text-slate-600 mb-6">
-              Cliquez sur le bouton pour appliquer les modifications demandées sur votre compte.
-            </p>
-            <button
-              type="button"
-              className={`${primaryButtonClass} w-full`}
-              onClick={handleConfirm}
-              disabled={status === "loading"}
-            >
-              {status === "loading" ? "Confirmation..." : "Confirmer les modifications"}
-            </button>
-          </>
-        )}
+            {!token && <p className="text-sm text-red-700">Lien incomplet. Utilisez le lien reçu par e-mail.</p>}
 
-        {status === "done" && (
-          <>
-            <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-brand-green text-2xl font-semibold tracking-tight text-brand-blue">
-              ✓
-            </div>
-            <p className="text-sm text-brand-blue bg-leaf-50 border border-brand-green/60 rounded-lg px-3 py-2 mb-4">
-              {message}
-            </p>
-            <p className="text-sm text-slate-600">
-              {passwordChanged
-                ? "Votre mot de passe a été modifié : toutes vos sessions ont été fermées. Reconnectez-vous depuis l'application."
-                : "La page d'attente de l'application se met à jour et vous redirige vers votre profil. Vous pouvez fermer cette page."}
-            </p>
-          </>
-        )}
+            {token && (status === "idle" || status === "loading") && (
+              <>
+                <p className="mb-6 text-sm text-slate-600">
+                  Cliquez sur le bouton pour appliquer les modifications demandées sur votre compte.
+                </p>
+                <button
+                  type="button"
+                  className={`${primaryButtonClass} w-full`}
+                  onClick={handleConfirm}
+                  disabled={status === "loading"}
+                >
+                  {status === "loading" ? "Confirmation..." : "Confirmer les modifications"}
+                </button>
+              </>
+            )}
 
-        {status === "error" && (
-          <>
-            <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2 mb-4">
-              {message}
-            </p>
-            <p className="text-sm text-slate-600">
-              Refaites une demande depuis la page « Mon profil » de l'application.
-            </p>
-          </>
-        )}
+            {status === "done" && (
+              <>
+                <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-brand-green text-2xl font-semibold tracking-tight text-brand-blue">
+                  ✓
+                </div>
+                <p className="mb-4 rounded-lg border border-brand-green/60 bg-leaf-50 px-3 py-2 text-sm text-brand-blue">
+                  {message}
+                </p>
+                <p className="text-sm text-slate-600">
+                  {passwordChanged
+                    ? "Votre mot de passe a été modifié : toutes vos sessions ont été fermées. Reconnectez-vous depuis l'application."
+                    : "La page d'attente de l'application se met à jour et vous redirige vers votre profil. Vous pouvez fermer cette page."}
+                </p>
+              </>
+            )}
+
+            {status === "error" && (
+              <>
+                <p className="mb-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-600">{message}</p>
+                <p className="text-sm text-slate-600">
+                  Refaites une demande depuis la page « Mon profil » de l'application.
+                </p>
+              </>
+            )}
+          </div>
         </div>
       </div>
     </div>

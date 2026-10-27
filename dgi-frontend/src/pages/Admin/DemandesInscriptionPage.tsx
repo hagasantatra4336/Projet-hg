@@ -121,6 +121,7 @@ export default function DemandesInscriptionPage() {
       setAction(null);
       setMotif("");
       setReloadKey((k) => k + 1);
+      window.dispatchEvent(new Event("notifications:maj"));
     } catch (err) {
       setError(
         getErrorMessage(

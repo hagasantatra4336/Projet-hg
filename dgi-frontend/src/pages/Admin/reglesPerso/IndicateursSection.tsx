@@ -1,7 +1,16 @@
 import { useEffect, useState, type FormEvent } from "react";
 import api, { getErrorMessage } from "../../../services/api";
 import type { IndicateurAdmin } from "../../../typesReglesPerso";
-import { DeleteButton, ErrorBox, inputClass, primaryButtonClass } from "../../../components/ui";
+import {
+  ConfirmDialog,
+  DeleteButton,
+  ErrorBox,
+  Field,
+  FormActions,
+  FormGrid,
+  inputClass,
+  primaryButtonClass,
+} from "../../../components/ui";
 
 interface Reponse {
   indicateurs: IndicateurAdmin[];
@@ -18,6 +27,8 @@ export default function IndicateursSection({ impots, onChange }: { impots: strin
   const [colonne, setColonne] = useState<string>("");
   const [unite, setUnite] = useState<string>("");
   const [choisis, setChoisis] = useState<string[]>([]);
+  const [aSupprimer, setASupprimer] = useState<IndicateurAdmin | null>(null);
+  const [supprimant, setSupprimant] = useState<boolean>(false);
 
   function charger() {
     api
@@ -60,14 +71,18 @@ export default function IndicateursSection({ impots, onChange }: { impots: strin
   }
 
   async function supprimer(i: IndicateurAdmin) {
-    if (!window.confirm(`Supprimer l'indicateur « ${i.libelle} » ?`)) return;
+    setSupprimant(true);
     setError("");
     try {
       await api.delete(`/indicateurs/${i.id}`);
+      setASupprimer(null);
       charger();
       onChange();
     } catch (err) {
+      setASupprimer(null);
       setError(getErrorMessage(err, "Suppression impossible."));
+    } finally {
+      setSupprimant(false);
     }
   }
 
@@ -98,59 +113,72 @@ export default function IndicateursSection({ impots, onChange }: { impots: strin
                 <input type="checkbox" className="h-4 w-4 accent-brand-blue" checked={i.actif} onChange={() => basculer(i)} />
                 Actif
               </label>
-              {!i.systeme && !i.utilise && <DeleteButton label="Supprimer l'indicateur" onClick={() => supprimer(i)} />}
+              {!i.systeme && !i.utilise && <DeleteButton label="Supprimer l'indicateur" onClick={() => setASupprimer(i)} />}
             </div>
           </li>
         ))}
       </ul>
 
-      <form onSubmit={ajouter} className="mt-5 grid gap-4 border-t border-line pt-4 md:grid-cols-2">
-        <p className="text-sm font-medium text-brand-blue md:col-span-2">Ajouter un indicateur</p>
-        <label className="block text-sm text-slate-700">
-          Libellé
-          <input className={inputClass} value={libelle} onChange={(e) => setLibelle(e.target.value)} required maxLength={150} />
-        </label>
-        <label className="block text-sm text-slate-700">
-          Code (lettres minuscules, chiffres, _)
-          <input className={inputClass} value={code} onChange={(e) => setCode(e.target.value)} required pattern="[a-z][a-z0-9_]{1,39}" />
-        </label>
-        <label className="block text-sm text-slate-700">
-          Colonne de la table des déclarations
-          <select className={inputClass} value={colonne} onChange={(e) => setColonne(e.target.value)} required>
-            <option value="">— choisir —</option>
-            {data?.colonnes_disponibles.map((c) => (
-              <option key={c.colonne} value={c.colonne}>
-                {c.colonne}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="block text-sm text-slate-700">
-          Unité (facultatif)
-          <input className={inputClass} value={unite} onChange={(e) => setUnite(e.target.value)} maxLength={20} placeholder="Ar" />
-        </label>
-        <div className="md:col-span-2">
-          <span className="block text-sm text-slate-700">Impôts concernés (aucun coché = tous)</span>
-          <div className="mt-1 flex flex-wrap gap-3">
-            {impots.map((impot) => (
-              <label key={impot} className="flex items-center gap-2 text-sm text-slate-700">
-                <input
-                  type="checkbox"
-                  className="h-4 w-4 accent-brand-blue"
-                  checked={choisis.includes(impot)}
-                  onChange={(e) => setChoisis(e.target.checked ? [...choisis, impot] : choisis.filter((x) => x !== impot))}
-                />
-                {impot}
-              </label>
-            ))}
+      <form onSubmit={ajouter} className="mt-5 border-t border-line pt-4">
+        <p className="mb-3 text-sm font-semibold text-brand-blue">Ajouter un indicateur</p>
+        <FormGrid>
+          <Field label="Libellé" required hint="Nom affiché dans les règles et les conditions.">
+            <input className={inputClass} value={libelle} onChange={(e) => setLibelle(e.target.value)} required maxLength={150} />
+          </Field>
+          <Field label="Code" required hint="Lettres minuscules, chiffres et _, commençant par une lettre (ex. ca_declare).">
+            <input className={inputClass} value={code} onChange={(e) => setCode(e.target.value)} required pattern="[a-z][a-z0-9_]{1,39}" />
+          </Field>
+          <Field label="Colonne de la table des déclarations" required className="sm:col-span-2">
+            <select className={inputClass} value={colonne} onChange={(e) => setColonne(e.target.value)} required>
+              <option value="">— choisir —</option>
+              {data?.colonnes_disponibles.map((c) => (
+                <option key={c.colonne} value={c.colonne}>
+                  {c.colonne}
+                </option>
+              ))}
+            </select>
+          </Field>
+          <Field label="Unité" optional hint="Affichée à côté des valeurs (ex. Ar, %, nombre).">
+            <input className={inputClass} value={unite} onChange={(e) => setUnite(e.target.value)} maxLength={20} placeholder="Ar" />
+          </Field>
+          <div className="sm:col-span-2">
+            <span className="mb-1 block text-sm font-medium text-slate-700">
+              Impôts concernés <span className="text-xs font-normal text-slate-400">(aucun coché = tous)</span>
+            </span>
+            <div className="flex flex-wrap gap-3">
+              {impots.map((impot) => (
+                <label key={impot} className="flex items-center gap-2 text-sm text-slate-700">
+                  <input
+                    type="checkbox"
+                    className="h-4 w-4 accent-brand-blue"
+                    checked={choisis.includes(impot)}
+                    onChange={(e) => setChoisis(e.target.checked ? [...choisis, impot] : choisis.filter((x) => x !== impot))}
+                  />
+                  {impot}
+                </label>
+              ))}
+            </div>
           </div>
-        </div>
-        <div className="flex justify-end md:col-span-2">
+        </FormGrid>
+        <FormActions>
           <button type="submit" className={primaryButtonClass} disabled={saving}>
             {saving ? "Ajout..." : "Ajouter"}
           </button>
-        </div>
+        </FormActions>
       </form>
+
+      {aSupprimer && (
+        <ConfirmDialog
+          title="Supprimer l'indicateur"
+          message={`Supprimer l'indicateur « ${aSupprimer.libelle} » ?`}
+          detail="Les règles personnalisées qui l'utilisent ne pourront plus être simulées tant qu'elles ne seront pas modifiées."
+          confirmLabel="Supprimer"
+          loadingLabel="Suppression..."
+          loading={supprimant}
+          onConfirm={() => void supprimer(aSupprimer)}
+          onCancel={() => setASupprimer(null)}
+        />
+      )}
     </details>
   );
 }

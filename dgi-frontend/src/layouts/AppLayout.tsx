@@ -2,6 +2,8 @@ import { useEffect, useState, type ReactNode } from "react";
 import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { useAnalyseAuto } from "../hooks/useAnalyseAuto";
+import { useNotifications } from "../hooks/useNotifications";
+import ThemeToggle from "../components/ThemeToggle";
 import { ROLE_LABELS, type Role } from "../types";
 import {
   IconAlert,
@@ -46,11 +48,27 @@ const subLinkClass = ({ isActive }: { isActive: boolean }) =>
     isActive ? "bg-white/10 font-semibold text-white" : "text-white/60 hover:text-white"
   }`;
 
+/** Pastille rouge avec le nombre d'éléments en attente. */
+function Pastille({ n, titre, className = "" }: { n: number; titre: string; className?: string }) {
+  if (n <= 0) return null;
+  return (
+    <span
+      title={titre}
+      className={`inline-flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-red-600 px-1 text-[10px] font-semibold leading-none text-white ${className}`}
+    >
+      {n > 99 ? "99+" : n}
+    </span>
+  );
+}
+
+const pluriel = (n: number, mot: string) => `${n} ${mot}${n > 1 ? "s" : ""}`;
+
 export default function AppLayout() {
   const { user, logout } = useAuth();
 
   // Analyse automatique des défaillances : active tant que cette session est ouverte (stoppée à la déconnexion).
   useAnalyseAuto(user?.role);
+  const notifications = useNotifications(user?.role);
   const navigate = useNavigate();
   const { pathname } = useLocation();
 
@@ -82,14 +100,22 @@ export default function AppLayout() {
           <img src="/logo-dgi.png" alt="Direction Générale des Impôts" className="h-8 w-auto" />
           <img src="/logo-mef.png" alt="Ministère de l'Économie et des Finances" className="h-8 w-auto" />
         </div>
-        <button
-          type="button"
-          onClick={() => setMobileOpen(true)}
-          aria-label="Ouvrir le menu"
-          className="rounded-lg p-2 text-white hover:bg-white/10"
-        >
-          <IconMenu />
-        </button>
+        <div className="flex items-center gap-1">
+          <ThemeToggle variant="sidebar" />
+          <button
+            type="button"
+            onClick={() => setMobileOpen(true)}
+            aria-label="Ouvrir le menu"
+            className="relative rounded-lg p-2 text-white hover:bg-white/10"
+          >
+            <IconMenu />
+            <Pastille
+              n={notifications.defaillances}
+              titre={`${pluriel(notifications.defaillances, "dossier")} à traiter`}
+              className="absolute -right-1.5 -top-1.5"
+            />
+          </button>
+        </div>
       </div>
 
       {mobileOpen && (
@@ -129,11 +155,21 @@ export default function AppLayout() {
           <NavLink to="/defaillances" className={linkClass}>
             <IconAlert />
             <span>Défaillances</span>
+            <Pastille
+              n={notifications.defaillances}
+              titre={`${pluriel(notifications.defaillances, "dossier")} à traiter`}
+              className="ml-auto"
+            />
           </NavLink>
 
           <NavLink to="/traitements" className={linkClass}>
             <IconBriefcase />
             <span>Traitements</span>
+            <Pastille
+              n={notifications.traitements}
+              titre={`${pluriel(notifications.traitements, "dossier")} en cours de traitement`}
+              className="ml-auto"
+            />
           </NavLink>
 
           {adminItems.length > 0 && (
@@ -146,6 +182,12 @@ export default function AppLayout() {
               >
                 <IconShield />
                 <span className="flex-1 text-left">Administration</span>
+                {!adminOpen && (
+                  <Pastille
+                    n={notifications.demandes}
+                    titre={`${pluriel(notifications.demandes, "demande")} à approuver`}
+                  />
+                )}
                 <IconChevron className={`h-4 w-4 transition-transform ${adminOpen ? "rotate-90" : ""}`} />
               </button>
 
@@ -155,6 +197,13 @@ export default function AppLayout() {
                     <NavLink key={i.to} to={i.to} className={subLinkClass}>
                       {i.icon}
                       <span>{i.label}</span>
+                      {i.to === "/admin/demandes" && (
+                        <Pastille
+                          n={notifications.demandes}
+                          titre={`${pluriel(notifications.demandes, "demande")} à approuver`}
+                          className="ml-auto"
+                        />
+                      )}
                     </NavLink>
                   ))}
                 </div>
@@ -177,6 +226,7 @@ export default function AppLayout() {
             <p className="truncate text-sm font-semibold text-white">{user?.nom}</p>
             <p className="truncate text-xs text-white/60">{user?.role ? ROLE_LABELS[user.role] : ""}</p>
           </div>
+          <ThemeToggle variant="sidebar" />
           <button
             type="button"
             onClick={handleLogout}

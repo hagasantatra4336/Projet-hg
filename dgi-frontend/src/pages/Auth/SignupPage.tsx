@@ -3,16 +3,17 @@ import { Link, useNavigate } from "react-router-dom";
 import { isAxiosError } from "axios";
 import api, { getErrorMessage } from "../../services/api";
 import { useAuth } from "../../context/AuthContext";
-import { PasswordInput } from "../../components/ui";
+import { ConfirmDialog, PasswordInput } from "../../components/ui";
 import AuthLayout from "../../components/AuthLayout";
 import CentreSelect, { type CentreOption } from "../../components/CentreSelect";
+import SearchSelect from "../../components/SearchSelect";
 import {
   clearPendingSignup,
   loadPendingSignup,
   savePendingSignup,
   updatePendingSignup,
 } from "../../services/signupRequest";
-import type { AppUser, NiveauApprobation, Role, StatutDemande } from "../../types";
+import { ROLE_LABELS, type AppUser, type NiveauApprobation, type Role, type StatutDemande } from "../../types";
 
 const STEP_INFOS = 1;
 const STEP_ATTENTE = 2;
@@ -186,6 +187,7 @@ export default function SignupPage() {
   const [error, setError] = useState<string>("");
   const [info, setInfo] = useState<string>("");
   const [loading, setLoading] = useState<boolean>(false);
+  const [aAnnuler, setAAnnuler] = useState<boolean>(false);
 
   // Listes déroulantes : centres + fonctions ouvertes à l'inscription
   useEffect(() => {
@@ -365,9 +367,11 @@ export default function SignupPage() {
     setLoading(true);
     try {
       await api.post("/register/cancel", { request_id: requestId });
+      setAAnnuler(false);
       recommencer();
     } catch (err) {
       setError(getErrorMessage(err, "Impossible d'annuler la demande."));
+      setAAnnuler(false);
     } finally {
       setLoading(false);
     }
@@ -464,19 +468,22 @@ export default function SignupPage() {
               required
             />
           </div>
-          <select
-            className={`${inputClass} sm:col-span-2`}
-            value={form.fonction_id}
-            onChange={(e) => setForm({ ...form, fonction_id: e.target.value })}
-            required
-          >
-            <option value="">Fonction</option>
-            {options.fonctions.map((f) => (
-              <option key={f.id} value={f.id}>
-                {f.nom}
-              </option>
-            ))}
-          </select>
+          <div className="sm:col-span-2">
+            <SearchSelect
+              options={options.fonctions.map((f) => ({
+                value: String(f.id),
+                label: f.nom,
+                description: ROLE_LABELS[f.role],
+              }))}
+              value={form.fonction_id}
+              onChange={(v) => setForm({ ...form, fonction_id: v })}
+              className={inputClass}
+              required
+              label="Fonction"
+              placeholder="Fonction (rechercher parmi la liste)"
+              emptyLabel="Aucune fonction trouvée"
+            />
+          </div>
           <input
             className={`${inputClass} sm:col-span-2`}
             placeholder="Adresse"
@@ -545,7 +552,7 @@ export default function SignupPage() {
               </p>
               <button
                 type="button"
-                onClick={handleCancel}
+                onClick={() => setAAnnuler(true)}
                 disabled={loading}
                 className="mt-5 text-sm font-medium text-gray-500 hover:text-red-600 hover:underline disabled:opacity-50"
               >
@@ -679,6 +686,20 @@ export default function SignupPage() {
             Se connecter
           </Link>
         </p>
+      )}
+
+      {aAnnuler && (
+        <ConfirmDialog
+          title="Annuler l'inscription"
+          message="Annuler cette demande de création de compte ?"
+          detail="L'approbateur ne pourra plus la valider. Vous pourrez recommencer l'inscription à tout moment."
+          confirmLabel="Confirmer l'annulation"
+          loadingLabel="Annulation..."
+          tone="primary"
+          loading={loading}
+          onConfirm={() => void handleCancel()}
+          onCancel={() => setAAnnuler(false)}
+        />
       )}
     </AuthLayout>
   );

@@ -3,7 +3,8 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 import api, { getErrorMessage } from "../services/api";
 import { useAuth } from "../context/AuthContext";
 import { REGLE_LABELS, type ContribuableFiche, type DossierAlerte, type GroupeAlerte, type LigneBaseRisque } from "../types";
-import { ErrorBox, inputClass, primaryButtonClass, secondaryButtonClass } from "../components/ui";
+import { ConfirmDialog, ErrorBox, IconButton, iconButtonClass, inputClass } from "../components/ui";
+import { IconCheck, IconFile, IconLock, IconRefresh, IconSave, IconUnlock } from "../components/icons";
 import {
   EtatBadge,
   Matrice,
@@ -133,9 +134,9 @@ function Bandeau({
           {groupe.pris_le ? ` depuis ${formatDateHeure(groupe.pris_le)}` : ""}. Vous pouvez le consulter, pas le traiter.
         </p>
         {canManage && (
-          <button type="button" className={secondaryButtonClass} disabled={busy} onClick={onReprendre}>
-            Reprendre le dossier
-          </button>
+          <IconButton label="Reprendre le dossier" onClick={onReprendre} disabled={busy}>
+            <IconRefresh className="h-4 w-4" />
+          </IconButton>
         )}
       </div>
     );
@@ -179,6 +180,7 @@ export default function DossierTraitementPage() {
   const [error, setError] = useState<string>("");
   const [message, setMessage] = useState<string>("");
   const [busy, setBusy] = useState<boolean>(false);
+  const [aConfirmer, setAConfirmer] = useState<"traiter" | "liberer" | "rouvrir" | null>(null);
 
   const charger = useCallback(async () => {
     try {
@@ -216,6 +218,7 @@ export default function DossierTraitementPage() {
     try {
       await fn();
       if (ok) setMessage(ok);
+      window.dispatchEvent(new Event("notifications:maj"));
     } catch (err) {
       setError(getErrorMessage(err, "Action impossible."));
       void charger(); // l'état du dossier a peut-être changé (pris par un autre, traité...)
@@ -253,6 +256,14 @@ export default function DossierTraitementPage() {
       await api.patch(`/defaillances/${id}`, { groupe: true, statut: "a_traiter" });
       await charger();
     }, "Dossier rouvert : ses anomalies non régularisées sont de nouveau à traiter.");
+
+  async function confirmer() {
+    const choix = aConfirmer;
+    setAConfirmer(null);
+    if (choix === "traiter") await marquerTraite();
+    else if (choix === "liberer") await liberer();
+    else if (choix === "rouvrir") await rouvrir();
+  }
 
   if (!dossier) {
     return (
@@ -294,6 +305,44 @@ export default function DossierTraitementPage() {
         </div>
         <StatutBadge statut={groupe.statut} />
       </div>
+
+      {/* Coordonnées du contribuable : utiles pour le contacter pendant le traitement */}
+      {fiche && (
+        <section className="rounded-xl border border-line bg-white p-4">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div className="min-w-0">
+              <h2 className="text-sm font-semibold text-brand-blue">Coordonnées du contribuable</h2>
+              <p className="mt-0.5 text-sm text-slate-700">
+                {fiche.contribuable.activite || "Activité non renseignée"} · {fiche.contribuable.adresse || "Adresse non renseignée"}
+              </p>
+              <p className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm">
+                {fiche.contribuable.telephone ? (
+                  <a href={`tel:${fiche.contribuable.telephone.replace(/\s/g, "")}`} className="font-medium text-brand-blue underline">
+                    {fiche.contribuable.telephone}
+                  </a>
+                ) : (
+                  <span className="text-slate-400">Téléphone non renseigné</span>
+                )}
+                {fiche.contribuable.email ? (
+                  <a href={`mailto:${fiche.contribuable.email}`} className="font-medium text-brand-blue underline">
+                    {fiche.contribuable.email}
+                  </a>
+                ) : (
+                  <span className="text-slate-400">E-mail non renseigné</span>
+                )}
+              </p>
+            </div>
+            <Link
+              to={`/contribuables/${fiche.contribuable.id}`}
+              className={`${iconButtonClass()} no-print`}
+              title="Fiche complète du contribuable"
+              aria-label="Fiche complète du contribuable"
+            >
+              <IconFile className="h-4 w-4" />
+            </Link>
+          </div>
+        </section>
+      )}
 
       <Bandeau
         groupe={groupe}
@@ -429,8 +478,14 @@ export default function DossierTraitementPage() {
       {/* Traitement */}
       <section className="rounded-xl border border-line bg-white p-5">
         <h2 className="text-sm font-semibold text-brand-blue">Traitement</h2>
+        <p className="mt-1 text-xs text-slate-500">
+          Le commentaire s'applique à toutes les anomalies de ce dossier et reste visible dans son historique.
+        </p>
         <label className="mt-3 block">
-          <span className="mb-1 block text-sm font-medium text-slate-800">Commentaire</span>
+          <span className="mb-1 flex items-baseline justify-between gap-3">
+            <span className="text-sm font-medium text-slate-800">Commentaire</span>
+            <span className="text-xs font-normal text-slate-400">{commentaire.length} / 2000</span>
+          </span>
           <textarea
             className={inputClass}
             rows={4}
@@ -442,32 +497,74 @@ export default function DossierTraitementPage() {
           />
         </label>
 
-        <div className="mt-4 flex flex-wrap justify-end gap-3">
+        <div className="mt-4 flex flex-wrap items-center justify-end gap-3 border-t border-line pt-4">
           {groupe.statut === "a_traiter" && (
-            <button type="button" className={primaryButtonClass} disabled={busy} onClick={() => void prendre()}>
-              Prendre le dossier
-            </button>
+            <IconButton label="Prendre le dossier" tone="primary" disabled={busy} onClick={() => void prendre()}>
+              <IconLock className="h-4 w-4" />
+            </IconButton>
           )}
           {enTraitementParMoi && (
             <>
-              <button type="button" className={secondaryButtonClass} disabled={busy} onClick={() => void liberer()}>
-                Libérer le dossier
-              </button>
-              <button type="button" className={secondaryButtonClass} disabled={busy} onClick={() => void enregistrer()}>
-                Enregistrer le commentaire
-              </button>
-              <button type="button" className={primaryButtonClass} disabled={busy} onClick={() => void marquerTraite()}>
-                Marquer comme traité
-              </button>
+              <IconButton label="Libérer le dossier" disabled={busy} onClick={() => setAConfirmer("liberer")}>
+                <IconUnlock className="h-4 w-4" />
+              </IconButton>
+              <IconButton label="Enregistrer le commentaire" disabled={busy} onClick={() => void enregistrer()}>
+                <IconSave className="h-4 w-4" />
+              </IconButton>
+              <IconButton label="Marquer comme traité" tone="primary" disabled={busy} onClick={() => setAConfirmer("traiter")}>
+                <IconCheck className="h-4 w-4" />
+              </IconButton>
             </>
           )}
           {groupe.statut === "traitee" && (
-            <button type="button" className={secondaryButtonClass} disabled={busy} onClick={() => void rouvrir()}>
-              Rouvrir le dossier
-            </button>
+            <IconButton label="Rouvrir le dossier" disabled={busy} onClick={() => setAConfirmer("rouvrir")}>
+              <IconRefresh className="h-4 w-4" />
+            </IconButton>
           )}
         </div>
       </section>
+
+      {aConfirmer === "traiter" && (
+        <ConfirmDialog
+          title="Marquer le dossier comme traité"
+          message="Clôturer le traitement de ce dossier ?"
+          detail="Le commentaire saisi est enregistré sur toutes les anomalies, puis vous revenez à la liste des alertes. Vous pourrez rouvrir le dossier si nécessaire."
+          confirmLabel="Marquer comme traité"
+          loadingLabel="Enregistrement..."
+          tone="primary"
+          loading={busy}
+          onConfirm={() => void confirmer()}
+          onCancel={() => setAConfirmer(null)}
+        />
+      )}
+
+      {aConfirmer === "liberer" && (
+        <ConfirmDialog
+          title="Libérer le dossier"
+          message="Libérer ce dossier sans le marquer comme traité ?"
+          detail="Il redeviendra « À traiter » pour les autres utilisateurs. Le commentaire en cours de saisie n'est pas enregistré."
+          confirmLabel="Libérer le dossier"
+          loadingLabel="Libération..."
+          tone="primary"
+          loading={busy}
+          onConfirm={() => void confirmer()}
+          onCancel={() => setAConfirmer(null)}
+        />
+      )}
+
+      {aConfirmer === "rouvrir" && (
+        <ConfirmDialog
+          title="Rouvrir le dossier"
+          message="Rouvrir ce dossier traité ?"
+          detail="Ses anomalies non régularisées repasseront « À traiter ». Le commentaire déjà enregistré est conservé."
+          confirmLabel="Rouvrir le dossier"
+          loadingLabel="Réouverture..."
+          tone="primary"
+          loading={busy}
+          onConfirm={() => void confirmer()}
+          onCancel={() => setAConfirmer(null)}
+        />
+      )}
     </div>
   );
 }

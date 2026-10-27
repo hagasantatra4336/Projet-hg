@@ -7,6 +7,8 @@ import {
   EditButton,
   ErrorBox,
   Field,
+  FormActions,
+  FormGrid,
   Modal,
   inputClass,
   primaryButtonClass,
@@ -149,37 +151,49 @@ export default function CentresPage() {
       {editing && (
         <Modal title={editing === "new" ? "Nouveau centre" : "Modifier le centre"} onClose={() => setEditing(null)}>
           <ErrorBox message={formError} />
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <Field label="Nom du centre">
-              <input
-                className={inputClass}
-                value={form.nom}
-                onChange={(e) => setForm({ ...form, nom: e.target.value })}
-                required
-              />
-            </Field>
-            <Field label="Adresse">
-              <input
-                className={inputClass}
-                value={form.adresse}
-                onChange={(e) => setForm({ ...form, adresse: e.target.value })}
-              />
-            </Field>
-            <div className="flex justify-end gap-3 pt-2">
+          <form onSubmit={handleSubmit} className="space-y-5">
+            <FormGrid>
+              <Field label="Nom du centre" required className="sm:col-span-2">
+                <input
+                  className={inputClass}
+                  value={form.nom}
+                  onChange={(e) => setForm({ ...form, nom: e.target.value })}
+                  placeholder="Ex. : Centre fiscal d'Antananarivo"
+                  required
+                />
+              </Field>
+              <Field label="Adresse" optional className="sm:col-span-2">
+                <input
+                  className={inputClass}
+                  value={form.adresse}
+                  onChange={(e) => setForm({ ...form, adresse: e.target.value })}
+                  placeholder="Ex. : Rue Rainitovo, Antananarivo 101"
+                />
+              </Field>
+            </FormGrid>
+            <FormActions>
               <button type="button" className={secondaryButtonClass} onClick={() => setEditing(null)}>
                 Annuler
               </button>
               <button type="submit" className={primaryButtonClass} disabled={saving}>
                 {saving ? "Enregistrement..." : "Enregistrer"}
               </button>
-            </div>
+            </FormActions>
           </form>
         </Modal>
       )}
 
       {toDelete && (
         <ConfirmDialog
-          message={`Supprimer le centre « ${toDelete.nom} » ?`}
+          title="Supprimer le centre"
+          message={`Supprimer définitivement le centre « ${toDelete.nom} » ?`}
+          detail={
+            (toDelete.users_count ?? 0) > 0
+              ? `${toDelete.users_count} utilisateur(s) y sont rattachés : déplacez-les d'abord vers un autre centre, sinon la suppression sera refusée.`
+              : "Cette action est définitive."
+          }
+          confirmLabel="Supprimer"
+          loadingLabel="Suppression..."
           loading={deleting}
           onConfirm={handleDelete}
           onCancel={() => setToDelete(null)}

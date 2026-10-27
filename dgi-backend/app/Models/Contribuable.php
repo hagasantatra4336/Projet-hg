@@ -20,7 +20,10 @@ class Contribuable extends Model
         self::ETAT_RADIE => 'Radié',
     ];
 
-    protected $fillable = ['nif', 'nom', 'centre_id', 'etat', 'date_cessation', 'date_radiation', 'date_blocage'];
+    protected $fillable = [
+        'nif', 'nom', 'centre_id', 'etat', 'date_cessation', 'date_radiation', 'date_blocage',
+        'telephone', 'email', 'adresse', 'activite',
+    ];
 
     protected function casts(): array
     {
@@ -50,5 +53,10 @@ class Contribuable extends Model
     public function alertes(): HasMany
     {
         return $this->hasMany(Alerte::class);
+    }
+
+    public function observations(): HasMany
+    {
+        return $this->hasMany(FicheObservation::class);
     }
 }

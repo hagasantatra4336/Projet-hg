@@ -44,4 +44,226 @@
       transition-duration: 0.01ms !important;
     }
   }
+
+  /* Impression de la fiche contribuable : on retire la navigation et les actions, on garde le contenu. */
+  @media print {
+    @page {
+      margin: 12mm;
+    }
+
+    body {
+      background: #ffffff !important;
+    }
+
+    aside,
+    .no-print {
+      display: none !important;
+    }
+
+    main {
+      padding: 0 !important;
+    }
+
+    main > div {
+      max-width: none !important;
+    }
+
+    section {
+      break-inside: avoid;
+    }
+  }
+}
+
+/* ---------------------------------------------------------------------------
+   Mode sombre
+   Les pages combinent des utilitaires clairs (bg-white, text-slate-*, border-line…).
+   Plutôt que d'ajouter un variant dark: à chaque classe, on remappe ici ces
+   utilitaires sous html.dark via des variables : le rendu suit le thème sans
+   toucher au balisage des pages.
+   --------------------------------------------------------------------------- */
+html.dark {
+  color-scheme: dark;
+  --dk-canvas: #0e1524;
+  --dk-surface: #161e30;
+  --dk-surface-2: #1b2438;
+  --dk-surface-3: #243049;
+  --dk-border: #2b3750;
+  --dk-border-strong: #3a4865;
+  --dk-text: #edf1f8;
+  --dk-text-2: #d5dceb;
+  --dk-text-3: #b3bfd2;
+  --dk-text-4: #96a3ba;
+  --dk-brand-ink: #bcccf0;
+  --dk-brand-line: #6c88c8;
+  --dk-ring: #7e9ad9;
+  --dk-amber-bg: #3a2f14;
+  --dk-amber-ink: #eecb7f;
+  --dk-red-bg: #3b1e21;
+  --dk-red-ink: #f2a4a4;
+  --dk-red-line: #623236;
+  --dk-leaf-bg: #22341f;
+  --dk-sky-bg: #1a2c40;
+  --dk-sky-ink: #a6c8e6;
+  --dk-green-ink: #8fd3af;
+}
+
+html.dark body {
+  background-color: var(--dk-canvas);
+  color: var(--dk-text);
+}
+
+html.dark * {
+  scrollbar-color: var(--dk-border-strong) transparent;
+}
+
+/* Surfaces */
+html.dark .bg-white,
+html.dark .focus\:bg-white:focus { background-color: var(--dk-surface); }
+
+html.dark .bg-canvas { background-color: var(--dk-canvas); }
+
+html.dark .bg-slate-50,
+html.dark .bg-slate-50\/70,
+html.dark .bg-gray-50,
+html.dark .bg-gray-50\/70 { background-color: var(--dk-surface-2); }
+
+html.dark .bg-slate-100,
+html.dark .bg-slate-200,
+html.dark .bg-gray-200 { background-color: var(--dk-surface-3); }
+
+html.dark .bg-slate-400 { background-color: #6c7b95; }
+
+/* Dégradés blancs des écrans d'accès */
+html.dark .from-white {
+  --tw-gradient-from: var(--dk-canvas) var(--tw-gradient-from-position);
+}
+
+html.dark .via-white {
+  --tw-gradient-stops: var(--tw-gradient-from), var(--dk-canvas) var(--tw-gradient-via-position), var(--tw-gradient-to);
+}
+
+/* Lignes alternées : la surface du tableau suffit, le survol reste lisible */
+html.dark .even\:bg-slate-50\/60:nth-child(even) { background-color: transparent; }
+
+/* Survols (après les surfaces pour l'emporter à spécificité égale) */
+html.dark .hover\:bg-white:hover,
+html.dark .hover\:bg-slate-50:hover,
+html.dark .hover\:bg-gray-50:hover,
+html.dark .group:hover .group-hover\:bg-slate-50 { background-color: var(--dk-surface-2); }
+
+html.dark .hover\:bg-slate-100:hover,
+html.dark .hover\:bg-slate-200:hover,
+html.dark .disabled\:bg-slate-100:disabled { background-color: var(--dk-surface-3); }
+
+html.dark .bg-red-50,
+html.dark .bg-red-100,
+html.dark .hover\:bg-red-50:hover { background-color: var(--dk-red-bg); }
+
+html.dark .bg-amber-50,
+html.dark .bg-amber-100 { background-color: var(--dk-amber-bg); }
+
+html.dark .bg-leaf-50,
+html.dark .bg-leaf-100 { background-color: var(--dk-leaf-bg); }
+
+html.dark .bg-sky-100 { background-color: var(--dk-sky-bg); }
+
+/* Textes */
+html.dark .text-slate-900,
+html.dark .text-slate-800,
+html.dark .text-gray-800 { color: var(--dk-text); }
+
+html.dark .text-slate-700,
+html.dark .text-slate-600,
+html.dark .text-gray-600,
+html.dark .text-gray-500 { color: var(--dk-text-2); }
+
+html.dark .text-slate-500 { color: var(--dk-text-3); }
+
+html.dark .text-slate-400,
+html.dark .text-gray-400,
+html.dark .text-gray-300 { color: var(--dk-text-4); }
+
+html.dark .text-brand-blue,
+html.dark .hover\:text-brand-blue:hover { color: var(--dk-brand-ink); }
+
+html.dark .text-red-700,
+html.dark .text-red-600,
+html.dark .text-red-500,
+html.dark .hover\:text-red-600:hover,
+html.dark .hover\:text-red-500:hover { color: var(--dk-red-ink); }
+
+html.dark .text-amber-900,
+html.dark .text-amber-800,
+html.dark .text-amber-700 { color: var(--dk-amber-ink); }
+
+html.dark .text-sky-900,
+html.dark .text-sky-800 { color: var(--dk-sky-ink); }
+
+html.dark .text-emerald-800 { color: var(--dk-green-ink); }
+
+html.dark .hover\:text-slate-700:hover,
+html.dark .hover\:text-slate-600:hover,
+html.dark .hover\:text-slate-500:hover,
+html.dark .disabled\:text-slate-500:disabled { color: var(--dk-text-2); }
+
+/* Bordures */
+html.dark .border-line,
+html.dark .hover\:border-line:hover { border-color: var(--dk-border); }
+
+html.dark .border-slate-300,
+html.dark .border-slate-200,
+html.dark .border-gray-200 { border-color: var(--dk-border-strong); }
+
+html.dark .border-brand-blue,
+html.dark .hover\:border-brand-blue:hover,
+html.dark .focus\:border-brand-blue:focus { border-color: var(--dk-brand-line); }
+
+html.dark .border-red-200 { border-color: var(--dk-red-line); }
+
+html.dark .divide-line > :not([hidden]) ~ :not([hidden]) { border-color: var(--dk-border); }
+
+/* Placeholders et anneaux de focus */
+html.dark .placeholder-slate-400::placeholder,
+html.dark .placeholder-gray-400::placeholder { color: var(--dk-text-4); }
+
+html.dark .ring-brand-blue,
+html.dark .focus\:ring-brand-blue:focus { --tw-ring-color: var(--dk-ring); }
+
+html.dark .focus\:ring-brand-blue\/30:focus { --tw-ring-color: rgb(109 139 208 / 0.35); }
+
+/* Textes sombres posés sur un fond clair qui reste clair dans les deux thèmes */
+html.dark .bg-brand-white.text-brand-blue,
+html.dark .bg-brand-green.text-brand-blue { color: #212e53; }
+
+/* Impression : la fiche doit rester sur fond blanc même si le mode sombre est actif */
+@media print {
+  html.dark {
+    color-scheme: light;
+    --dk-canvas: #ffffff;
+    --dk-surface: #ffffff;
+    --dk-surface-2: #f8fafc;
+    --dk-surface-3: #f1f5f9;
+    --dk-border: #d9dee7;
+    --dk-border-strong: #cbd5e1;
+    --dk-text: #1e293b;
+    --dk-text-2: #334155;
+    --dk-text-3: #64748b;
+    --dk-text-4: #94a3b8;
+    --dk-brand-ink: #212e53;
+    --dk-brand-line: #212e53;
+    --dk-red-bg: #fef2f2;
+    --dk-red-ink: #b91c1c;
+    --dk-red-line: #fecaca;
+    --dk-amber-bg: #fffbeb;
+    --dk-amber-ink: #78350f;
+    --dk-leaf-bg: #eef5e9;
+    --dk-sky-bg: #e0f2fe;
+    --dk-sky-ink: #0c4a6e;
+    --dk-green-ink: #065f46;
+  }
+
+  html.dark body {
+    background: #ffffff !important;
+    color: #1e293b !important;
+  }
 }

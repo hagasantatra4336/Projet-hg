@@ -2,7 +2,7 @@ import { useEffect, useState, type ReactNode } from "react";
 import { Link, Navigate, useNavigate } from "react-router-dom";
 import api, { getErrorMessage } from "../services/api";
 import { useAuth } from "../context/AuthContext";
-import { ErrorBox, primaryButtonClass, secondaryButtonClass } from "../components/ui";
+import { ConfirmDialog, ErrorBox, primaryButtonClass, secondaryButtonClass } from "../components/ui";
 import { clearPendingRequest, loadPendingRequest } from "../services/profileRequest";
 
 type Phase = "pending" | "confirmed" | "cancelled" | "failed" | "expired";
@@ -47,6 +47,7 @@ export default function ProfileWaitingPage() {
   const [serverMessage, setServerMessage] = useState<string>("");
   const [now, setNow] = useState<number>(() => Date.now());
   const [cancelling, setCancelling] = useState<boolean>(false);
+  const [aAnnuler, setAAnnuler] = useState<boolean>(false);
   const [error, setError] = useState<string>("");
 
   // Suivi de la demande : toutes les 3 s, et immédiatement quand l'onglet redevient visible.
@@ -126,6 +127,7 @@ export default function ProfileWaitingPage() {
     } catch (err) {
       setError(getErrorMessage(err, "Impossible d'annuler la demande."));
       setCancelling(false);
+      setAAnnuler(false);
     }
   }
 
@@ -138,9 +140,6 @@ export default function ProfileWaitingPage() {
     <div className="w-full">
       <div className="mb-6 border-b border-line pb-4">
         <h1 className="text-2xl font-semibold tracking-tight text-brand-blue">Validation de vos modifications</h1>
-        <p className="text-sm text-slate-600">
-          Vous serez redirigé vers votre profil dès que vous aurez validé l'e-mail, sur ordinateur ou sur smartphone.
-        </p>
       </div>
 
       <ErrorBox message={error} />
@@ -184,7 +183,7 @@ export default function ProfileWaitingPage() {
           )}
 
           <div className="mt-6 flex flex-wrap justify-center gap-3">
-            <button type="button" className={secondaryButtonClass} onClick={handleCancel} disabled={cancelling}>
+            <button type="button" className={secondaryButtonClass} onClick={() => setAAnnuler(true)} disabled={cancelling}>
               {cancelling ? "Annulation..." : "Annuler la demande"}
             </button>
             <Link to="/profile" className={secondaryButtonClass}>
@@ -252,6 +251,20 @@ export default function ProfileWaitingPage() {
             Refaire une demande
           </Link>
         </Card>
+      )}
+
+      {aAnnuler && (
+        <ConfirmDialog
+          title="Annuler la demande"
+          message="Annuler cette demande de modification ?"
+          detail="Aucune modification ne sera appliquée et le lien reçu par e-mail ne fonctionnera plus. Vous pourrez refaire une demande depuis votre profil."
+          confirmLabel="Confirmer l'annulation"
+          loadingLabel="Annulation..."
+          tone="primary"
+          loading={cancelling}
+          onConfirm={() => void handleCancel()}
+          onCancel={() => setAAnnuler(false)}
+        />
       )}
     </div>
   );

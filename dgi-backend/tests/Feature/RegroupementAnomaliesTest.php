@@ -77,6 +77,31 @@ class RegroupementAnomaliesTest extends TestCase
         $this->assertGreaterThanOrEqual(2, $r2->count());
     }
 
+    public function test_le_summary_distingue_alertes_et_dossiers_a_traiter(): void
+    {
+        $this->connecter();
+
+        $libres = Alerte::where('statut', Alerte::A_TRAITER)->whereNull('pris_par');
+        $alertes = (clone $libres)->count();
+        $dossiers = (clone $libres)->distinct()->count('contribuable_id');
+
+        $res = $this->getJson('/api/defaillances/summary');
+        $res->assertOk();
+        $this->assertSame($alertes, $res->json('a_traiter'));
+        $this->assertSame($dossiers, $res->json('dossiers_a_traiter'));
+
+        // La liste étant groupée par contribuable, elle compte bien des dossiers.
+        $this->assertSame($dossiers, $this->getJson('/api/defaillances?grouper=1')->json('total'));
+
+        // Un dossier pris sort des « à traiter » et entre dans « en traitement ».
+        $alerte = (clone $libres)->firstOrFail();
+        $this->postJson("/api/defaillances/{$alerte->id}/prendre", ['groupe' => true])->assertOk();
+
+        $res = $this->getJson('/api/defaillances/summary');
+        $this->assertSame($dossiers - 1, $res->json('dossiers_a_traiter'));
+        $this->assertSame(1, $res->json('dossiers_en_traitement'));
+    }
+
     public function test_la_liste_regroupe_les_anomalies_dun_contribuable(): void
     {
         $this->connecter();

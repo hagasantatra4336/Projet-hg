@@ -149,6 +149,8 @@ export interface DefaillanceSummary {
   faible: number;
   traitees: number;
   regularisees: number;
+  /** Nombre de contribuables (dossiers) ayant au moins une anomalie libre à traiter. */
+  dossiers_a_traiter: number;
   /** Nombre de contribuables (dossiers) dont au moins une anomalie est prise. */
   dossiers_en_traitement: number;
   /** Nombre de contribuables (dossiers) ayant au moins une anomalie traitée. */
@@ -214,6 +216,34 @@ export interface LigneHistorique {
   cellules: CelluleDeclaration[];
 }
 
+/** Synthèse de l'analyse d'un contribuable, affichée sur sa fiche et reprise dans le PDF. */
+export interface SyntheseFiche {
+  alertes_total: number;
+  par_statut: Record<StatutAlerte, number>;
+  par_regle: Record<Regle, number>;
+  par_niveau: Record<NiveauRisque, number>;
+  niveau_global: NiveauRisque | null;
+  derniere_analyse: { at: string; date: string } | null;
+  annees: { premiere: number | null; derniere: number | null };
+}
+
+/** Chiffres clés repris de la base d'analyse risque (dernier exercice disponible par source). */
+export interface ChiffresFiche {
+  ir: { annee: number; ca: number; resultat: number; ir_a_payer: number } | null;
+  tva: { annee: number; nb_mois: number; dernier_mois: number; ca: number; export: number; credit_tva: number } | null;
+  recoupement: { annee: number; montant_total: number; prestations: number } | null;
+  dau: { annee: number; tva_im4: number; caf_ex1: number } | null;
+  ecart_ca_pct: number | null;
+}
+
+/** Une note du journal d'observations d'un contribuable. */
+export interface ObservationFiche {
+  id: number;
+  texte: string;
+  auteur: string | null;
+  le: string | null;
+}
+
 /** Fiche d'un contribuable : identité, état, obligations, alertes et historique des déclarations. */
 export interface ContribuableFiche {
   contribuable: {
@@ -226,8 +256,15 @@ export interface ContribuableFiche {
     date_cessation: string | null;
     date_radiation: string | null;
     date_blocage: string | null;
+    telephone: string | null;
+    email: string | null;
+    adresse: string | null;
+    activite: string | null;
   };
   stats: { nb_declarations: number; premiere_annee: number | null; derniere_annee: number | null };
+  resultat: SyntheseFiche;
+  chiffres: ChiffresFiche;
+  observations: ObservationFiche[];
   obligations: { type_impot: string; annee_fiscale: number; periodicite: string; actif: boolean; exonere: boolean }[];
   alertes: AlerteContribuable[];
   historique: {

@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "rea
 import { useLocation, useNavigate } from "react-router-dom";
 import api, { getErrorMessage } from "../services/api";
 import { useAuth } from "../context/AuthContext";
-import { ErrorBox, Field, PasswordInput, RoleBadge, inputClass } from "../components/ui";
+import { ErrorBox, Field, FormActions, PasswordInput, RoleBadge, inputClass } from "../components/ui";
 import CentreSelect, { type CentreOption } from "../components/CentreSelect";
 import { savePendingRequest } from "../services/profileRequest";
 
@@ -180,9 +180,6 @@ export default function ProfilePage() {
       {/* Titre aligné à gauche, sur toute la largeur */}
       <div className="mb-6 border-b border-line pb-4">
         <h1 className="text-2xl font-semibold tracking-tight text-brand-blue">Mon profil</h1>
-        <p className="text-sm text-slate-600">
-          Les modifications ne sont appliquées qu'après confirmation par un lien envoyé à votre adresse e-mail.
-        </p>
       </div>
 
       <ErrorBox message={error} />
@@ -236,31 +233,41 @@ export default function ProfilePage() {
         <form onSubmit={handleSubmit} className="space-y-6 lg:col-span-2">
           <Section title="Mes informations">
             <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-              <Field label="Nom">
+              <Field label="Nom" required>
                 <input
                   className={inputClass}
                   value={form.nom}
                   onChange={(e) => setForm({ ...form, nom: e.target.value })}
+                  autoComplete="name"
                   required
                 />
               </Field>
-              <Field label="Téléphone">
+              <Field label="Téléphone" optional>
                 <input
                   className={inputClass}
                   value={form.telephone}
                   onChange={(e) => setForm({ ...form, telephone: e.target.value })}
+                  autoComplete="tel"
                 />
               </Field>
-              <Field label="Adresse">
+              <Field label="Adresse" optional>
                 <input
                   className={inputClass}
                   value={form.adresse}
                   onChange={(e) => setForm({ ...form, adresse: e.target.value })}
+                  autoComplete="street-address"
                 />
               </Field>
               <div>
-                <span className="mb-1 block text-sm font-medium text-brand-blue">
-                  {centreRequired ? "Centre" : "Centre (facultatif)"}
+                <span className="mb-1 flex items-baseline gap-1 text-sm font-medium text-slate-700">
+                  <span>Centre</span>
+                  {centreRequired ? (
+                    <span className="text-red-600" aria-hidden="true" title="Champ obligatoire">
+                      *
+                    </span>
+                  ) : (
+                    <span className="text-xs font-normal text-slate-400">facultatif</span>
+                  )}
                 </span>
                 <CentreSelect
                   centres={centreOptions}
@@ -282,7 +289,7 @@ export default function ProfilePage() {
 
           <Section title="Changer mon mot de passe" hint="Laissez vide pour conserver votre mot de passe actuel.">
             <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-            <Field label="Mot de passe actuel">
+              <Field label="Mot de passe actuel">
                 <PasswordInput
                   className={inputClass}
                   value={passwords.current_password}
@@ -290,7 +297,7 @@ export default function ProfilePage() {
                   autoComplete="current-password"
                 />
               </Field>
-              <Field label="Nouveau mot de passe">
+              <Field label="Nouveau mot de passe" hint="8 caractères minimum.">
                 <PasswordInput
                   className={inputClass}
                   value={passwords.password}
@@ -311,7 +318,7 @@ export default function ProfilePage() {
             </div>
           </Section>
 
-          <div className="flex justify-end">
+          <FormActions className="rounded-xl border border-line bg-white px-6 py-4">
             <button
               type="submit"
               disabled={loading}
@@ -319,7 +326,7 @@ export default function ProfilePage() {
             >
               {loading ? "Envoi..." : "Enregistrer et demander la confirmation"}
             </button>
-          </div>
+          </FormActions>
         </form>
       </div>
     </div>

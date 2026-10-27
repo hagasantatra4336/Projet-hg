@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import ThemeToggle from "./ThemeToggle";
 
 /** Mise en page des pages de connexion et d'inscription : image E-Fehy à gauche, formulaire à droite. */
 export default function AuthLayout({ children }: { children: ReactNode }) {
@@ -23,7 +24,12 @@ export default function AuthLayout({ children }: { children: ReactNode }) {
         </div>
 
         <div className="flex flex-1 items-center justify-center px-6 pb-10 pt-4 sm:px-10 lg:py-10">
-          <div className="w-full max-w-md">{children}</div>
+          <div className="w-full max-w-md">
+            <div className="mb-2 flex justify-end">
+              <ThemeToggle />
+            </div>
+            {children}
+          </div>
         </div>
       </main>
     </div>
