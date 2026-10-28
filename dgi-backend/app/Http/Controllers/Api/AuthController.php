@@ -20,6 +20,7 @@ use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Notification;
+use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\Rules\Password;
@@ -101,13 +102,15 @@ class AuthController extends Controller
             if ($statut === DemandeInscription::EXPIREE) {
                 $existante->update(['statut' => DemandeInscription::EXPIREE]);
             } else {
-                return $this->payloadDemande(
-                    $existante,
-                    $statut === DemandeInscription::APPROUVEE
-                        ? 'Votre demande a déjà été approuvée. Saisissez le code reçu par e-mail.'
-                        : "Votre demande est déjà en attente d'approbation.",
-                    200
-                );
+                // Route publique : ne jamais renvoyer ici le request_id (ni le nom ou l'approbateur) de
+                // la demande existante. Il suffirait de connaître un e-mail pour obtenir ce secret,
+                // lire la demande via /register/status et l'annuler via /register/cancel. Le navigateur
+                // qui a créé la demande conserve son request_id dans localStorage et la suit seul.
+                return response()->json([
+                    'message' => "Une demande existe déjà pour cet e-mail. Reprenez-la depuis le navigateur où elle a été créée, ou contactez l'administration pour la réinitialiser.",
+                    'statut' => $statut,
+                    'reprise_locale_uniquement' => true,
+                ]);
             }
         }
 
@@ -149,7 +152,7 @@ class AuthController extends Controller
         );
     }
 
-    /** Suivi public de la demande (le request_id de 48 caractères est le secret). */
+    /** Suivi public de la demande : le request_id de 48 caractères est le secret, il n'est jamais renvoyé par /register. */
     public function signupStatus(string $requestId): JsonResponse
     {
         $demande = DemandeInscription::with(['centre', 'fonction', 'traitePar'])
@@ -273,6 +276,14 @@ class AuthController extends Controller
             'otp_code' => ['required', 'digits:6'],
         ]);
 
+        // Même principe que pour la connexion : le compteur survit aux renvois de code.
+        $cleEchecs = 'otp-echecs:signup:' . sha1($data['request_id']);
+        if (RateLimiter::tooManyAttempts($cleEchecs, 10)) {
+            return response()->json([
+                'message' => 'Trop de tentatives. Réessayez dans ' . RateLimiter::availableIn($cleEchecs) . ' secondes.',
+            ], 429);
+        }
+
         $demande = DemandeInscription::where('request_id', $data['request_id'])->first();
 
         if ($demande === null
@@ -292,11 +303,13 @@ class AuthController extends Controller
         }
 
         if (! $this->otp->verifier($demande->email, $data['otp_code'], $demande->otp_hash)) {
+            RateLimiter::hit($cleEchecs, 900);
             $demande->increment('otp_attempts');
 
             return response()->json(['message' => 'Code invalide ou expiré.'], 422);
         }
 
+        RateLimiter::clear($cleEchecs);
         $setupToken = Str::random(40);
 
         $demande->update([
@@ -417,11 +430,24 @@ class AuthController extends Controller
             'password' => ['required', 'string'],
         ]);
 
+        // Limitation par COMPTE, en plus du throttle par IP de la route : des tentatives réparties
+        // sur plusieurs adresses (ou derrière un proxy) ne contournent plus le compteur.
+        $cleEchecs = 'login-echecs:' . sha1(Str::lower($data['email']));
+        if (RateLimiter::tooManyAttempts($cleEchecs, 5)) {
+            return response()->json([
+                'message' => 'Trop de tentatives pour ce compte. Réessayez dans ' . RateLimiter::availableIn($cleEchecs) . ' secondes.',
+            ], 429);
+        }
+
         $user = User::where('email', $data['email'])->first();
 
         if (! $user || ! $user->password || ! Hash::check($data['password'], $user->password)) {
+            RateLimiter::hit($cleEchecs, 900); // 15 minutes
+
             return response()->json(['message' => 'Identifiants incorrects.'], 401);
         }
+
+        RateLimiter::clear($cleEchecs);
 
         return $this->sendLoginOtp($user, 'Un code de connexion a été envoyé par e-mail.');
     }
@@ -433,6 +459,15 @@ class AuthController extends Controller
             'email' => ['required', 'email'],
             'otp_code' => ['required', 'digits:6'],
         ]);
+
+        // Compteur cumulé sur 15 minutes, volontairement NON remis à zéro par « Renvoyer le code » :
+        // sinon un cycle renvoi/tentatives illimité annulerait l'effet de MAX_TENTATIVES (5 essais par code).
+        $cleEchecs = 'otp-echecs:login:' . sha1(Str::lower($data['email']));
+        if (RateLimiter::tooManyAttempts($cleEchecs, 10)) {
+            return response()->json([
+                'message' => 'Trop de tentatives. Veuillez vous reconnecter dans ' . RateLimiter::availableIn($cleEchecs) . ' secondes.',
+            ], 429);
+        }
 
         $key = $this->loginKey($data['email']);
         $state = Cache::get($key);
@@ -450,12 +485,14 @@ class AuthController extends Controller
         }
 
         if (! $this->otp->verifier($data['email'], $data['otp_code'], $state['otp'])) {
+            RateLimiter::hit($cleEchecs, 900);
             $state['attempts']++;
             Cache::put($key, $state, Carbon::createFromTimestamp($state['expires_at']));
 
             return response()->json(['message' => 'Code invalide ou expiré.'], 422);
         }
 
+        RateLimiter::clear($cleEchecs);
         Cache::forget($key); // code à usage unique
 
         $user = User::find($state['user_id']);

@@ -54,14 +54,16 @@ interface Approbateur {
 
 interface RegisterResponse {
   message: string;
-  request_id: string;
+  request_id?: string;
   statut: StatutDemande;
-  nom: string;
-  email: string;
+  nom?: string;
+  email?: string;
   approbateur?: Approbateur;
   expires_at?: string | null;
   otp_expires_at?: string | null;
   code_verifie?: boolean;
+  // Demande déjà existante : le serveur ne renvoie aucun request_id (secret de suivi), seulement un message.
+  reprise_locale_uniquement?: boolean;
 }
 
 interface StatusResponse {
@@ -261,6 +263,14 @@ export default function SignupPage() {
         fonction_id: Number(form.fonction_id),
       });
 
+      // Une demande existe déjà pour cet e-mail : le serveur ne transmet plus son request_id
+      // (secret de suivi) pour empêcher qu'un tiers la consulte ou l'annule. On reste sur le
+      // formulaire avec le message indiquant comment la reprendre depuis le navigateur d'origine.
+      if (!res.data.request_id) {
+        setInfo(res.data.message);
+        return;
+      }
+
       const centreNom =
         options.centres.find((c) => String(c.id) === form.centre_id)?.nom ??
         res.data.approbateur?.centre ??
@@ -269,8 +279,8 @@ export default function SignupPage() {
 
       savePendingSignup({
         request_id: res.data.request_id,
-        email: res.data.email,
-        nom: res.data.nom,
+        email: res.data.email ?? form.email,
+        nom: res.data.nom ?? form.nom,
         approbateur: approbateurRecu,
         otp_expires_at: res.data.otp_expires_at ?? null,
       });

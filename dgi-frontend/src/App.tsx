@@ -16,6 +16,7 @@ import DefaillancesPage from "./pages/DefaillancesPage";
 import TraitementsPage from "./pages/TraitementsPage";
 import DossierTraitementPage from "./pages/DossierTraitementPage";
 import ContribuableFichePage from "./pages/ContribuableFichePage";
+import ContribuableFicheApercuPage from "./pages/ContribuableFicheApercuPage";
 import ProfilePage from "./pages/ProfilePage";
 import ProfileWaitingPage from "./pages/ProfileWaitingPage";
 import ConfirmChangePage from "./pages/ConfirmChangePage";
@@ -44,6 +45,8 @@ export default function App() {
           <Route path="/defaillances/:id/traitement" element={<DossierTraitementPage />} />
           {/* Fiche de résultat d'un contribuable (synthèse, coordonnées, observations, export PDF) */}
           <Route path="/contribuables/:id" element={<ContribuableFichePage />} />
+          {/* Aperçu plein écran de la fiche PDF */}
+          <Route path="/contribuables/:id/apercu" element={<ContribuableFicheApercuPage />} />
 
           {/* Section Administration : utilisateurs + centres + fonctions */}
           <Route element={<ProtectedRoute roles={["superadmin", "central", "admin"]} />}>

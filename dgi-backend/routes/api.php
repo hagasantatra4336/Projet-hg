@@ -85,6 +85,8 @@ Route::middleware('auth:sanctum')->group(function () {
     // même filtrage par centre. Le PDF reprend exactement les mêmes données.
     Route::get('/contribuables/{contribuable}', [ContribuableController::class, 'show']);
     Route::get('/contribuables/{contribuable}/fiche.pdf', [ContribuableController::class, 'pdf']);
+    // Aperçu écran : même gabarit que le PDF, rendu en HTML (aucun téléchargement)
+    Route::get('/contribuables/{contribuable}/fiche.html', [ContribuableController::class, 'html']);
     Route::patch('/contribuables/{contribuable}/contact', [ContribuableController::class, 'updateContact']);
     Route::post('/contribuables/{contribuable}/observations', [ContribuableController::class, 'storeObservation'])
         ->middleware('throttle:30,1,observations');

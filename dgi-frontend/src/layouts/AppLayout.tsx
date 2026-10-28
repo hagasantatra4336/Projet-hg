@@ -1,15 +1,18 @@
-import { useEffect, useState, type ReactNode } from "react";
-import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
+import { useEffect, useRef, useState, type ReactNode } from "react";
+import { Link, NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { useAnalyseAuto } from "../hooks/useAnalyseAuto";
 import { useNotifications } from "../hooks/useNotifications";
 import ThemeToggle from "../components/ThemeToggle";
+import { ConfirmDialog } from "../components/ui";
 import { ROLE_LABELS, type Role } from "../types";
 import {
   IconAlert,
   IconBriefcase,
   IconBuilding,
   IconChevron,
+  IconChevronDown,
+  IconChevronUp,
   IconClose,
   IconDashboard,
   IconLogout,
@@ -75,6 +78,10 @@ export default function AppLayout() {
   const [mobileOpen, setMobileOpen] = useState<boolean>(false);
   const inAdmin = pathname.startsWith("/admin");
   const [adminOpen, setAdminOpen] = useState<boolean>(inAdmin);
+  const [deconnexion, setDeconnexion] = useState<boolean>(false);
+  const [deconnexionEnCours, setDeconnexionEnCours] = useState<boolean>(false);
+  const [menuCompte, setMenuCompte] = useState<boolean>(false);
+  const refCompte = useRef<HTMLDivElement>(null);
 
   // Les agents n'ont pas accès à l'administration.
   const adminItems = ADMIN_ITEMS.filter((i) => user?.role && i.roles.includes(user.role));
@@ -82,12 +89,37 @@ export default function AppLayout() {
   // Ferme le menu mobile à chaque changement de page ; ouvre le groupe Administration en y entrant.
   useEffect(() => {
     setMobileOpen(false);
+    setMenuCompte(false);
     if (pathname.startsWith("/admin")) setAdminOpen(true);
   }, [pathname]);
 
-  async function handleLogout() {
-    await logout();
-    navigate("/");
+  // Ferme le menu du compte au clic extérieur ou avec Échap
+  useEffect(() => {
+    if (!menuCompte) return;
+    const surClic = (e: MouseEvent) => {
+      if (refCompte.current && !refCompte.current.contains(e.target as Node)) setMenuCompte(false);
+    };
+    const surTouche = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setMenuCompte(false);
+    };
+    document.addEventListener("mousedown", surClic);
+    document.addEventListener("keydown", surTouche);
+    return () => {
+      document.removeEventListener("mousedown", surClic);
+      document.removeEventListener("keydown", surTouche);
+    };
+  }, [menuCompte]);
+
+  // Déconnexion confirmée par l'agent : ferme la session puis renvoie à l'accueil
+  async function confirmerDeconnexion() {
+    setDeconnexionEnCours(true);
+    try {
+      await logout();
+      navigate("/");
+    } finally {
+      setDeconnexionEnCours(false);
+      setDeconnexion(false);
+    }
   }
 
   const initial = (user?.nom ?? "?").trim().charAt(0).toUpperCase();
@@ -211,31 +243,66 @@ export default function AppLayout() {
             </div>
           )}
 
-          <NavLink to="/profile" className={linkClass}>
-            <IconUser />
-            <span>Mon profil</span>
-          </NavLink>
+          {/* Le profil n'est plus ici : il reste accessible par le nom et le menu du compte en bas. */}
         </nav>
 
-        {/* Utilisateur connecté + déconnexion */}
-        <div className="mt-4 flex items-center gap-3 rounded-lg border border-white/10 bg-white/5 p-3">
-          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-brand-white font-semibold text-brand-blue">
-            {initial}
-          </span>
-          <div className="min-w-0 flex-1">
-            <p className="truncate text-sm font-semibold text-white">{user?.nom}</p>
-            <p className="truncate text-xs text-white/60">{user?.role ? ROLE_LABELS[user.role] : ""}</p>
+        {/* Compte : le nom mène au profil, le chevron ouvre le menu (profil / déconnexion) */}
+        <div ref={refCompte} className="relative mt-4 border-t border-white/15 pt-3">
+          <div className="flex items-center gap-1">
+            <Link
+              to="/profile"
+              title={`${user?.nom ?? ""} — voir mon profil`}
+              className="flex min-w-0 flex-1 items-center gap-2 rounded-lg py-1 pl-1 pr-1 transition hover:bg-white/10"
+            >
+              <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-brand-white text-[13px] font-semibold text-brand-blue">
+                {initial}
+              </span>
+              <span className="min-w-0 leading-tight">
+                <span className="block truncate text-[13px] font-semibold text-white">{user?.nom}</span>
+                <span className="block truncate text-[11px] text-white/70">{user?.role ? ROLE_LABELS[user.role] : ""}</span>
+              </span>
+            </Link>
+            <ThemeToggle variant="sidebar" />
+            <button
+              type="button"
+              onClick={() => setMenuCompte((ouvert) => !ouvert)}
+              title="Menu du compte"
+              aria-label="Menu du compte"
+              aria-haspopup="menu"
+              aria-expanded={menuCompte}
+              className="rounded-lg p-1.5 text-white/70 transition hover:bg-white/10 hover:text-white"
+            >
+              {menuCompte ? <IconChevronUp className="h-4 w-4" /> : <IconChevronDown className="h-4 w-4" />}
+            </button>
           </div>
-          <ThemeToggle variant="sidebar" />
-          <button
-            type="button"
-            onClick={handleLogout}
-            title="Déconnexion"
-            aria-label="Déconnexion"
-            className="rounded-lg p-2 text-white/60 transition hover:bg-white/10 hover:text-white"
-          >
-            <IconLogout />
-          </button>
+
+          {menuCompte && (
+            <div
+              role="menu"
+              className="absolute bottom-full right-0 mb-2 w-48 overflow-hidden rounded-lg border border-white/15 bg-brand-blue shadow-xl"
+            >
+              <Link
+                to="/profile"
+                role="menuitem"
+                className="flex items-center gap-2.5 px-3 py-2.5 text-sm text-white/85 transition hover:bg-white/10 hover:text-white"
+              >
+                <IconUser className="h-4 w-4" />
+                Mon profil
+              </Link>
+              <button
+                type="button"
+                role="menuitem"
+                onClick={() => {
+                  setMenuCompte(false);
+                  setDeconnexion(true);
+                }}
+                className="flex w-full items-center gap-2.5 border-t border-white/10 px-3 py-2.5 text-left text-sm text-red-200 transition hover:bg-red-500/20 hover:text-white"
+              >
+                <IconLogout className="h-4 w-4" />
+                Se déconnecter
+              </button>
+            </div>
+          )}
         </div>
       </aside>
 
@@ -244,6 +311,19 @@ export default function AppLayout() {
           <Outlet />
         </div>
       </main>
+
+      {deconnexion && (
+        <ConfirmDialog
+          title="Déconnexion"
+          message="Voulez-vous vraiment vous déconnecter ?"
+          detail="Vous devrez saisir à nouveau votre mot de passe et le code reçu par e-mail pour revenir."
+          confirmLabel="Se déconnecter"
+          loadingLabel="Déconnexion..."
+          loading={deconnexionEnCours}
+          onConfirm={() => void confirmerDeconnexion()}
+          onCancel={() => setDeconnexion(false)}
+        />
+      )}
     </div>
   );
 }

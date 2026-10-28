@@ -5,18 +5,18 @@ export interface ApiErrorResponse {
   errors?: Record<string, string[]>;
 }
 
-// Sans VITE_API_URL, l'API est cherchée sur la même machine que celle qui affiche la page (port 8000) :
-// http://127.0.0.1:8000/api depuis le PC, http://192.168.1.20:8000/api depuis un smartphone ouvert sur l'adresse du PC.
-const apiHost = window.location.hostname === "localhost" ? "127.0.0.1" : window.location.hostname;
-
+// L'API est jointe sur la même adresse que la page : en développement Vite transmet /api à Laravel
+// (voir vite.config.ts), en production le serveur web sert les deux. VITE_API_URL permet de viser
+// une API hébergée ailleurs (ex. http://192.168.1.20:8000/api).
 const api = axios.create({
-  baseURL: import.meta.env.VITE_API_URL ?? `http://${apiHost}:8000/api`, // définissez VITE_API_URL dans .env si l'API est ailleurs
+  baseURL: import.meta.env.VITE_API_URL ?? "/api",
   headers: {
     "Content-Type": "application/json",
     Accept: "application/json",
   },
 });
 
+// Ajoute le jeton de connexion à chaque appel
 api.interceptors.request.use((config: InternalAxiosRequestConfig) => {
   const token = localStorage.getItem("token");
   if (token) {
@@ -25,6 +25,7 @@ api.interceptors.request.use((config: InternalAxiosRequestConfig) => {
   return config;
 });
 
+// Session expirée : supprime le jeton et prévient l'application
 api.interceptors.response.use(
   (response) => response,
   (error: AxiosError<ApiErrorResponse>) => {

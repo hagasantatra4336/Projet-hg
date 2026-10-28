@@ -138,10 +138,6 @@
         $etatTexte .= ' — le ' . \Illuminate\Support\Carbon::parse($c['date_blocage'])->format('d/m/Y');
     }
 
-    // Saut de page seulement si la fiche contient de quoi remplir une deuxième page
-    $sautPage = count($fiche['alertes']) > 0
-        || count($fiche['historique']['mensuel']['impots']) > 0
-        || count($fiche['historique']['annuel']['impots']) > 0;
 @endphp
 <!DOCTYPE html>
 <html lang="fr">
@@ -151,31 +147,39 @@
     <style>
         @page { margin: 14mm 14mm 16mm 14mm; }
         * { box-sizing: border-box; }
-        body { font-family: "DejaVu Sans", sans-serif; font-size: 8.5px; color: #111111; line-height: 1.4; margin: 0; }
+        body { font-family: "Times New Roman", Times, serif; font-size: 8.5px; color: #111111; line-height: 1.4; margin: 0; }
         h1, h2, p { margin: 0; }
         table { border-collapse: collapse; width: 100%; }
 
         .entete td { vertical-align: top; }
-        .org { width: 60%; font-size: 7.8px; line-height: 1.55; color: #111111; }
+        .org { width: 60%; font-size: 7.8px; line-height: 1.55; color: #111111; text-transform: uppercase; }
         .org .etat { font-weight: bold; }
+        .org-logo { width: 40px; padding-right: 9px; vertical-align: middle; }
+        .org-logo img { width: 40px; }
         .cachet { width: 40%; }
-        .cachet table { border: 1px solid #666666; }
+        .cachet table { }
         .cachet td { padding: 4px 7px; font-size: 7.6px; color: #111111; }
         .cachet .numero { font-weight: bold; }
-        .filet { border-top: 1px solid #111111; margin: 8px 0 10px; }
+        
 
         .titre-doc { text-align: center; }
         .titre-doc h1 { font-size: 12.6px; font-weight: bold; text-transform: uppercase; }
         .titre-doc .sous { font-size: 7.8px; color: #444444; margin-top: 2px; font-style: italic; }
 
+        /* Les petits blocs restent d'un seul tenant ; les sections longues (anomalies, observations,
+           obligations, historique) utilise classe « section-libre » et se poursuivent sur la page
+           suivante au lieu de créer une page presque vide. */
         .section { margin-top: 11px; page-break-inside: avoid; }
         .section-libre { margin-top: 11px; }
-        .titre-section { font-size: 9.2px; font-weight: bold; text-transform: uppercase; border-bottom: 1px solid #666666; padding-bottom: 1.5px; }
+        .titre-section { font-size: 9.2px; font-weight: bold; text-transform: uppercase; border-bottom: 1px solid #666666; padding-bottom: 1.5px; page-break-after: avoid; }
+        /* Une ligne de tableau ne doit jamais être coupée en deux par un saut de page. */
+        tr { page-break-inside: avoid; }
 
-        .grille { margin-top: 4px; }
-        .grille td { border: 1px solid #999999; padding: 3px 5px; vertical-align: top; }
-        .grille .cle { font-weight: bold; width: 17%; }
-        .grille .val { width: 33%; }
+        /* Coordonnées : deux colonnes de lignes simples, sans cadre */
+        .coordonnees { margin-top: 4px; }
+        .coordonnees td { padding: 1.2px 0; font-size: 8.4px; vertical-align: top; }
+        .coordonnees .cle { width: 14%; }
+        .coordonnees .val { width: 36%; padding-right: 8px; }
 
         .recap { margin-top: 4px; }
         .recap th { background: #ededed; border: 1px solid #999999; font-size: 7.4px; text-transform: uppercase; text-align: left; padding: 3px 5px; font-weight: bold; }
@@ -205,12 +209,14 @@
         .observation .meta { font-size: 7.2px; color: #444444; margin-bottom: 2px; }
         .vide { color: #666666; font-style: italic; font-size: 8px; margin-top: 3px; }
 
-        .matrice { table-layout: fixed; margin-top: 4px; }
+        .matrice { table-layout: fixed; margin-top: 4px; page-break-inside: avoid; }
         .matrice th, .matrice td { border: 1px solid #bbbbbb; text-align: center; padding: 2px 1px; font-size: 6.8px; }
         .matrice th { background: #ededed; }
         .matrice .impot { text-align: left; font-weight: bold; width: 32px; padding-left: 3px; }
         .legende { font-size: 6.8px; color: #444444; margin-top: 3px; }
 
+        /* Bloc de clôture : signature et mention finale restent ensemble sur la dernière page. */
+        .fin { page-break-inside: avoid; }
         .signature { margin-top: 16px; page-break-inside: avoid; }
         .signature td { vertical-align: top; font-size: 8px; }
         .signature .cadre { border: 1px solid #999999; padding: 5px 7px; }
@@ -226,10 +232,19 @@
     <table class="entete">
         <tr>
             <td class="org">
-                <span class="etat">RÉPUBLIQUE DE MADAGASCAR</span><br>
-                Ministère de l'Économie et des Finances<br>
-                <strong>Direction Générale des Impôts</strong><br>
-                {{ $c['centre'] ?? 'Centre non rattaché' }}
+                <table>
+                    <tr>
+                        @if ($logo)
+                            <td class="org-logo"><img src="{{ $logo }}" alt="DGI"></td>
+                        @endif
+                        <td>
+                            <span class="etat">RÉPUBLIQUE DE MADAGASCAR</span><br>
+                            <strong>MINISTÈRE DE L'ÉCONOMIE ET DES FINANCES</strong><br>
+                            <strong>DIRECTION GÉNÉRALE DES IMPÔTS</strong><br>
+                            <strong>{{ mb_strtoupper($c['centre'] ?: 'Centre non rattaché', 'UTF-8') }}</strong>
+                        </td>
+                    </tr>
+                </table>
             </td>
             <td class="cachet">
                 <table>
@@ -246,7 +261,7 @@
             </td>
         </tr>
     </table>
-    <div class="filet"></div>
+    <br>
 
     <div class="titre-doc">
         <h1>Fiche de résultat de l'analyse des risques fiscaux</h1>
@@ -256,31 +271,33 @@
         </div>
     </div>
 
-    {{-- Identification --}}
+    {{-- Coordonnées : deux colonnes (4 informations à gauche, 4 à droite), sans cadre --}}
     <div class="section">
-        <div class="titre-section">Identification du contribuable</div>
-        <table class="grille">
+        <div class="titre-section">Coordonnées</div>
+        <table class="coordonnees">
             <tr>
-                <td class="cle">NIF</td>
+                <td class="cle">NIF :</td>
                 <td class="val">{{ $c['nif'] }}</td>
-                <td class="cle">Raison sociale</td>
-                <td class="val"><strong>{{ $c['nom'] }}</strong></td>
-            </tr>
-            <tr>
-                <td class="cle">Activité</td>
-                <td class="val">{{ $c['activite'] ?: 'Non renseignée' }}</td>
-                <td class="cle">État</td>
-                <td class="val">{{ $etatTexte }}</td>
-            </tr>
-            <tr>
-                <td class="cle">Téléphone</td>
+                <td class="cle">Téléphone :</td>
                 <td class="val">{{ $c['telephone'] ?: 'Non renseigné' }}</td>
-                <td class="cle">E-mail</td>
+            </tr>
+            <tr>
+                <td class="cle">Raison sociale :</td>
+                <td class="val"><strong>{{ $c['nom'] }}</strong></td>
+                <td class="cle">E-mail :</td>
                 <td class="val">{{ $c['email'] ?: 'Non renseigné' }}</td>
             </tr>
             <tr>
-                <td class="cle">Adresse</td>
-                <td class="val" colspan="3">{{ $c['adresse'] ?: 'Non renseignée' }}</td>
+                <td class="cle">Activité :</td>
+                <td class="val">{{ $c['activite'] ?: 'Non renseignée' }}</td>
+                <td class="cle">Centre :</td>
+                <td class="val">{{ $c['centre'] ?: 'Non rattaché' }}</td>
+            </tr>
+            <tr>
+                <td class="cle">Adresse :</td>
+                <td class="val">{{ $c['adresse'] ?: 'Non renseignée' }}</td>
+                <td class="cle">État :</td>
+                <td class="val">{{ $etatTexte }}</td>
             </tr>
         </table>
     </div>
@@ -419,8 +436,8 @@
         @endif
     </div>
 
-    {{-- Observations (deuxième page : suites données) --}}
-    <div class="section" @if ($sautPage) style="page-break-before: always; margin-top: 0" @endif>
+    {{-- Observations : section libre, une observation n'étant jamais coupée (classe .observation) --}}
+    <div class="section-libre">
         <div class="titre-section">Observations et suites données</div>
         @if (count($fiche['observations']) === 0)
             <p class="vide">Aucune observation enregistrée.</p>
@@ -437,8 +454,8 @@
         @endif
     </div>
 
-    {{-- Obligations --}}
-    <div class="section">
+    {{-- Obligations : peut compter plusieurs impôts et exercices → coupure autorisée, en-tête répété --}}
+    <div class="section-libre">
         <div class="titre-section">Obligations déclaratives</div>
         @if (count($fiche['obligations']) === 0)
             <p class="vide">Aucun assujettissement connu : l'obligation est déduite de la première déclaration de chaque impôt.</p>
@@ -549,25 +566,27 @@
         @endif
     </div>
 
-    <table class="signature">
-        <tr>
-            <td class="cadre" style="width: 46%">
-                Visa du chef de centre
-                <div class="mention" style="margin-top: 26px">Nom, signature et cachet</div>
-            </td>
-            <td style="width: 8%"></td>
-            <td class="cadre" style="width: 46%">
-                Antananarivo, le {{ $genereLe->format('d/m/Y') }}
-                <div class="fonction">{{ $fonction ?: 'Agent rédacteur' }}</div>
-                <div class="nom">{{ $auteur }}</div>
-                <div class="mention" style="margin-top: 18px">Signature et cachet</div>
-            </td>
-        </tr>
-    </table>
+    <div class="fin">
+        <table class="signature">
+            <tr>
+                <td class="cadre" style="width: 46%">
+                    Visa du chef de centre
+                    <div class="mention" style="margin-top: 26px">Nom, signature et cachet</div>
+                </td>
+                <td style="width: 8%"></td>
+                <td class="cadre" style="width: 46%">
+                    Antananarivo, le {{ $genereLe->format('d/m/Y') }}
+                    <div class="fonction">{{ $fonction ?: 'Agent rédacteur' }}</div>
+                    <div class="nom">{{ $auteur }}</div>
+                    <div class="mention" style="margin-top: 18px">Signature et cachet</div>
+                </td>
+            </tr>
+        </table>
 
-    <div class="pied">
-        <strong>Document interne</strong> — fiche générée par {{ $auteur }} le {{ $genereLe->format('d/m/Y à H:i') }}
-        · contribuable {{ $c['nif'] }} · {{ $c['nom'] }}.
+        <div class="pied">
+            <strong>Document interne</strong> — fiche générée par {{ $auteur }} le {{ $genereLe->format('d/m/Y à H:i') }}
+            · contribuable {{ $c['nif'] }} · {{ $c['nom'] }}.
+        </div>
     </div>
 </body>
 </html>

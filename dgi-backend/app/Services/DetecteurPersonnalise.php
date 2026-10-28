@@ -41,20 +41,26 @@ class DetecteurPersonnalise
 
         $colonnes = $this->colonnes($conditions); // code => colonne (vérifiée)
 
-        $lignes = $this->lire($colonnes, $impots, $anneeMin, $centreId);
-
         $trouvees = [];
         $absentes = 0;
+        $analyses = 0;
         $libelles = Indicateur::pluck('libelle', 'code')->all();
 
-        foreach ($lignes as $l) {
+        // Parcours en flux : chaque déclaration est évaluée puis oubliée. Avant, toutes les lignes
+        // étaient empilées dans un tableau (saturation mémoire possible sur une grosse base) ;
+        // seules les déclarations en défaut sont conservées pour créer/mettre à jour les alertes.
+        $this->parcourir($colonnes, $impots, $anneeMin, $centreId, function (array $l) use (&$trouvees, &$absentes, &$analyses, $conditions, $regle, $libelles): void {
+            $analyses++;
+
             if (in_array(null, $l['valeurs'], true)) {
                 $absentes++;
             }
+
             $r = EvaluateurConditions::evaluer($conditions, $l);
             if (! $r['ok']) {
-                continue;
+                return;
             }
+
             $trouvees[] = [
                 'contribuable_id' => $l['contribuable_id'],
                 'type_impot' => $l['type_impot'],
@@ -71,13 +77,13 @@ class DetecteurPersonnalise
                 ],
                 'centre_id' => $l['centre_id'],
             ];
-        }
+        });
 
         if ($simuler) {
-            return $this->resume($regle, $aujourdhui, count($lignes), $absentes, $trouvees);
+            return $this->resume($regle, $aujourdhui, $analyses, $absentes, $trouvees);
         }
 
-        $stats = ['date' => $aujourdhui, 'analyses' => count($lignes), 'crees' => 0, 'mis_a_jour' => 0, 'regularisees' => 0];
+        $stats = ['date' => $aujourdhui, 'analyses' => $analyses, 'crees' => 0, 'mis_a_jour' => 0, 'regularisees' => 0];
 
         DB::transaction(function () use ($trouvees, $regle, $anneeMin, $impots, $centreId, &$stats) {
             $actuelles = [];
@@ -162,11 +168,14 @@ class DetecteurPersonnalise
     }
 
     /**
+     * Évalue chaque déclaration sans les stocker : le curseur ne garde qu'une ligne à la fois,
+     * la mémoire reste donc stable quel que soit le volume de la table.
+     *
      * @param array<string, string> $colonnes
      * @param array<int, string> $impots
-     * @return array<int, array<string, mixed>>
+     * @param callable(array<string, mixed>): void $surLigne
      */
-    private function lire(array $colonnes, array $impots, int $anneeMin, ?int $centreId): array
+    private function parcourir(array $colonnes, array $impots, int $anneeMin, ?int $centreId, callable $surLigne): void
     {
         $q = DB::table('declarations')
             ->join('contribuables', 'contribuables.id', '=', 'declarations.contribuable_id')
@@ -198,7 +207,6 @@ class DetecteurPersonnalise
             $q->where('contribuables.centre_id', $centreId);
         }
 
-        $lignes = [];
         foreach ($q->cursor() as $r) {
             $valeurs = [];
             $precedentes = [];
@@ -206,7 +214,7 @@ class DetecteurPersonnalise
                 $valeurs[$code] = $r->{"v_{$n}"} !== null ? (float) $r->{"v_{$n}"} : null;
                 $precedentes[$code] = $r->{"p_{$n}"} !== null ? (float) $r->{"p_{$n}"} : null;
             }
-            $lignes[] = [
+            $surLigne([
                 'contribuable_id' => (int) $r->contribuable_id,
                 'type_impot' => $r->type_impot,
                 'annee_fiscale' => (int) $r->annee_fiscale,
@@ -215,10 +223,8 @@ class DetecteurPersonnalise
                 'centre_id' => $r->centre_id !== null ? (int) $r->centre_id : null,
                 'valeurs' => $valeurs,
                 'precedentes' => $precedentes,
-            ];
+            ]);
         }
-
-        return $lignes;
     }
 
     /** @param array<int, array<string, mixed>> $constats @param array<string, string> $libelles */

@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api;
 
+use App\Enums\Role;
 use App\Http\Controllers\Controller;
 use App\Models\Regle;
 use App\Models\RegleHistorique;
@@ -115,6 +116,20 @@ class RegleController extends Controller
         $erreurs = ReglesDetection::verifier($code, $params);
         if ($erreurs !== []) {
             throw ValidationException::withMessages(['parametres' => $erreurs]);
+        }
+
+        // Un « central » règle les seuils, mais ne peut pas masquer des alertes pour tous les
+        // centres : désactiver une règle active ou en retirer un impôt est réservé au super admin.
+        // Les changements restent de toute façon tracés dans regles_historique.
+        if ($request->user()->role !== Role::Superadmin) {
+            $impotsAvant = array_values((array) (ReglesDetection::parametres($code)['impots'] ?? []));
+            $impotsApres = array_values((array) ($params['impots'] ?? $impotsAvant));
+
+            if (((bool) $regle->actif && ! (bool) $data['actif']) || array_diff($impotsAvant, $impotsApres) !== []) {
+                throw ValidationException::withMessages([
+                    'actif' => "Seul un super admin peut désactiver une règle ou retirer un impôt de la détection : cela masquerait des alertes pour tous les centres.",
+                ]);
+            }
         }
 
         $avant = ['actif' => (bool) $regle->actif, 'parametres' => ReglesDetection::parametres($code)];

@@ -89,6 +89,20 @@ export const IconChevron = (p: IconProps) => (
   </Svg>
 );
 
+/** Chevron vers le bas : menu fermé, on peut l'ouvrir. */
+export const IconChevronDown = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M6 9l6 6 6-6" />
+  </Svg>
+);
+
+/** Chevron vers le haut : menu ouvert, on peut le refermer. */
+export const IconChevronUp = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M6 15l6-6 6 6" />
+  </Svg>
+);
+
 export const IconMenu = (p: IconProps) => (
   <Svg {...p}>
     <path d="M4 6h16M4 12h16M4 18h16" />
@@ -181,6 +195,13 @@ export const IconFile = (p: IconProps) => (
   <Svg {...p}>
     <path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8l-5-5z" />
     <path d="M14 3v5h5" />
+  </Svg>
+);
+
+export const IconEye = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7-10-7-10-7z" />
+    <circle cx="12" cy="12" r="3" />
   </Svg>
 );
 

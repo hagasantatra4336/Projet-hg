@@ -181,7 +181,7 @@ export function FormActions({ children, className = "" }: { children: ReactNode;
 
 const ROLE_BADGE: Record<Role, string> = {
   agent: "bg-slate-100 text-slate-700",
-  admin: "bg-leaf-100 text-brand-blue",
+  admin: "bg-brand-blue/10 text-brand-blue",
   central: "bg-sky-100 text-sky-900",
   superadmin: "bg-brand-blue text-white",
 };

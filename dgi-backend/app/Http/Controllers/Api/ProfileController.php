@@ -7,6 +7,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Centre;
 use App\Models\User;
 use App\Notifications\ProfileChangeNotification;
+use App\Support\FrontendUrl;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -65,9 +66,13 @@ class ProfileController extends Controller
             if ($centreId !== $currentCentreId) {
                 $role = $user->role;
 
-                if ($role === Role::Admin) {
+                // Seuls les profils centraux peuvent se rattacher à un autre centre. Un agent ou un
+                // chef de centre qui changerait de centre lui-même accéderait aux contribuables, aux
+                // alertes et aux déclarations du centre visé, et un agent échapperait à la supervision
+                // de son chef : ce rattachement est du ressort de l'administration (UserController).
+                if (! in_array($role, [Role::Central, Role::Superadmin], true)) {
                     throw ValidationException::withMessages([
-                        'centre_id' => "Un admin ne peut pas changer de centre lui-même : contactez un responsable central ou un super admin.",
+                        'centre_id' => "Vous ne pouvez pas changer de centre vous-même : contactez un responsable central ou un super admin.",
                     ]);
                 }
 
@@ -83,13 +88,22 @@ class ProfileController extends Controller
         }
 
         if (filled($data['password'] ?? null)) {
-            if (! filled($data['current_password'] ?? null) || ! Hash::check($data['current_password'], (string) $user->password)) {
+            $changes['password'] = Hash::make($data['password']); // jamais de mot de passe en clair dans le cache
+        }
+
+        // Toute modification doit être confirmée avec le mot de passe actuel (jamais renvoyé par l'API).
+        if ($changes !== []) {
+            if (! filled($data['current_password'] ?? null)) {
+                throw ValidationException::withMessages([
+                    'current_password' => "Saisissez votre mot de passe actuel pour confirmer la modification.",
+                ]);
+            }
+
+            if (! Hash::check($data['current_password'], (string) $user->password)) {
                 throw ValidationException::withMessages([
                     'current_password' => 'Le mot de passe actuel est incorrect.',
                 ]);
             }
-
-            $changes['password'] = Hash::make($data['password']); // jamais de mot de passe en clair dans le cache
         }
 
         if ($changes === []) {
@@ -181,8 +195,10 @@ class ProfileController extends Controller
         $requestId = $pending['request_id'] ?? null;
 
         if (array_key_exists('centre_id', $changes)) {
-            if ($user->role === Role::Admin) {
-                $message = "Un admin ne peut pas changer de centre lui-même.";
+            // Même contrôle qu'à l'étape 1 : le rôle a pu changer (ou la demande a été créée avant
+            // ce correctif), on revérifie donc au moment d'appliquer les modifications.
+            if (! in_array($user->role, [Role::Central, Role::Superadmin], true)) {
+                $message = "Vous ne pouvez pas changer de centre vous-même.";
                 $this->marquerDemande($requestId, 'failed', ['message' => $message]);
 
                 return response()->json(['message' => $message], 422);
@@ -257,35 +273,13 @@ class ProfileController extends Controller
     }
 
     /**
-     * Adresse du front utilisée dans le lien de l'e-mail : celle depuis laquelle l'utilisateur a fait sa demande
-     * (en-tête Origin envoyé par le navigateur), à condition qu'elle fasse partie des origines de confiance de
-     * config/cors.php. Ainsi le lien s'ouvre aussi depuis un smartphone quand l'application a été ouverte avec
-     * l'adresse du PC. Sinon : FRONTEND_URL.
+     * Adresse du front utilisée dans le lien de l'e-mail : seule une origine déclarée EXACTEMENT
+     * dans config/cors.php est acceptée (une origine forgée ferait pointer le lien ailleurs).
+     * Sinon : FRONTEND_URL. Voir App\Support\FrontendUrl.
      */
     private function frontendBase(Request $request): string
     {
-        $origin = rtrim((string) $request->headers->get('Origin', ''), '/');
-
-        if ($origin !== '' && $this->originDeConfiance($origin)) {
-            return $origin;
-        }
-
-        return rtrim((string) config('dgi.frontend_url', 'http://localhost:5173'), '/');
-    }
-
-    private function originDeConfiance(string $origin): bool
-    {
-        if (in_array($origin, (array) config('cors.allowed_origins', []), true)) {
-            return true;
-        }
-
-        foreach ((array) config('cors.allowed_origins_patterns', []) as $pattern) {
-            if (@preg_match((string) $pattern, $origin) === 1) {
-                return true;
-            }
-        }
-
-        return false;
+        return FrontendUrl::base($request);
     }
 
     /** Met à jour l'état d'une demande suivie par la page d'attente (sans effet si elle n'existe plus). */

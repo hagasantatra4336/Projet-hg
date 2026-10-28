@@ -4,20 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#212E53" />
-    <script>
-      // Applique le thème avant le premier rendu pour éviter un flash de page claire.
-      (function () {
-        try {
-          var saved = localStorage.getItem("theme");
-          var dark = saved ? saved === "dark" : window.matchMedia("(prefers-color-scheme: dark)").matches;
-          var root = document.documentElement;
-          root.classList.toggle("dark", dark);
-          root.style.colorScheme = dark ? "dark" : "light";
-          var meta = document.querySelector('meta[name="theme-color"]');
-          if (meta) meta.setAttribute("content", dark ? "#0E1524" : "#212E53");
-        } catch (e) {}
-      })();
-    </script>
+    <script src="/theme-init.js"></script>
     <link rel="icon" type="image/png" href="/logo-dgi.png" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />

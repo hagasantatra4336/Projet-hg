@@ -1,10 +1,11 @@
-import { useCallback, useEffect, useState, type ReactNode } from "react";
-import { Link, useParams } from "react-router-dom";
+import { useCallback, useEffect, useState } from "react";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import api, { getErrorMessage } from "../services/api";
 import { ErrorBox, Field, IconButton, inputClass } from "../components/ui";
-import { IconCheck, IconClose, IconDownload, IconEdit, IconPlus, IconPrinter } from "../components/icons";
+import { IconCheck, IconClose, IconDownload, IconEdit, IconEye, IconPlus, IconPrinter } from "../components/icons";
 import {
   EtatBadge,
+  LigneInfo,
   Matrice,
   NiveauBadge,
   PeriodeAnomalie,
@@ -28,23 +29,17 @@ const STAT_TONE: Record<string, string> = {
   muted: "text-slate-500",
 };
 
+// Montant en ariary, ou « — » si la donnée manque
 function nombre(v: number | null | undefined): string {
   return v === null || v === undefined ? "—" : `${v.toLocaleString("fr-FR")} Ar`;
 }
 
+// Pourcentage à une décimale, ou « — » si la donnée manque
 function pourcent(v: number | null): string {
   return v === null ? "—" : `${v.toLocaleString("fr-FR", { maximumFractionDigits: 1 })} %`;
 }
 
-function Info({ label, children }: { label: string; children: ReactNode }) {
-  return (
-    <div>
-      <dt className="text-xs font-medium uppercase tracking-wide text-slate-500">{label}</dt>
-      <dd className="mt-0.5 text-sm text-slate-900">{children}</dd>
-    </div>
-  );
-}
-
+// Petite tuile de chiffre clé (compteur de la synthèse)
 function Stat({ label, value, tone = "neutral" }: { label: string; value: number | string; tone?: keyof typeof STAT_TONE }) {
   return (
     <div className="rounded-xl bg-slate-50 p-3">
@@ -59,6 +54,7 @@ type ContactForm = { telephone: string; email: string; adresse: string; activite
 /** Fiche de résultat d'un contribuable : synthèse de l'analyse, coordonnées, observations, export PDF. */
 export default function ContribuableFichePage() {
   const { id } = useParams();
+  const navigate = useNavigate();
   const [fiche, setFiche] = useState<Fiche | null>(null);
   const [error, setError] = useState<string>("");
   const [message, setMessage] = useState<string>("");
@@ -68,6 +64,7 @@ export default function ContribuableFichePage() {
   const [contact, setContact] = useState<ContactForm>({ telephone: "", email: "", adresse: "", activite: "" });
   const [observation, setObservation] = useState<string>("");
 
+  // Chargement initial et rechargement de la fiche depuis l'API
   const charger = useCallback(async () => {
     try {
       const res = await api.get<Fiche>(`/contribuables/${id}`);
@@ -82,6 +79,7 @@ export default function ContribuableFichePage() {
     void charger();
   }, [charger]);
 
+  // Enveloppe commune aux actions : verrouille les boutons et affiche succès ou erreur
   async function action(fn: () => Promise<void>, ok?: string) {
     setBusy(true);
     setError("");
@@ -96,6 +94,7 @@ export default function ContribuableFichePage() {
     }
   }
 
+  // Téléchargement du PDF : uniquement quand l'agent clique sur « Exporter en PDF »
   const exporterPdf = () =>
     action(async () => {
       const res = await api.get(`/contribuables/${id}/fiche.pdf`, { responseType: "blob" });
@@ -109,6 +108,7 @@ export default function ContribuableFichePage() {
       URL.revokeObjectURL(url);
     });
 
+  // Ouvre le formulaire de coordonnées pré-rempli avec les valeurs actuelles
   function ouvrirContact() {
     if (!fiche) return;
     setContact({
@@ -120,6 +120,7 @@ export default function ContribuableFichePage() {
     setContactOuvert(true);
   }
 
+  // Enregistre les coordonnées puis remplace la fiche par la version renvoyée par l'API
   const enregistrerContact = () =>
     action(async () => {
       const res = await api.patch<Fiche>(`/contribuables/${id}/contact`, contact);
@@ -127,6 +128,7 @@ export default function ContribuableFichePage() {
       setContactOuvert(false);
     }, "Coordonnées enregistrées.");
 
+  // Ajoute une observation datée à l'historique de la fiche
   const ajouterObservation = () =>
     action(async () => {
       if (!observation.trim()) return;
@@ -219,6 +221,13 @@ export default function ContribuableFichePage() {
             </p>
           </div>
           <div className="no-print flex flex-wrap gap-2">
+            <IconButton
+              label="Voir la fiche"
+              onClick={() => navigate(`/contribuables/${id}/apercu`)}
+              disabled={busy}
+            >
+              <IconEye className="h-4 w-4" />
+            </IconButton>
             <IconButton label="Exporter en PDF" tone="primary" onClick={() => void exporterPdf()} disabled={busy}>
               <IconDownload className="h-4 w-4" />
             </IconButton>
@@ -231,9 +240,9 @@ export default function ContribuableFichePage() {
           </div>
         </div>
 
-        <dl className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          <Info label="Activité">{c.activite || <span className="text-slate-400">Non renseignée</span>}</Info>
-          <Info label="Téléphone">
+        <dl className="mt-4 grid gap-x-8 sm:grid-cols-2">
+          <LigneInfo label="Activité">{c.activite || <span className="text-slate-400">Non renseignée</span>}</LigneInfo>
+          <LigneInfo label="Téléphone">
             {c.telephone ? (
               <a href={`tel:${c.telephone.replace(/\s/g, "")}`} className="text-brand-blue underline">
                 {c.telephone}
@@ -241,8 +250,8 @@ export default function ContribuableFichePage() {
             ) : (
               <span className="text-slate-400">Non renseigné</span>
             )}
-          </Info>
-          <Info label="E-mail">
+          </LigneInfo>
+          <LigneInfo label="E-mail">
             {c.email ? (
               <a href={`mailto:${c.email}`} className="text-brand-blue underline">
                 {c.email}
@@ -250,8 +259,8 @@ export default function ContribuableFichePage() {
             ) : (
               <span className="text-slate-400">Non renseigné</span>
             )}
-          </Info>
-          <Info label="Adresse">{c.adresse || <span className="text-slate-400">Non renseignée</span>}</Info>
+          </LigneInfo>
+          <LigneInfo label="Adresse">{c.adresse || <span className="text-slate-400">Non renseignée</span>}</LigneInfo>
         </dl>
 
         {contactOuvert && (

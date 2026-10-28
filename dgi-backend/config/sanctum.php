@@ -50,7 +50,11 @@ return [
     |
     */
 
-    'expiration' => null,
+    // Un jeton sans expiration reste valide indéfiniment : un jeton volé (stockage navigateur,
+    // sauvegarde de poste...) donnerait un accès permanent. On le limite donc à une journée de
+    // travail par défaut ; le front déconnecte l'utilisateur au premier 401 et il se reconnecte
+    // (mot de passe + code OTP). Surchargeable via SANCTUM_EXPIRATION (minutes), sans toucher au .env.
+    'expiration' => (int) env('SANCTUM_EXPIRATION', 480),
 
     /*
     |--------------------------------------------------------------------------

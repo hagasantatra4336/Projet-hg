@@ -2,7 +2,18 @@ import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "rea
 import { useLocation, useNavigate } from "react-router-dom";
 import api, { getErrorMessage } from "../services/api";
 import { useAuth } from "../context/AuthContext";
-import { ErrorBox, Field, FormActions, PasswordInput, RoleBadge, inputClass } from "../components/ui";
+import {
+  ErrorBox,
+  Field,
+  FormActions,
+  FormGrid,
+  Modal,
+  PasswordInput,
+  RoleBadge,
+  inputClass,
+  primaryButtonClass,
+  secondaryButtonClass,
+} from "../components/ui";
 import CentreSelect, { type CentreOption } from "../components/CentreSelect";
 import { savePendingRequest } from "../services/profileRequest";
 
@@ -13,8 +24,8 @@ interface ProfileForm {
   centre_id: string;
 }
 
+/** Nouveau mot de passe : le mot de passe actuel n'est plus affiché, il est demandé au moment de confirmer. */
 interface PasswordForm {
-  current_password: string;
   password: string;
   password_confirmation: string;
 }
@@ -28,8 +39,9 @@ interface RequestChangeResponse {
   debug_confirm_url?: string; // renvoyé par l'API uniquement en mode développement (APP_DEBUG=true)
 }
 
-const EMPTY_PASSWORDS: PasswordForm = { current_password: "", password: "", password_confirmation: "" };
+const EMPTY_PASSWORDS: PasswordForm = { password: "", password_confirmation: "" };
 
+/** Initiales affichées dans l'avatar (deux premières lettres du nom). */
 function initials(nom: string): string {
   const parts = nom.trim().split(/\s+/).filter(Boolean);
   if (parts.length === 0) return "?";
@@ -56,10 +68,10 @@ function LockIcon() {
   );
 }
 
-/** Ligne « libellé / valeur » non modifiable, alignée à gauche, avec un cadenas à droite. */
+/** Ligne « libellé / valeur » non modifiable, avec un cadenas à droite. */
 function InfoRow({ label, children }: { label: string; children: ReactNode }) {
   return (
-    <div className="flex items-center justify-between gap-3 py-3">
+    <div className="flex items-center justify-between gap-3 py-2.5">
       <div className="min-w-0">
         <dt className="text-xs font-medium text-slate-500">{label}</dt>
         <dd className="break-words text-sm font-medium text-brand-blue">{children}</dd>
@@ -69,13 +81,13 @@ function InfoRow({ label, children }: { label: string; children: ReactNode }) {
   );
 }
 
-/** Carte blanche avec liseré vert et titre bleu. */
+/** Carte blanche avec titre et filet de séparation. */
 function Section({ title, hint, children }: { title: string; hint?: string; children: ReactNode }) {
   return (
-    <section className="bg-white rounded-xl border border-line p-6 space-y-4">
-      <div className="border-b border-line pb-3">
+    <section className="rounded-xl border border-line bg-white p-6">
+      <div className="mb-4 border-b border-line pb-3">
         <h2 className="font-semibold text-brand-blue">{title}</h2>
-        {hint && <p className="text-xs text-slate-500 mt-0.5">{hint}</p>}
+        {hint && <p className="mt-0.5 text-xs text-slate-500">{hint}</p>}
       </div>
       {children}
     </section>
@@ -94,6 +106,10 @@ export default function ProfilePage() {
     centre_id: user?.centre_id ? String(user.centre_id) : "",
   });
   const [passwords, setPasswords] = useState<PasswordForm>(EMPTY_PASSWORDS);
+  // Le bloc « mot de passe » reste replié : l'utilisateur l'ouvre seulement s'il veut le changer.
+  const [motDePasseOuvert, setMotDePasseOuvert] = useState<boolean>(false);
+  // Fenêtre de confirmation : demande le mot de passe actuel avant d'envoyer la demande.
+  const [confirmation, setConfirmation] = useState<{ motDePasse: string; erreur: string } | null>(null);
   const [centres, setCentres] = useState<CentreOption[]>([]);
   const [error, setError] = useState<string>("");
   const [loading, setLoading] = useState<boolean>(false);
@@ -134,26 +150,48 @@ export default function ProfilePage() {
 
   if (!user) return null;
 
-  const isAdmin = user.role === "admin";
-  const centreRequired = user.role === "agent" || user.role === "admin";
+  // Seuls les profils centraux peuvent se rattacher à un autre centre : pour un agent ou un chef
+  // de centre, ce changement relève d'un responsable (même règle vérifiée côté serveur).
+  const peutChangerCentre = user.role === "central" || user.role === "superadmin";
 
   // Le centre actuel reste sélectionnable même s'il manquait dans la liste chargée.
   const centreOptions =
     user.centre && !centres.some((c) => c.id === user.centre!.id) ? [...centres, user.centre] : centres;
 
-  async function handleSubmit(e: FormEvent<HTMLFormElement>) {
+  // Étape 1 : on vérifie le formulaire puis on demande le mot de passe actuel.
+  function handleSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setError("");
+    if (passwords.password && passwords.password !== passwords.password_confirmation) {
+      setError("Les deux mots de passe ne correspondent pas.");
+      return;
+    }
+    setConfirmation({ motDePasse: "", erreur: "" });
+  }
+
+  // Étape 2 : mot de passe actuel saisi, envoi de la demande (un e-mail de confirmation suivra).
+  async function confirmerEnvoi(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    if (!confirmation) return;
+
+    if (!confirmation.motDePasse) {
+      setConfirmation({ ...confirmation, erreur: "Saisissez votre mot de passe actuel." });
+      return;
+    }
+
     setLoading(true);
+    setError("");
 
     const payload: Record<string, string | number | null> = {
       nom: form.nom,
       telephone: form.telephone,
       adresse: form.adresse,
+      current_password: confirmation.motDePasse,
     };
-    if (!isAdmin) payload.centre_id = form.centre_id ? Number(form.centre_id) : null;
-    if (passwords.password || passwords.current_password || passwords.password_confirmation) {
-      Object.assign(payload, passwords);
+    if (peutChangerCentre) payload.centre_id = form.centre_id ? Number(form.centre_id) : null;
+    if (passwords.password) {
+      payload.password = passwords.password;
+      payload.password_confirmation = passwords.password_confirmation;
     }
 
     try {
@@ -169,14 +207,21 @@ export default function ProfilePage() {
       setPasswords(EMPTY_PASSWORDS);
       navigate("/profile/attente");
     } catch (err) {
-      setError(getErrorMessage(err, "Impossible d'envoyer la demande."));
+      const message = getErrorMessage(err, "Impossible d'envoyer la demande.");
+      // Erreur de mot de passe : on la garde dans la fenêtre pour que l'utilisateur corrige sur place.
+      if (message.toLowerCase().includes("mot de passe actuel")) {
+        setConfirmation({ ...confirmation, erreur: message });
+      } else {
+        setConfirmation(null);
+        setError(message);
+      }
     } finally {
       setLoading(false);
     }
   }
 
   return (
-    <div className="w-full">
+    <div className="mx-auto w-full max-w-5xl">
       {/* Titre aligné à gauche, sur toute la largeur */}
       <div className="mb-6 border-b border-line pb-4">
         <h1 className="text-2xl font-semibold tracking-tight text-brand-blue">Mon profil</h1>
@@ -187,21 +232,21 @@ export default function ProfilePage() {
       {updated && (
         <div
           role="status"
-          className="mb-6 rounded-lg border border-brand-green/60 bg-leaf-50 px-4 py-3 text-sm font-medium text-brand-blue"
+          className="mb-6 rounded-lg border border-brand-blue/30 bg-brand-blue/5 px-4 py-3 text-sm font-medium text-brand-blue"
         >
-          ✓ Vos modifications ont été appliquées.
+          Vos modifications ont été appliquées.
         </div>
       )}
 
       {/* Deux colonnes : identité à gauche, formulaires à droite (une seule colonne sur mobile) */}
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3 lg:items-start">
-        <aside className="space-y-6 lg:sticky lg:top-6">
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,19rem)_minmax(0,1fr)] lg:items-start">
+        <aside className="space-y-6">
           <div className="overflow-hidden rounded-xl border border-line bg-white">
-            <div className="relative h-16 bg-brand-blue">
-              <div className="absolute inset-x-0 bottom-0 h-1 bg-brand-gold" />
+            <div className="flex h-14 flex-col justify-end bg-brand-blue">
+              <div className="h-1 bg-brand-gold" />
             </div>
             <div className="px-6 pb-6">
-              <div className="relative z-10 -mt-8 flex h-16 w-16 items-center justify-center rounded-lg bg-brand-green text-xl font-semibold text-brand-blue ring-4 ring-white">
+              <div className="relative z-10 -mt-8 flex h-16 w-16 items-center justify-center rounded-full bg-brand-blue text-xl font-semibold text-white ring-4 ring-white">
                 {initials(user.nom)}
               </div>
               <h2 className="mt-3 break-words text-lg font-semibold text-brand-blue">{user.nom}</h2>
@@ -213,7 +258,7 @@ export default function ProfilePage() {
                   </span>
                 )}
                 {user.centre && (
-                  <span className="rounded-full bg-leaf-100 px-2.5 py-0.5 text-xs font-semibold text-brand-blue">
+                  <span className="rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-semibold text-slate-700">
                     {user.centre.nom}
                   </span>
                 )}
@@ -221,8 +266,8 @@ export default function ProfilePage() {
             </div>
           </div>
 
-          <Section title="Informations non modifiables" hint="L'IM, l'e-mail et la fonction sont gérés par un responsable.">
-            <dl className="-my-2 divide-y divide-line">
+          <Section title="Informations du compte" hint="L'IM, l'e-mail et la fonction sont gérés par un responsable.">
+            <dl className="-my-1 divide-y divide-line">
               <InfoRow label="IM (matricule)">{user.im ?? "—"}</InfoRow>
               <InfoRow label="E-mail">{user.email}</InfoRow>
               <InfoRow label="Fonction">{user.fonction?.nom ?? "—"}</InfoRow>
@@ -230,9 +275,9 @@ export default function ProfilePage() {
           </Section>
         </aside>
 
-        <form onSubmit={handleSubmit} className="space-y-6 lg:col-span-2">
+        <form onSubmit={handleSubmit} className="space-y-6">
           <Section title="Mes informations">
-            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+            <FormGrid>
               <Field label="Nom" required>
                 <input
                   className={inputClass}
@@ -261,74 +306,117 @@ export default function ProfilePage() {
               <div>
                 <span className="mb-1 flex items-baseline gap-1 text-sm font-medium text-slate-700">
                   <span>Centre</span>
-                  {centreRequired ? (
-                    <span className="text-red-600" aria-hidden="true" title="Champ obligatoire">
-                      *
-                    </span>
-                  ) : (
-                    <span className="text-xs font-normal text-slate-400">facultatif</span>
-                  )}
+                  <span className="text-xs font-normal text-slate-400">facultatif</span>
                 </span>
                 <CentreSelect
                   centres={centreOptions}
                   value={form.centre_id}
                   onChange={(v) => setForm({ ...form, centre_id: v })}
                   className={inputClass}
-                  disabled={isAdmin}
-                  required={centreRequired && !isAdmin}
+                  disabled={!peutChangerCentre}
                 />
+                {!peutChangerCentre && (
+                  <span className="mt-1 block text-xs leading-snug text-slate-500">
+                    Le rattachement à un centre est géré par un responsable : contactez l'administration pour en changer.
+                  </span>
+                )}
               </div>
-            </div>
-            {isAdmin && (
-              <p className="text-xs text-slate-500">
-                Un admin gère les agents de son centre : pour changer de centre, contactez un responsable central ou un
-                super admin.
-              </p>
+            </FormGrid>
+          </Section>
+
+          <Section
+            title="Mot de passe"
+            hint="Le mot de passe actuel vous sera demandé pour confirmer l'enregistrement."
+          >
+            {!motDePasseOuvert ? (
+              <button type="button" className={secondaryButtonClass} onClick={() => setMotDePasseOuvert(true)}>
+                Changer mon mot de passe
+              </button>
+            ) : (
+              <div className="space-y-4">
+                <FormGrid>
+                  <Field label="Nouveau mot de passe" hint="8 caractères minimum.">
+                    <PasswordInput
+                      className={inputClass}
+                      value={passwords.password}
+                      onChange={(e) => setPasswords({ ...passwords, password: e.target.value })}
+                      minLength={8}
+                      autoComplete="new-password"
+                    />
+                  </Field>
+                  <Field label="Confirmer le nouveau mot de passe">
+                    <PasswordInput
+                      className={inputClass}
+                      value={passwords.password_confirmation}
+                      onChange={(e) => setPasswords({ ...passwords, password_confirmation: e.target.value })}
+                      minLength={8}
+                      autoComplete="new-password"
+                    />
+                  </Field>
+                </FormGrid>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPasswords(EMPTY_PASSWORDS);
+                    setMotDePasseOuvert(false);
+                  }}
+                  className="text-sm font-medium text-slate-500 underline transition hover:text-brand-blue"
+                >
+                  Annuler le changement de mot de passe
+                </button>
+              </div>
             )}
           </Section>
 
-          <Section title="Changer mon mot de passe" hint="Laissez vide pour conserver votre mot de passe actuel.">
-            <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-              <Field label="Mot de passe actuel">
-                <PasswordInput
-                  className={inputClass}
-                  value={passwords.current_password}
-                  onChange={(e) => setPasswords({ ...passwords, current_password: e.target.value })}
-                  autoComplete="current-password"
-                />
-              </Field>
-              <Field label="Nouveau mot de passe" hint="8 caractères minimum.">
-                <PasswordInput
-                  className={inputClass}
-                  value={passwords.password}
-                  onChange={(e) => setPasswords({ ...passwords, password: e.target.value })}
-                  minLength={8}
-                  autoComplete="new-password"
-                />
-              </Field>
-              <Field label="Confirmer le nouveau">
-                <PasswordInput
-                  className={inputClass}
-                  value={passwords.password_confirmation}
-                  onChange={(e) => setPasswords({ ...passwords, password_confirmation: e.target.value })}
-                  minLength={8}
-                  autoComplete="new-password"
-                />
-              </Field>
-            </div>
-          </Section>
-
-          <FormActions className="rounded-xl border border-line bg-white px-6 py-4">
-            <button
-              type="submit"
-              disabled={loading}
-              className="rounded-lg bg-brand-blue px-6 py-2.5 font-medium text-white transition hover:bg-brand-blue-light disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              {loading ? "Envoi..." : "Enregistrer et demander la confirmation"}
+          <FormActions className="rounded-xl px-6 py-4">
+            <button type="submit" disabled={loading} className={primaryButtonClass}>
+              Enregistrer les modifications
             </button>
           </FormActions>
         </form>
       </div>
+
+      {/* Confirmation : le mot de passe actuel n'est jamais affiché, il est demandé ici pour valider la modification */}
+      {confirmation && (
+        <Modal
+          title="Confirmer la modification"
+          onClose={loading ? () => undefined : () => setConfirmation(null)}
+        >
+          <form onSubmit={confirmerEnvoi}>
+            <p className="text-sm leading-relaxed text-slate-700">
+              Saisissez votre mot de passe actuel pour confirmer. Un e-mail de confirmation vous sera ensuite envoyé
+              pour appliquer les changements.
+            </p>
+            <div className="mt-4">
+              <Field label="Mot de passe actuel" required>
+                <PasswordInput
+                  value={confirmation.motDePasse}
+                  onChange={(e) => setConfirmation({ ...confirmation, motDePasse: e.target.value, erreur: "" })}
+                  autoComplete="current-password"
+                  autoFocus
+                  required
+                />
+              </Field>
+              {confirmation.erreur && (
+                <p className="mt-2 text-sm font-medium text-red-700">{confirmation.erreur}</p>
+              )}
+            </div>
+            <div className="mt-6 flex flex-wrap justify-end gap-3">
+              <button
+                type="button"
+                className={secondaryButtonClass}
+                onClick={() => setConfirmation(null)}
+                disabled={loading}
+              >
+                Annuler
+              </button>
+              <button type="submit" className={primaryButtonClass} disabled={loading}>
+                {loading ? "Envoi..." : "Confirmer"}
+              </button>
+            </div>
+          </form>
+        </Modal>
+      )}
     </div>
   );
 }

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import api, { getErrorMessage } from "../services/api";
 import {
@@ -17,6 +17,16 @@ import {
   type StatutAlerte,
 } from "../types";
 import { ErrorBox } from "./ui";
+
+/** Ligne « libellé → valeur » des blocs de renseignements (fiche contribuable, fenêtre fiche). */
+export function LigneInfo({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <div className="flex items-baseline justify-between gap-4 border-b border-line py-1.5">
+      <dt className="shrink-0 text-sm text-slate-600">{label}</dt>
+      <dd className="min-w-0 break-words text-right text-sm font-medium text-slate-900">{children}</dd>
+    </div>
+  );
+}
 
 // ---------------------------------------------------------------------
 //  Utilitaires partagés (page Anomalies, dashboard agent, fiche contribuable)
@@ -355,21 +365,40 @@ export function ContribuableModal({ id, onClose }: { id: number; onClose: () => 
 
         {fiche && mensuel && annuel && (
           <div className="space-y-6">
-            {/* Chiffres clés */}
-            <div className="grid gap-3 sm:grid-cols-3">
-              <div className="rounded-xl bg-slate-50 p-3">
-                <p className="text-xs text-slate-500">Déclarations enregistrées</p>
-                <p className="text-xl font-semibold text-brand-blue">{fiche.stats.nb_declarations}</p>
-              </div>
-              <div className="rounded-xl bg-slate-50 p-3">
-                <p className="text-xs text-slate-500">Première année déclarée</p>
-                <p className="text-xl font-semibold text-brand-blue">{fiche.stats.premiere_annee ?? "—"}</p>
-              </div>
-              <div className="rounded-xl bg-slate-50 p-3">
-                <p className="text-xs text-slate-500">Dernière année déclarée</p>
-                <p className="text-xl font-semibold text-brand-blue">{fiche.stats.derniere_annee ?? "—"}</p>
-              </div>
-            </div>
+            {/* Données du contribuable */}
+            <section>
+              <h3 className="mb-2 text-sm font-semibold text-brand-blue">Données du contribuable</h3>
+              <dl className="grid gap-x-8 sm:grid-cols-2">
+                <LigneInfo label="Activité">
+                  {fiche.contribuable.activite || <span className="text-slate-400">Non renseignée</span>}
+                </LigneInfo>
+                <LigneInfo label="Téléphone">
+                  {fiche.contribuable.telephone ? (
+                    <a href={`tel:${fiche.contribuable.telephone.replace(/\s/g, "")}`} className="text-brand-blue underline">
+                      {fiche.contribuable.telephone}
+                    </a>
+                  ) : (
+                    <span className="text-slate-400">Non renseigné</span>
+                  )}
+                </LigneInfo>
+                <LigneInfo label="E-mail">
+                  {fiche.contribuable.email ? (
+                    <a href={`mailto:${fiche.contribuable.email}`} className="text-brand-blue underline">
+                      {fiche.contribuable.email}
+                    </a>
+                  ) : (
+                    <span className="text-slate-400">Non renseigné</span>
+                  )}
+                </LigneInfo>
+                <LigneInfo label="Adresse">
+                  {fiche.contribuable.adresse || <span className="text-slate-400">Non renseignée</span>}
+                </LigneInfo>
+                <LigneInfo label="Déclarations enregistrées">{fiche.stats.nb_declarations}</LigneInfo>
+                <LigneInfo label="Années déclarées">
+                  {fiche.stats.premiere_annee ?? "—"} – {fiche.stats.derniere_annee ?? "—"}
+                </LigneInfo>
+              </dl>
+            </section>
 
             {/* Obligations */}
             <section>

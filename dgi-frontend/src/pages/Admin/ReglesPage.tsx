@@ -1,6 +1,7 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
 import api, { getErrorMessage } from "../../services/api";
+import { useAuth } from "../../context/AuthContext";
 import type { FormuleRegle, ParametreSchema, RegleConfig, ValeursRegle } from "../../types";
 import {
   ConfirmDialog,
@@ -184,6 +185,9 @@ function Formules({ formule }: { formule: FormuleRegle }) {
 }
 
 function RegleCard({ regle, onChange }: { regle: RegleConfig; onChange: (r: RegleConfig) => void }) {
+  const { user } = useAuth();
+  // Désactiver une règle masque ses alertes pour tous les centres : réservé au super admin.
+  const peutDesactiver = user?.role === "superadmin";
   const [actif, setActif] = useState<boolean>(regle.actif);
   const [valeurs, setValeurs] = useState<ValeursRegle>(regle.parametres);
   const [saving, setSaving] = useState<boolean>(false);
@@ -246,8 +250,17 @@ function RegleCard({ regle, onChange }: { regle: RegleConfig; onChange: (r: Regl
             </Link>
           </p>
         </div>
-        <label className="flex items-center gap-2 rounded-lg border border-line px-3 py-1.5 text-sm font-medium text-brand-blue">
-          <input type="checkbox" className="h-5 w-5 accent-brand-blue" checked={actif} onChange={(e) => setActif(e.target.checked)} />
+        <label
+          className="flex items-center gap-2 rounded-lg border border-line px-3 py-1.5 text-sm font-medium text-brand-blue"
+          title={peutDesactiver || !actif ? undefined : "Seul un super admin peut désactiver cette règle."}
+        >
+          <input
+            type="checkbox"
+            className="h-5 w-5 accent-brand-blue"
+            checked={actif}
+            disabled={!peutDesactiver && actif}
+            onChange={(e) => setActif(e.target.checked)}
+          />
           Règle {actif ? "activée" : "désactivée"}
         </label>
       </div>
