@@ -25,11 +25,20 @@ api.interceptors.request.use((config: InternalAxiosRequestConfig) => {
   return config;
 });
 
-// Session expirée : supprime le jeton et prévient l'application
+// Session expirée ou fermée (jeton révoqué, ou connexion sur un autre appareil) :
+// supprime le jeton et prévient l'application.
 api.interceptors.response.use(
   (response) => response,
   (error: AxiosError<ApiErrorResponse>) => {
     if (error.response?.status === 401) {
+      // Une déconnexion volontaire ne doit pas afficher « session fermée ».
+      const volontaire = (error.config?.url ?? "").endsWith("/logout");
+      if (!volontaire && localStorage.getItem("token")) {
+        sessionStorage.setItem(
+          "connexion:fermee",
+          "Votre session a été fermée : elle a expiré, ou le compte s'est connecté sur un autre appareil.",
+        );
+      }
       localStorage.removeItem("token");
       window.dispatchEvent(new Event("auth:expired"));
     }

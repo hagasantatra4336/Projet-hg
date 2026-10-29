@@ -58,6 +58,14 @@ const SOURCES: { cle: "IR" | "TVA" | "RECOUPEMENT" | "DAU"; titre: string; parMo
 
 const nombre = (v: number | null | undefined) => (v === null || v === undefined ? "—" : v.toLocaleString("fr-FR", { maximumFractionDigits: 2 }));
 
+const ACTIONS_DOSSIER: Record<string, string> = {
+  prise: "Dossier pris",
+  reprise: "Dossier repris",
+  liberation: "Dossier libéré",
+  cloture: "Dossier clôturé",
+  reouverture: "Dossier rouvert",
+};
+
 /** Tableau d'une source : une ligne par année (ou par mois), une colonne par valeur renseignée. */
 function TableauSource({ titre, lignes, parMois }: { titre: string; lignes: LigneBaseRisque[]; parMois?: boolean }) {
   if (lignes.length === 0) return null;
@@ -147,6 +155,7 @@ function Bandeau({
       <p className="rounded-xl border border-line bg-slate-50 px-4 py-3 text-sm text-slate-700">
         Dossier traité ({anomalies}){groupe.traite_par ? ` par ${groupe.traite_par}` : ""}
         {groupe.traite_le ? `, le ${formatDate(groupe.traite_le)}` : ""}.
+        {!canManage && <span className="text-slate-500"> Seul votre chef de centre peut le rouvrir.</span>}
       </p>
     );
   }
@@ -475,6 +484,26 @@ export default function DossierTraitementPage() {
         </section>
       )}
 
+      {/* Journal des actions */}
+      <section className="rounded-xl border border-line bg-white p-5">
+        <h2 className="text-sm font-semibold text-brand-blue">Journal du dossier</h2>
+        <p className="text-xs text-slate-500">Prise, reprise, libération, clôture et réouverture, avec leur auteur et leur date.</p>
+        {dossier.historique.length === 0 ? (
+          <p className="mt-3 rounded-lg bg-slate-50 p-3 text-sm text-slate-500">Aucune action enregistrée pour ce dossier.</p>
+        ) : (
+          <ul className="mt-3 space-y-2">
+            {dossier.historique.map((h) => (
+              <li key={h.id} className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 border-b border-line pb-2 text-sm last:border-0 last:pb-0">
+                <span className="text-slate-800">
+                  <strong className="font-medium">{ACTIONS_DOSSIER[h.action] ?? h.action}</strong> par {h.auteur}
+                </span>
+                <span className="text-xs text-slate-500">{h.le ? formatDateHeure(h.le) : ""}</span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+
       {/* Traitement */}
       <section className="rounded-xl border border-line bg-white p-5">
         <h2 className="text-sm font-semibold text-brand-blue">Traitement</h2>
@@ -516,7 +545,7 @@ export default function DossierTraitementPage() {
               </IconButton>
             </>
           )}
-          {groupe.statut === "traitee" && (
+          {groupe.statut === "traitee" && canManage && (
             <IconButton label="Rouvrir le dossier" disabled={busy} onClick={() => setAConfirmer("rouvrir")}>
               <IconRefresh className="h-4 w-4" />
             </IconButton>
@@ -528,7 +557,7 @@ export default function DossierTraitementPage() {
         <ConfirmDialog
           title="Marquer le dossier comme traité"
           message="Clôturer le traitement de ce dossier ?"
-          detail="Le commentaire saisi est enregistré sur toutes les anomalies, puis vous revenez à la liste des alertes. Vous pourrez rouvrir le dossier si nécessaire."
+          detail="Le commentaire saisi est enregistré sur toutes les anomalies, puis vous revenez à la liste des alertes. Seul un chef de centre pourra rouvrir le dossier si nécessaire."
           confirmLabel="Marquer comme traité"
           loadingLabel="Enregistrement..."
           tone="primary"
@@ -556,7 +585,7 @@ export default function DossierTraitementPage() {
         <ConfirmDialog
           title="Rouvrir le dossier"
           message="Rouvrir ce dossier traité ?"
-          detail="Ses anomalies non régularisées repasseront « À traiter ». Le commentaire déjà enregistré est conservé."
+          detail="Ses anomalies non régularisées repasseront « À traiter » et le dossier sera libéré. Le commentaire déjà enregistré est conservé ; l'agent pourra le reprendre."
           confirmLabel="Rouvrir le dossier"
           loadingLabel="Réouverture..."
           tone="primary"

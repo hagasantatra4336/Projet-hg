@@ -31,12 +31,16 @@ class RegroupementAnomaliesTest extends TestCase
 
         Centre::create(['nom' => 'Centre de test']);
         $this->seed(DeclarationDemoSeeder::class);
-        app(AnomalieAnalyseur::class)->analyser(new DateTimeImmutable(now()->toDateString()));
+
+        // L'analyse ne juge un exercice qu'une fois clos (échéance de déclaration + 48 h) :
+        // les exemples portent sur l'année en cours, on analyse donc au 1er juin de l'année suivante.
+        $analyse = new DateTimeImmutable(((int) now()->format('Y') + 1).'-06-01');
+        app(AnomalieAnalyseur::class)->analyser($analyse);
     }
 
     private function contribuable(int $numero): Contribuable
     {
-        $nif = Nif::normaliser('90000' . sprintf('%05d', $numero));
+        $nif = Nif::normaliser('90000'.sprintf('%05d', $numero));
 
         return Contribuable::where('nif', $nif)->firstOrFail();
     }
@@ -69,7 +73,7 @@ class RegroupementAnomaliesTest extends TestCase
         foreach ($attendus as $regle => $numero) {
             $regles = Alerte::where('contribuable_id', $this->contribuable($numero)->id)
                 ->whereIn('regle', CalculRisque::CODES)->distinct()->pluck('regle')->sort()->values()->all();
-            $this->assertSame([$regle], $regles, "Le contribuable {$numero} déclenche aussi : " . implode(', ', $regles));
+            $this->assertSame([$regle], $regles, "Le contribuable {$numero} déclenche aussi : ".implode(', ', $regles));
         }
 
         // R2 : le dossier du contribuable 6 contient aussi l'alerte orange de l'exercice précédent.
@@ -107,7 +111,7 @@ class RegroupementAnomaliesTest extends TestCase
         $this->connecter();
         $c = $this->contribuable(1);
 
-        $res = $this->getJson('/api/defaillances?grouper=1&search=' . $c->nif);
+        $res = $this->getJson('/api/defaillances?grouper=1&search='.$c->nif);
         $res->assertOk();
 
         $groupes = collect($res->json('data'));

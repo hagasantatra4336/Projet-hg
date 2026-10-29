@@ -6,6 +6,7 @@ use App\Enums\Role;
 use App\Http\Controllers\Controller;
 use App\Models\Alerte;
 use App\Models\BaseRisque;
+use App\Models\DossierHistorique;
 use App\Models\User;
 use App\Services\AnomalieAnalyseur;
 use App\Services\FormulesRegles;
@@ -32,6 +33,9 @@ use Illuminate\Validation\Rule;
  */
 class DefaillanceController extends Controller
 {
+    private const MESSAGE_REOUVERTURE = 'Seul le chef du centre (ou un central) peut rouvrir un dossier traité. '
+        . 'Demandez-lui de le rouvrir et de le libérer, puis reprenez-le.';
+
     public function index(Request $request): JsonResponse
     {
         $data = $request->validate([
@@ -294,6 +298,15 @@ class DefaillanceController extends Controller
             ], 422);
         }
 
+        // Un dossier clôturé ne se rouvre que par un chef de centre, un central ou un superadmin.
+        if (array_key_exists('statut', $data) && $data['statut'] === Alerte::A_TRAITER
+            && $alerte->statut === Alerte::TRAITEE && ! $this->peutReprendre($me)) {
+            return response()->json(['message' => self::MESSAGE_REOUVERTURE], 403);
+        }
+
+        $statutAvant = $alerte->statut;
+        $etatAvant = $this->statutPresente($alerte);
+
         if (array_key_exists('commentaire', $data)) {
             $alerte->commentaire = trim((string) $data['commentaire']) !== '' ? trim((string) $data['commentaire']) : null;
         }
@@ -312,6 +325,16 @@ class DefaillanceController extends Controller
         }
 
         $alerte->save();
+
+        if (array_key_exists('statut', $data) && $data['statut'] !== $statutAvant) {
+            $this->journaliser(
+                $alerte,
+                $me,
+                $data['statut'] === Alerte::TRAITEE ? DossierHistorique::CLOTURE : DossierHistorique::REOUVERTURE,
+                $etatAvant,
+                $data['statut'],
+            );
+        }
 
         return response()->json($this->present($alerte->load(['contribuable.centre', 'traitePar']), [], $me));
     }
@@ -340,6 +363,17 @@ class DefaillanceController extends Controller
             ], 422);
         }
 
+        // Rouvrir un dossier clôturé est réservé au chef de centre, au central et au superadmin.
+        if (array_key_exists('statut', $data) && $data['statut'] === Alerte::A_TRAITER
+            && $modifiables->contains(fn (Alerte $a) => $a->statut === Alerte::TRAITEE)
+            && ! $this->peutReprendre($me)) {
+            return response()->json(['message' => self::MESSAGE_REOUVERTURE], 403);
+        }
+
+        $etatAvant = $this->etatGroupe($modifiables);
+        $statutChange = array_key_exists('statut', $data)
+            && $modifiables->contains(fn (Alerte $a) => $data['statut'] !== $a->statut);
+
         $changerCommentaire = array_key_exists('commentaire', $data);
         $commentaire = $changerCommentaire && trim((string) $data['commentaire']) !== '' ? trim((string) $data['commentaire']) : null;
 
@@ -364,6 +398,16 @@ class DefaillanceController extends Controller
             $a->save();
         }
 
+        if ($statutChange) {
+            $this->journaliser(
+                $alerte,
+                $me,
+                $data['statut'] === Alerte::TRAITEE ? DossierHistorique::CLOTURE : DossierHistorique::REOUVERTURE,
+                $etatAvant,
+                $data['statut'],
+            );
+        }
+
         $alerte = $alerte->fresh(['contribuable.centre', 'traitePar']);
 
         return response()->json($this->present($alerte, [], $me) + ['groupe' => $this->presentGroupeComplet($request, $alerte)]);
@@ -384,6 +428,10 @@ class DefaillanceController extends Controller
             return $this->prendreGroupe($request, $alerte, $me, $forcer);
         }
 
+        $etatAvant = $this->statutPresente($alerte);
+        $dejaPrisParMoi = $this->prisParMoi($alerte, $me);
+        $repris = $forcer && VerrouAlerte::verrouille($alerte) && (int) $alerte->getAttribute('pris_par') !== $me->id;
+
         $n = Alerte::query()->whereKey($alerte->id)->where('statut', Alerte::A_TRAITER)
             ->where(function ($q) use ($me, $forcer) {
                 if ($forcer) {
@@ -403,6 +451,10 @@ class DefaillanceController extends Controller
             };
 
             return response()->json(['message' => $message, 'alerte' => $this->present($alerte, [], $me)], $alerte->statut === Alerte::A_TRAITER ? 409 : 422);
+        }
+
+        if (! $dejaPrisParMoi) {
+            $this->journaliser($alerte, $me, $repris ? DossierHistorique::REPRISE : DossierHistorique::PRISE, $etatAvant, 'en_traitement');
         }
 
         return response()->json($this->present($alerte, [], $me));
@@ -440,7 +492,14 @@ class DefaillanceController extends Controller
             }
         }
 
+        $dejaPrisParMoi = $aTraiter->every(fn (Alerte $a) => $this->prisParMoi($a, $me));
+        $repris = $forcer && $aTraiter->contains(fn (Alerte $a) => VerrouAlerte::verrouille($a) && (int) $a->getAttribute('pris_par') !== $me->id);
+
         Alerte::query()->whereKey($aTraiter->pluck('id')->all())->update(['pris_par' => $me->id, 'pris_le' => now()]);
+
+        if (! $dejaPrisParMoi) {
+            $this->journaliser($alerte, $me, $repris ? DossierHistorique::REPRISE : DossierHistorique::PRISE, 'a_traiter', 'en_traitement');
+        }
 
         $alerte = $alerte->fresh(['contribuable.centre', 'traitePar']);
 
@@ -455,6 +514,7 @@ class DefaillanceController extends Controller
 
         if ($request->boolean('groupe')) {
             $alertes = $this->requeteGroupe($request, $alerte)->get();
+            $etaitPris = $alertes->contains(fn (Alerte $a) => VerrouAlerte::verrouille($a));
 
             foreach ($alertes as $a) {
                 if (VerrouAlerte::verrouille($a) && (int) $a->getAttribute('pris_par') !== $me->id && ! $this->peutReprendre($me)) {
@@ -463,6 +523,11 @@ class DefaillanceController extends Controller
             }
 
             Alerte::query()->whereKey($alertes->pluck('id')->all())->update(['pris_par' => null, 'pris_le' => null]);
+
+            if ($etaitPris) {
+                $this->journaliser($alerte, $me, DossierHistorique::LIBERATION, 'en_traitement', 'a_traiter');
+            }
+
             $alerte = $alerte->fresh(['contribuable.centre', 'traitePar']);
 
             return response()->json($this->present($alerte, [], $me) + ['groupe' => $this->presentGroupeComplet($request, $alerte)]);
@@ -472,7 +537,13 @@ class DefaillanceController extends Controller
             return response()->json(['message' => 'Ce dossier est en cours de traitement par ' . $this->nomPreneur($alerte) . '.'], 423);
         }
 
+        $etaitPris = VerrouAlerte::verrouille($alerte);
+
         $alerte->forceFill(['pris_par' => null, 'pris_le' => null])->save();
+
+        if ($etaitPris) {
+            $this->journaliser($alerte, $me, DossierHistorique::LIBERATION, 'en_traitement', 'a_traiter');
+        }
 
         return response()->json($this->present($alerte->load(['contribuable.centre', 'traitePar']), [], $me));
     }
@@ -526,6 +597,7 @@ class DefaillanceController extends Controller
             'formule' => $formule,
             'formules' => $formules,
             'groupe' => $groupe,
+            'historique' => $this->historique($alerte),
             'verrou_minutes' => VerrouAlerte::DUREE_MINUTES,
         ]);
     }
@@ -597,10 +669,66 @@ class DefaillanceController extends Controller
         }
     }
 
-    /** Admin, central et superadmin peuvent reprendre ou libérer un dossier pris par un autre. */
+    /** Admin, central et superadmin peuvent reprendre ou libérer un dossier pris par un autre, et rouvrir un dossier clos. */
     private function peutReprendre(User $me): bool
     {
         return in_array($me->role, [Role::Superadmin, Role::Central, Role::Admin], true);
+    }
+
+    /** Statut affiché : un dossier pris reste « à traiter » en base mais s'affiche « en traitement ». */
+    private function statutPresente(Alerte $alerte): string
+    {
+        return VerrouAlerte::verrouille($alerte) ? 'en_traitement' : $alerte->statut;
+    }
+
+    /** État affiché d'un dossier : « en traitement » dès qu'une de ses anomalies est prise. */
+    private function etatGroupe($alertes): string
+    {
+        if ($alertes->contains(fn (Alerte $a) => $this->statutPresente($a) === 'en_traitement')) {
+            return 'en_traitement';
+        }
+
+        return $alertes->every(fn (Alerte $a) => in_array($a->statut, [Alerte::TRAITEE, Alerte::REGULARISEE], true))
+            ? 'traitee'
+            : 'a_traiter';
+    }
+
+    private function prisParMoi(Alerte $alerte, User $me): bool
+    {
+        return VerrouAlerte::verrouille($alerte) && (int) $alerte->getAttribute('pris_par') === $me->id;
+    }
+
+    /** Une ligne de journal par action de dossier (pas une par anomalie). */
+    private function journaliser(Alerte $alerte, User $me, string $action, string $avant, string $apres): void
+    {
+        DossierHistorique::create([
+            'contribuable_id' => $alerte->contribuable_id,
+            'alerte_id' => $alerte->id,
+            'user_id' => $me->id,
+            'auteur' => $me->nom,
+            'action' => $action,
+            'statut_avant' => $avant,
+            'statut_apres' => $apres,
+        ]);
+    }
+
+    /** Dernières actions du dossier, la plus récente d'abord. */
+    private function historique(Alerte $alerte): array
+    {
+        return DossierHistorique::query()
+            ->where('contribuable_id', $alerte->contribuable_id)
+            ->orderByDesc('id')
+            ->limit(50)
+            ->get()
+            ->map(fn (DossierHistorique $h) => [
+                'id' => $h->id,
+                'action' => $h->action,
+                'auteur' => $h->auteur,
+                'statut_avant' => $h->statut_avant,
+                'statut_apres' => $h->statut_apres,
+                'le' => $h->created_at?->toIso8601String(),
+            ])
+            ->all();
     }
 
     private function nomPreneur(Alerte $a): string

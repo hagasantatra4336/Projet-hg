@@ -195,7 +195,20 @@ export interface DossierAlerte {
   formules?: Partial<Record<Regle, FormuleRegle | null>>;
   /** Dossier contribuable : toutes ses anomalies. */
   groupe: GroupeAlerte;
+  /** Journal des actions : prise, reprise, libération, clôture, réouverture. */
+  historique: ActionDossier[];
   verrou_minutes: number;
+}
+
+export type ActionDossierType = "prise" | "reprise" | "liberation" | "cloture" | "reouverture";
+
+export interface ActionDossier {
+  id: number;
+  action: ActionDossierType;
+  auteur: string;
+  statut_avant: StatutAlerte;
+  statut_apres: StatutAlerte;
+  le: string | null;
 }
 
 export const ETAT_LABELS: Record<number, string> = { 1: "Actif", 2: "Bloqué", 3: "Cessation", 4: "Radié" };

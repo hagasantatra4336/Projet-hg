@@ -55,4 +55,24 @@ class CalendrierFiscalTest extends TestCase
             CalendrierFiscal::derniereEcheancePassee(new DateTimeImmutable('2026-11-16'))->format('Y-m-d')
         );
     }
+
+    public function test_un_exercice_est_clos_apres_sa_derniere_echeance_plus_48h(): void
+    {
+        // Exercice 2025 : dernière échéance = IR 2025 au 15/05/2026 (+ 48 h → 17/05/2026)
+        $this->assertSame('2026-05-17', CalendrierFiscal::exerciceClosDepuis(2025)?->format('Y-m-d'));
+
+        $this->assertFalse(CalendrierFiscal::exerciceClose(2025, new DateTimeImmutable('2026-05-16')));
+        $this->assertTrue(CalendrierFiscal::exerciceClose(2025, new DateTimeImmutable('2026-05-17')));
+
+        // L'exercice en cours n'est pas clos tant que ses déclarations annuelles sont ouvertes
+        $this->assertFalse(CalendrierFiscal::exerciceClose(2026, new DateTimeImmutable('2026-12-31')));
+    }
+
+    public function test_dernier_exercice_clos(): void
+    {
+        // Au 29/10/2026 : 2025 est clos depuis le 17/05/2026, 2026 ne le sera que le 17/05/2027
+        $this->assertSame(2025, CalendrierFiscal::dernierExerciceClos(new DateTimeImmutable('2026-10-29')));
+        $this->assertSame(2024, CalendrierFiscal::dernierExerciceClos(new DateTimeImmutable('2026-05-16')));
+        $this->assertSame(2025, CalendrierFiscal::dernierExerciceClos(new DateTimeImmutable('2026-05-17')));
+    }
 }

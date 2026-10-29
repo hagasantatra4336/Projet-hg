@@ -45,7 +45,11 @@ export default function LoginPage() {
   const [form, setForm] = useState<LoginForm>({ email: "", password: "" });
   const [otp, setOtp] = useState<string>("");
   const [error, setError] = useState<string>("");
-  const [info, setInfo] = useState<string>("");
+  const [info, setInfo] = useState<string>(() => {
+    const fermee = sessionStorage.getItem("connexion:fermee") ?? "";
+    sessionStorage.removeItem("connexion:fermee");
+    return fermee;
+  });
   const [loading, setLoading] = useState<boolean>(false);
 
   // Étape 1 : e-mail + mot de passe → l'API envoie un code par e-mail

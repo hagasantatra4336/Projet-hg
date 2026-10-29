@@ -12,6 +12,7 @@ use App\Models\User;
 use App\Notifications\DemandeInscriptionNotification;
 use App\Services\OtpMailer;
 use App\Services\OtpService;
+use App\Services\SessionsAppareils;
 use App\Support\FrontendUrl;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
@@ -48,6 +49,7 @@ class AuthController extends Controller
     public function __construct(
         private readonly OtpService $otp,
         private readonly OtpMailer $mailer,
+        private readonly SessionsAppareils $sessions,
     ) {
     }
 
@@ -387,7 +389,7 @@ class AuthController extends Controller
 
         return response()->json([
             'message' => 'Compte créé avec succès.',
-            'token' => $user->createToken('auth')->plainTextToken,
+            'token' => $this->sessions->ouvrir($user, $request),
             'user' => $this->userPayload($user),
         ]);
     }
@@ -502,7 +504,7 @@ class AuthController extends Controller
         }
 
         return response()->json([
-            'token' => $user->createToken('auth')->plainTextToken,
+            'token' => $this->sessions->ouvrir($user, $request),
             'user' => $this->userPayload($user),
         ]);
     }

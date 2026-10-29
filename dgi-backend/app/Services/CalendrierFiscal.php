@@ -68,6 +68,53 @@ class CalendrierFiscal
     }
 
     /**
+     * Instant à partir duquel un EXERCICE entier peut être jugé : plus tardive des échéances de
+     * l'exercice (déclarations annuelles IS / IR et TVA de décembre) + délai d'analyse (48 h).
+     * Null si aucun impôt n'a de règle dans le calendrier.
+     */
+    public static function exerciceClosDepuis(int $annee): ?DateTimeImmutable
+    {
+        $seuil = null;
+
+        foreach (config('anomalies.echeances.impots', []) as $impot => $regle) {
+            // Périodicité mensuelle : la dernière période de l'exercice est décembre
+            $mois = ($regle['periodicite'] ?? null) === 'mensuelle' ? 12 : 0;
+            $depuis = self::analysableDepuis((string) $impot, $annee, $mois);
+
+            if ($depuis !== null && ($seuil === null || $depuis > $seuil)) {
+                $seuil = $depuis;
+            }
+        }
+
+        return $seuil;
+    }
+
+    /**
+     * L'exercice est-il clos (dernière échéance + délai passée) à la date donnée ?
+     * Aucune règle au calendrier : on garde l'ancien comportement (exercice jugé immédiatement).
+     */
+    public static function exerciceClose(int $annee, DateTimeInterface $date): bool
+    {
+        $depuis = self::exerciceClosDepuis($annee);
+
+        return $depuis === null || $date->getTimestamp() >= $depuis->getTimestamp();
+    }
+
+    /** Dernier exercice clos à la date donnée (null si le calendrier ne permet d'en clore aucun). */
+    public static function dernierExerciceClos(DateTimeInterface $date): ?int
+    {
+        $annee = (int) $date->format('Y');
+
+        for ($a = $annee; $a >= $annee - 10; $a--) {
+            if (self::exerciceClose($a, $date)) {
+                return $a;
+            }
+        }
+
+        return null;
+    }
+
+    /**
      * Dernière fenêtre d'échéance (date limite + délai) déjà ouverte à la date donnée :
      * sert de marqueur à l'analyse automatique, qui ne rejuge rien entre deux échéances.
      */
@@ -75,7 +122,7 @@ class CalendrierFiscal
     {
         $seuil = null;
         $annee = (int) $date->format('Y');
-        $maintenant = (new DateTimeImmutable('@' . $date->getTimestamp()));
+        $maintenant = (new DateTimeImmutable('@'.$date->getTimestamp()));
 
         // Fenêtre assez large : périodes des deux derniers exercices couvrent toutes les échéances récentes
         foreach (config('anomalies.echeances.impots', []) as $impot => $regle) {

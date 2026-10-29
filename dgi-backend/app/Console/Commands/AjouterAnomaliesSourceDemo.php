@@ -3,6 +3,7 @@
 namespace App\Console\Commands;
 
 use App\Models\Centre;
+use App\Services\CalendrierFiscal;
 use DateTimeImmutable;
 use Illuminate\Console\Command;
 use Illuminate\Database\ConnectionInterface;
@@ -22,6 +23,9 @@ use Throwable;
  * Toutes les TVA de janvier au dernier mois échu sont déclarées : ces dossiers ne créent donc pas de défaut de dépôt (R4).
  * Seules les lignes de ces six NIF sont supprimées puis réécrites ; le reste de la base source n'est jamais touché.
  *
+ * L'exercice par défaut est le dernier exercice CLOS (échéance de déclaration + 48 h, calendrier fiscal) :
+ * l'analyse ne juge plus un exercice en cours, ses déclarations pouvant encore être modifiées.
+ *
  *   php artisan dgi:source-anomalies-demo
  *   php artisan dgi:source-anomalies-demo --annee=2025
  *   php artisan dgi:source-anomalies-demo --force     # base source dont le nom ne contient ni « test », ni « source »
@@ -33,7 +37,7 @@ use Throwable;
 class AjouterAnomaliesSourceDemo extends Command
 {
     protected $signature = 'dgi:source-anomalies-demo
-        {--annee= : Exercice des exemples (défaut : année en cours)}
+        {--annee= : Exercice des exemples (défaut : dernier exercice clos)}
         {--force : Autorise l\'écriture si le nom de la base source ne contient ni « test », ni « source », ni « demo »}';
 
     protected $description = 'Insère dans la base source des exemples d\'anomalies R1, R2, R3, R5, R6 et R7';
@@ -62,7 +66,7 @@ class AjouterAnomaliesSourceDemo extends Command
             return self::FAILURE;
         }
 
-        $annee = (int) ($this->option('annee') ?: now()->format('Y'));
+        $annee = (int) ($this->option('annee') ?: (CalendrierFiscal::dernierExerciceClos(now()) ?? (int) now()->format('Y') - 1));
         if ($annee < 1990 || $annee > (int) now()->format('Y')) {
             $this->error('--annee doit être une année passée ou l\'année en cours.');
 
@@ -131,7 +135,7 @@ class AjouterAnomaliesSourceDemo extends Command
             $base, count($jeu['ir']), count($jeu['tva']), count($jeu['recoupement']), count($jeu['dau'])
         ));
         foreach (self::NIFS as $regle => $nif) {
-            $this->line("  {$regle} : {$nif} — " . $jeu['noms'][$nif]);
+            $this->line("  {$regle} : {$nif} — ".$jeu['noms'][$nif]);
         }
         $this->line('Étapes suivantes :');
         $this->line('  php artisan dgi:importer-source');
@@ -340,10 +344,10 @@ class AjouterAnomaliesSourceDemo extends Command
     }
 
     /**
-     * @param array<int, array<string, mixed>> $lignes
-     * @param array<int, int> $mois
-     * @param array<string, float> $valeurs par mois
-     * @param array<int, array<string, float>> $exceptions mois => indicateurs à remplacer
+     * @param  array<int, array<string, mixed>>  $lignes
+     * @param  array<int, int>  $mois
+     * @param  array<string, float>  $valeurs  par mois
+     * @param  array<int, array<string, float>>  $exceptions  mois => indicateurs à remplacer
      */
     private function ajouterTva(array &$lignes, array $col, string $nif, int $annee, array $mois, array $valeurs, array $exceptions = []): void
     {

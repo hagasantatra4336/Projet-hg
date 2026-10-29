@@ -36,7 +36,12 @@ class DetecteurRisque
             return $stats;
         }
 
-        $anneeMax = (int) $date->format('Y');
+        // [AJOUT] Un exercice n'est jugé qu'une fois CLOS : dernière échéance de déclaration du calendrier
+        // fiscal (IS, IR, TVA de décembre) + 48 h. Avant, les déclarations peuvent encore être modifiées.
+        $anneeMax = CalendrierFiscal::dernierExerciceClos($date);
+        if ($anneeMax === null) {
+            return $stats; // aucun exercice ne peut être clos (calendrier fiscal inutilisable)
+        }
         $anneeMin = $anneeMax - (int) max(array_map(fn ($c) => (int) ($c['fenetre_exercices'] ?? 1), $cfgs));
 
         // Années pour lesquelles des DAU ont été chargés : sans cela, « aucun DAU » serait pris pour « aucune importation »
@@ -54,7 +59,7 @@ class DetecteurRisque
             }
         }
 
-        DB::transaction(function () use ($trouvees, $evalues, $anneeMin, &$stats, $cfgs) {
+        DB::transaction(function () use ($trouvees, $evalues, $anneeMin, $anneeMax, &$stats, $cfgs) {
             $actuelles = [];
 
             foreach ($trouvees as $t) {
@@ -88,19 +93,20 @@ class DetecteurRisque
                 $existait ? $stats['mis_a_jour']++ : $stats['crees']++;
                 $stats['par_regle'][$t['regle']] = ($stats['par_regle'][$t['regle']] ?? 0) + 1;
 
-                $actuelles[$t['contribuable_id'] . '|' . $t['regle'] . '|' . $t['type_impot'] . '|' . $t['annee_fiscale'] . '|' . $t['mois']] = true;
+                $actuelles[$t['contribuable_id'].'|'.$t['regle'].'|'.$t['type_impot'].'|'.$t['annee_fiscale'].'|'.$t['mois']] = true;
             }
 
-            // Alertes ouvertes dont le risque a disparu → régularisées (seulement pour les contribuables examinés)
+            // Alertes ouvertes dont le risque a disparu → régularisées (seulement pour les contribuables examinés).
+            // Les exercices non clos ne sont pas jugés : leurs alertes ne sont ni confirmées ni régularisées.
             $ouvertes = Alerte::query()
                 ->whereIn('regle', array_keys($cfgs))
                 ->where('statut', Alerte::A_TRAITER)
-                ->where('annee_fiscale', '>=', $anneeMin)
+                ->whereBetween('annee_fiscale', [$anneeMin, $anneeMax])
                 ->whereIn('contribuable_id', array_keys($evalues))
                 ->get(['id', 'contribuable_id', 'regle', 'type_impot', 'annee_fiscale', 'mois']);
 
             foreach ($ouvertes as $a) {
-                if (! isset($actuelles[$a->contribuable_id . '|' . $a->regle . '|' . $a->type_impot . '|' . $a->annee_fiscale . '|' . $a->mois])) {
+                if (! isset($actuelles[$a->contribuable_id.'|'.$a->regle.'|'.$a->type_impot.'|'.$a->annee_fiscale.'|'.$a->mois])) {
                     $a->forceFill(['statut' => Alerte::REGULARISEE, 'pris_par' => null, 'pris_le' => null])->save();
                     $stats['regularisees']++;
                 }
@@ -155,10 +161,10 @@ class DetecteurRisque
     /**
      * Évalue les critères d'UN contribuable (aucun accès base : testable seul).
      *
-     * @param array<string, mixed> $g       IR[annee] ; TVA[annee][mois] ; RECOUPEMENT[annee] ; DAU[annee] (valeurs par indicateur)
-     * @param array<string, array<string, mixed>> $cfgs  réglages des critères ACTIFS (clé = code r1...)
-     * @param array<int, int> $anneesDau    années pour lesquelles des DAU sont chargés
-     * @return array<int, array<string, mixed>>  regle, type_impot, annee_fiscale, mois, niveau, motif, details
+     * @param  array<string, mixed>  $g  IR[annee] ; TVA[annee][mois] ; RECOUPEMENT[annee] ; DAU[annee] (valeurs par indicateur)
+     * @param  array<string, array<string, mixed>>  $cfgs  réglages des critères ACTIFS (clé = code r1...)
+     * @param  array<int, int>  $anneesDau  années pour lesquelles des DAU sont chargés
+     * @return array<int, array<string, mixed>> regle, type_impot, annee_fiscale, mois, niveau, motif, details
      */
     public static function evaluer(array $g, array $cfgs, int $anneeMin, int $anneeMax, array $anneesDau = []): array
     {
@@ -260,7 +266,7 @@ class DetecteurRisque
                             "Le chiffre d'affaires déclaré en %d (IR %s Ar, TVA %s Ar) s'écarte du recoupement (%s Ar)%s. Score R5 : %s/5.",
                             $annee, $caIr !== null ? self::nb($caIr) : 'non déclaré', $caTva !== null ? self::nb($caTva) : 'non déclaré',
                             self::nb($r['ca_recoup']),
-                            $r['ca_non_declare'] > 0 ? ', avec ' . self::nb($r['ca_non_declare']) . ' Ar de CA non déclaré estimé d\'après la TVA déductible' : '',
+                            $r['ca_non_declare'] > 0 ? ', avec '.self::nb($r['ca_non_declare']).' Ar de CA non déclaré estimé d\'après la TVA déductible' : '',
                             self::nb($r['score'], 1)
                         ));
                     }
