@@ -76,6 +76,7 @@ Route::middleware('auth:sanctum')->group(function () {
     // Défaillances de déclaration : consultation et traitement des alertes par tous les rôles
     // (agent et admin ne voient que leur centre : voir DefaillanceController)
     Route::get('/defaillances', [DefaillanceController::class, 'index']);
+    Route::get('/defaillances/export', [DefaillanceController::class, 'export'])->middleware('throttle:20,1,export');
     Route::get('/defaillances/summary', [DefaillanceController::class, 'summary']);
     Route::patch('/defaillances/{alerte}', [DefaillanceController::class, 'update']);
     Route::post('/defaillances/{alerte}/prendre', [DefaillanceController::class, 'prendre']);
@@ -95,13 +96,13 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/defaillances/auto', AnalyseAutoController::class)->middleware('throttle:100,1,defaillances-auto');
 
     // Lancer l'analyse et importer des déclarations (CSV) : superadmin, central, admin (admin = son centre)
-    Route::middleware(EnsureRole::class . ':superadmin,central,admin')->group(function () {
+    Route::middleware(EnsureRole::class.':superadmin,central,admin')->group(function () {
         Route::post('/defaillances/analyser', [DefaillanceController::class, 'analyser'])->middleware('throttle:10,1,analyser');
         Route::post('/declarations/import', [DeclarationImportController::class, 'store'])->middleware('throttle:10,1,import');
     });
 
     // Règles de détection : réglages modifiables depuis l'application (central, superadmin)
-    Route::middleware(EnsureRole::class . ':superadmin,central')->group(function () {
+    Route::middleware(EnsureRole::class.':superadmin,central')->group(function () {
         Route::get('/regles', [RegleController::class, 'index']);
         Route::put('/regles/{code}', [RegleController::class, 'update']);
         Route::post('/regles/{code}/reinitialiser', [RegleController::class, 'reinitialiser']);
@@ -122,18 +123,18 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('/regles-personnalisees/{regle}/activer', [ReglePersonnaliseeController::class, 'activer']);
         Route::post('/regles-personnalisees/{regle}/desactiver', [ReglePersonnaliseeController::class, 'desactiver']);
         Route::get('/regles/historique', [RegleController::class, 'historique']);
-        });
+    });
 
     // Section Administration — gestion des utilisateurs : superadmin, central, admin
     // (l'admin est limité à son propre centre : voir UserController)
-    Route::middleware(EnsureRole::class . ':superadmin,central,admin')->group(function () {
+    Route::middleware(EnsureRole::class.':superadmin,central,admin')->group(function () {
         Route::get('/users/options', [UserController::class, 'options']);
         Route::apiResource('users', UserController::class)->except('show');
     });
 
     // Demandes d'inscription des agents : le chef de centre (admin) approuve ou refuse.
     // L'admin ne voit que son centre ; central et superadmin voient tout (voir DemandeInscriptionController).
-    Route::middleware(EnsureRole::class . ':superadmin,central,admin')->group(function () {
+    Route::middleware(EnsureRole::class.':superadmin,central,admin')->group(function () {
         Route::get('/demandes-inscription', [DemandeInscriptionController::class, 'index']);
         Route::post('/demandes-inscription/{demande}/approuver', [DemandeInscriptionController::class, 'approuver'])
             ->middleware('throttle:20,1,demandes');
@@ -142,12 +143,12 @@ Route::middleware('auth:sanctum')->group(function () {
     });
 
     // Gestion des centres : superadmin, central
-    Route::middleware(EnsureRole::class . ':superadmin,central')->group(function () {
+    Route::middleware(EnsureRole::class.':superadmin,central')->group(function () {
         Route::apiResource('centres', CentreController::class)->except('show');
     });
 
     // Gestion des fonctions et de leur rôle : superadmin uniquement
-    Route::middleware(EnsureRole::class . ':superadmin')->group(function () {
+    Route::middleware(EnsureRole::class.':superadmin')->group(function () {
         Route::apiResource('fonctions', FonctionController::class)->except('show');
     });
 });

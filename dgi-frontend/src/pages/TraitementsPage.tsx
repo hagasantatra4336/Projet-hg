@@ -1,15 +1,14 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import api, { getErrorMessage } from "../services/api";
 import { useAuth } from "../context/AuthContext";
-import { REGLE_LABELS, type DefaillanceSummary, type GroupeAlerte, type Paginated } from "../types";
+import { REGLE_LABELS, type GroupeAlerte, type Paginated } from "../types";
 import { ConfirmDialog, ErrorBox, inputClass, primaryButtonClass } from "../components/ui";
 import { IconSearch } from "../components/icons";
 import {
   ContribuableModal,
   NiveauBadge,
   RegleBadge,
-  formatDate,
   formatDateHeure,
 } from "../components/defaillance";
 
@@ -26,10 +25,9 @@ function pageWindow(current: number, last: number): number[] {
   return Array.from({ length: size }, (_, i) => start + i);
 }
 
-type Onglet = "en_cours" | "effectues";
-
 // ---------------------------------------------------------------------
-//  Page Traitements : dossiers pris (en cours) et traitements effectués
+//  Page Traitements : dossiers pris en charge (en cours de traitement).
+//  Les dossiers clôturés sont dans la page Archives.
 // ---------------------------------------------------------------------
 
 export default function TraitementsPage() {
@@ -37,9 +35,7 @@ export default function TraitementsPage() {
   const role = user?.role ?? null;
   const canManage = role === "superadmin" || role === "central" || role === "admin";
 
-  const [onglet, setOnglet] = useState<Onglet>("en_cours");
   const [data, setData] = useState<Paginated<GroupeAlerte> | null>(null);
-  const [summary, setSummary] = useState<DefaillanceSummary | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string>("");
   const [actionError, setActionError] = useState<string>("");
@@ -63,15 +59,7 @@ export default function TraitementsPage() {
     return () => clearTimeout(t);
   }, [searchInput]);
 
-  // Compteurs des cartes et des onglets
-  useEffect(() => {
-    api
-      .get<DefaillanceSummary>("/defaillances/summary")
-      .then((res) => setSummary(res.data))
-      .catch(() => undefined);
-  }, [reloadKey]);
-
-  // Liste du moment (en cours = dossiers pris ; effectués = dossiers traités)
+  // Dossiers pris par un agent (en cours)
   useEffect(() => {
     let cancelled = false;
     if (!silentRef.current) setLoading(true);
@@ -83,8 +71,8 @@ export default function TraitementsPage() {
           page,
           grouper: 1,
           search: search || undefined,
-          statut: onglet === "en_cours" ? "en_traitement" : "traitee",
-          sort: onglet === "en_cours" ? "niveau" : "traite_le",
+          statut: "en_traitement",
+          sort: "niveau",
           dir: "desc",
         },
       })
@@ -103,7 +91,7 @@ export default function TraitementsPage() {
     return () => {
       cancelled = true;
     };
-  }, [onglet, page, search, reloadKey]);
+  }, [page, search, reloadKey]);
 
   const reload = useCallback(() => setReloadKey((k) => k + 1), []);
 
@@ -115,12 +103,6 @@ export default function TraitementsPage() {
     }, REFRESH_MS);
     return () => clearInterval(t);
   }, []);
-
-  function changerOnglet(o: Onglet) {
-    setOnglet(o);
-    setPage(1);
-    setActionError("");
-  }
 
   /** Ouvre le dossier contribuable ; « Traiter »/« Continuer »/« Reprendre » prend d'abord toutes ses anomalies (atomique côté API). */
   async function ouvrir(d: GroupeAlerte, mode: "consulter" | "prendre" | "reprendre") {
@@ -138,7 +120,7 @@ export default function TraitementsPage() {
       navigate(`/defaillances/${id}/traitement`);
     } catch (err) {
       setActionError(getErrorMessage(err, "Impossible de prendre ce dossier."));
-      reload(); // l'état du dossier a changé : les deux listes sont mises à jour
+      reload(); // l'état du dossier a changé : la liste est mise à jour
     } finally {
       setBusyId(null);
     }
@@ -147,37 +129,20 @@ export default function TraitementsPage() {
   const from = data && data.total > 0 ? (data.current_page - 1) * 10 + 1 : 0;
   const to = data ? Math.min(data.current_page * 10, data.total) : 0;
 
-  const onglets: { cle: Onglet; label: string; n: number | undefined }[] = [
-    { cle: "en_cours", label: "Dossiers en cours", n: summary?.dossiers_en_traitement },
-    { cle: "effectues", label: "Traitements effectués", n: summary?.dossiers_traites },
-  ];
-
   return (
     <div>
       <div className="mb-4">
         <h1 className="text-xl font-semibold tracking-tight text-brand-blue">Traitements</h1>
+        <p className="mt-1 text-sm text-slate-500">
+          Dossiers en cours de traitement. Les dossiers clôturés sont dans{" "}
+          <Link to="/archives" className="font-medium text-brand-blue hover:underline">
+            Archives
+          </Link>
+          .
+        </p>
       </div>
 
-      {/* Onglets : en cours / effectués */}
-      <div className="flex flex-wrap gap-2" role="tablist" aria-label="Listes des traitements">
-        {onglets.map((o) => (
-          <button
-            key={o.cle}
-            type="button"
-            role="tab"
-            aria-selected={onglet === o.cle}
-            onClick={() => changerOnglet(o.cle)}
-            className={`rounded-xl border border-line px-3 py-2 text-left transition ${
-              onglet === o.cle ? "border-brand-blue ring-2 ring-brand-blue" : "bg-white hover:border-brand-blue/40"
-            }`}
-          >
-            <p className="text-xs text-slate-500">{o.label}</p>
-            <p className="text-xl font-semibold text-brand-blue">{o.n ?? "—"}</p>
-          </button>
-        ))}
-      </div>
-
-      <section className="mt-4 rounded-xl bg-white p-4 border border-line sm:p-5">
+      <section className="rounded-xl bg-white p-4 border border-line sm:p-5">
         {/* Recherche */}
         <div className="relative mb-3 sm:max-w-xs">
           <IconSearch className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
@@ -202,18 +167,8 @@ export default function TraitementsPage() {
                 <th className="px-2 py-2">Impôt</th>
                 <th className="px-2 py-2">Exercices</th>
                 <th className="px-2 py-2">Risque</th>
-                {onglet === "en_cours" ? (
-                  <>
-                    <th className="px-2 py-2">Pris par</th>
-                    <th className="sticky right-0 z-10 border-l border-line bg-slate-50 px-2 py-2 text-right">Action</th>
-                  </>
-                ) : (
-                  <>
-                    <th className="px-2 py-2">Traité par</th>
-                    <th className="px-2 py-2">Commentaire</th>
-                    <th className="sticky right-0 z-10 border-l border-line bg-slate-50 px-2 py-2 text-right">Dossier</th>
-                  </>
-                )}
+                <th className="px-2 py-2">Pris par</th>
+                <th className="sticky right-0 z-10 border-l border-line bg-slate-50 px-2 py-2 text-right">Action</th>
               </tr>
             </thead>
             <tbody className={loading ? "opacity-50 transition" : "transition"}>
@@ -253,80 +208,53 @@ export default function TraitementsPage() {
                     <td className="px-2 py-2.5">
                       <NiveauBadge niveau={g.niveau} />
                     </td>
-                    {onglet === "en_cours" ? (
-                      <>
-                        <td className="px-2 py-2.5 text-slate-700">
-                          {g.pris_par_moi ? <span className="font-medium text-brand-blue">vous</span> : (g.pris_par ?? "—")}
-                          {g.pris_le && <p className="text-xs text-slate-500">depuis {formatDateHeure(g.pris_le)}</p>}
-                        </td>
-                        <td className="sticky right-0 z-[1] border-l border-line bg-white px-2 py-2 text-right group-hover:bg-slate-50">
-                          {g.pris_par_moi ? (
-                            <button
-                              type="button"
-                              className={primaryButtonClass + " px-2.5 py-1 text-xs"}
-                              disabled={busyId === g.representant_id}
-                              onClick={() => void ouvrir(g, "prendre")}
-                            >
-                              {busyId === g.representant_id ? "..." : "Continuer"}
-                            </button>
-                          ) : canManage ? (
-                            <button
-                              type="button"
-                              className={primaryButtonClass + " px-2.5 py-1 text-xs"}
-                              disabled={busyId === g.representant_id}
-                              onClick={() => setAReprendre(g)}
-                            >
-                              {busyId === g.representant_id ? "..." : "Reprendre"}
-                            </button>
-                          ) : (
-                            <button
-                              type="button"
-                              className="text-xs font-medium text-brand-blue underline disabled:opacity-50"
-                              disabled={busyId === g.representant_id}
-                              onClick={() => void ouvrir(g, "consulter")}
-                            >
-                              Consulter
-                            </button>
-                          )}
-                        </td>
-                      </>
-                    ) : (
-                      <>
-                        <td className="px-2 py-2.5 text-slate-700">
-                          {g.traite_par ?? "—"}
-                          {g.traite_le && <p className="text-xs text-slate-500">le {formatDate(g.traite_le)}</p>}
-                        </td>
-                        <td className="px-2 py-2.5">
-                          <div className="line-clamp-2 max-w-[180px] text-xs italic text-slate-500" title={g.commentaire ?? undefined}>
-                            {g.commentaire ?? "—"}
-                          </div>
-                        </td>
-                        <td className="sticky right-0 z-[1] border-l border-line bg-white px-2 py-2 text-right group-hover:bg-slate-50">
-                          <button
-                            type="button"
-                            className="text-xs font-medium text-brand-blue underline"
-                            onClick={() => void ouvrir(g, "consulter")}
-                          >
-                            Voir le dossier
-                          </button>
-                        </td>
-                      </>
-                    )}
+                    <td className="px-2 py-2.5 text-slate-700">
+                      {g.pris_par_moi ? <span className="font-medium text-brand-blue">vous</span> : (g.pris_par ?? "—")}
+                      {g.pris_le && <p className="text-xs text-slate-500">depuis {formatDateHeure(g.pris_le)}</p>}
+                    </td>
+                    <td className="sticky right-0 z-[1] border-l border-line bg-white px-2 py-2 text-right group-hover:bg-slate-50">
+                      {g.pris_par_moi ? (
+                        <button
+                          type="button"
+                          className={primaryButtonClass + " px-2.5 py-1 text-xs"}
+                          disabled={busyId === g.representant_id}
+                          onClick={() => void ouvrir(g, "prendre")}
+                        >
+                          {busyId === g.representant_id ? "..." : "Continuer"}
+                        </button>
+                      ) : canManage ? (
+                        <button
+                          type="button"
+                          className={primaryButtonClass + " px-2.5 py-1 text-xs"}
+                          disabled={busyId === g.representant_id}
+                          onClick={() => setAReprendre(g)}
+                        >
+                          {busyId === g.representant_id ? "..." : "Reprendre"}
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          className="text-xs font-medium text-brand-blue underline disabled:opacity-50"
+                          disabled={busyId === g.representant_id}
+                          onClick={() => void ouvrir(g, "consulter")}
+                        >
+                          Consulter
+                        </button>
+                      )}
+                    </td>
                   </tr>
                 );
               })}
               {data && data.data.length === 0 && (
                 <tr>
-                  <td colSpan={onglet === "en_cours" ? 7 : 8} className="px-2 py-8 text-center text-slate-500">
-                    {onglet === "en_cours"
-                      ? "Aucun dossier en cours de traitement : prenez-en un depuis la page Défaillances (bouton « Traiter »)."
-                      : "Aucun traitement effectué pour l'instant."}
+                  <td colSpan={7} className="px-2 py-8 text-center text-slate-500">
+                    Aucun dossier en cours de traitement : prenez-en un depuis la page Anomalies (bouton « Traiter »).
                   </td>
                 </tr>
               )}
               {!data && loading && (
                 <tr>
-                  <td colSpan={onglet === "en_cours" ? 7 : 8} className="px-2 py-8 text-center text-slate-500">
+                  <td colSpan={7} className="px-2 py-8 text-center text-slate-500">
                     Chargement...
                   </td>
                 </tr>

@@ -8,6 +8,7 @@ import { ConfirmDialog } from "../components/ui";
 import { ROLE_LABELS, type Role } from "../types";
 import {
   IconAlert,
+  IconArchive,
   IconBriefcase,
   IconBuilding,
   IconChevron,
@@ -186,7 +187,7 @@ export default function AppLayout() {
 
           <NavLink to="/defaillances" className={linkClass}>
             <IconAlert />
-            <span>Défaillances</span>
+            <span>Anomalies</span>
             <Pastille
               n={notifications.defaillances}
               titre={`${pluriel(notifications.defaillances, "dossier")} à traiter`}
@@ -202,6 +203,11 @@ export default function AppLayout() {
               titre={`${pluriel(notifications.traitements, "dossier")} en cours de traitement`}
               className="ml-auto"
             />
+          </NavLink>
+
+          <NavLink to="/archives" className={linkClass}>
+            <IconArchive />
+            <span>Archives</span>
           </NavLink>
 
           {adminItems.length > 0 && (

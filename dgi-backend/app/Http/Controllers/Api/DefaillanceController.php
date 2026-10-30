@@ -17,9 +17,11 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Cache;
-use Throwable;
 use Illuminate\Validation\Rule;
+use Symfony\Component\HttpFoundation\StreamedResponse;
+use Throwable;
 
 /**
  * Alertes d'anomalies (défaillance de déclaration, baisse du chiffre d'affaires).
@@ -34,19 +36,30 @@ use Illuminate\Validation\Rule;
 class DefaillanceController extends Controller
 {
     private const MESSAGE_REOUVERTURE = 'Seul le chef du centre (ou un central) peut rouvrir un dossier traité. '
-        . 'Demandez-lui de le rouvrir et de le libérer, puis reprenez-le.';
+        .'Demandez-lui de le rouvrir et de le libérer, puis reprenez-le.';
+
+    /** Délai au-delà duquel un dossier encore ouvert est compté en retard (même seuil que le surlignage « Âge »). */
+    private const SEUIL_RETARD = 30;
+
+    /** Libellés lisibles dans l'export CSV (le fichier est lu hors de l'application). */
+    private const LIBELLES_NIVEAU = ['faible' => 'Faible', 'moyen' => 'Moyen', 'eleve' => 'Élevé'];
+
+    private const LIBELLES_STATUT = [
+        'a_traiter' => 'À traiter',
+        'en_traitement' => 'En traitement',
+        'traitee' => 'Traitée',
+        'regularisee' => 'Régularisée',
+    ];
+
+    private const LIBELLES_REGLE = [
+        'defaillance' => 'R4 Défaut de dépôt',
+        'baisse_ca' => "Baisse du chiffre d'affaires",
+    ];
 
     public function index(Request $request): JsonResponse
     {
-        $data = $request->validate([
-            'regle' => ['nullable', Rule::in(array_merge(Alerte::REGLES, ReglesDetection::codesPersonnalises()))],
-            'niveau' => ['nullable', Rule::in(Alerte::NIVEAUX)],
-            'type_impot' => ['nullable', Rule::in(config('anomalies.defaillance.impots'))],
-            'statut' => ['nullable', Rule::in([Alerte::A_TRAITER, 'en_traitement', Alerte::TRAITEE, Alerte::REGULARISEE])],
-            'annee_fiscale' => ['nullable', 'integer', 'between:1990,2100'],
-            'centre_id' => ['nullable', 'integer'],
-            'search' => ['nullable', 'string', 'max:100'],
-            'sort' => ['nullable', Rule::in(['niveau', 'type_impot', 'annee_fiscale', 'traite_le'])],
+        $data = $request->validate($this->reglesFiltres() + [
+            'sort' => ['nullable', Rule::in(['niveau', 'type_impot', 'annee_fiscale', 'traite_le', 'cree_le'])],
             'dir' => ['nullable', Rule::in(['asc', 'desc'])],
             'grouper' => ['nullable', 'boolean'],
         ]);
@@ -67,7 +80,8 @@ class DefaillanceController extends Controller
             $query->orderByRaw("CASE alertes.niveau WHEN 'eleve' THEN 3 WHEN 'moyen' THEN 2 ELSE 1 END {$dir}")
                 ->orderBy('alertes.annee_fiscale', 'desc');
         } else {
-            $query->orderBy('alertes.' . $sort, $dir);
+            // « cree_le » est le nom d'affichage : la colonne réelle est created_at.
+            $query->orderBy('alertes.'.($sort === 'cree_le' ? 'created_at' : $sort), $dir);
         }
         $query->orderBy('alertes.id', 'desc');
 
@@ -77,12 +91,30 @@ class DefaillanceController extends Controller
         return response()->json($page->through(fn (Alerte $a) => $this->present($a, $noms, $request->user())));
     }
 
+    /** Règles de validation communes à la liste, aux compteurs et à l'export. @return array<string, mixed> */
+    private function reglesFiltres(): array
+    {
+        return [
+            'regle' => ['nullable', Rule::in(array_merge(Alerte::REGLES, ReglesDetection::codesPersonnalises()))],
+            'niveau' => ['nullable', Rule::in(Alerte::NIVEAUX)],
+            'type_impot' => ['nullable', Rule::in(config('anomalies.defaillance.impots'))],
+            'statut' => ['nullable', Rule::in([Alerte::A_TRAITER, 'en_traitement', Alerte::TRAITEE, Alerte::REGULARISEE])],
+            // Archives : 1 = seulement les dossiers clôturés (toutes anomalies traitées/régularisées)
+            'archive' => ['nullable', 'boolean'],
+            'annee_fiscale' => ['nullable', 'integer', 'between:1990,2100'],
+            'centre_id' => ['nullable', 'integer'],
+            'search' => ['nullable', 'string', 'max:100'],
+            // Ancienneté du dossier en jours : « créé depuis moins de N jours »
+            'age_min' => ['nullable', 'integer', 'between:1,3650'],
+        ];
+    }
+
     /**
      * Vue groupée : un « dossier contribuable » par ligne, contenant toutes ses anomalies visibles.
      * Les filtres portent sur les alertes : un contribuable n'apparaît que s'il a au moins une alerte correspondante,
      * et la ligne ne détaille que ces alertes.
      *
-     * @param array<string, mixed> $data
+     * @param  array<string, mixed>  $data
      */
     private function indexGroupes(Request $request, array $data): JsonResponse
     {
@@ -93,15 +125,17 @@ class DefaillanceController extends Controller
         $sort = $data['sort'] ?? 'niveau';
 
         $groupes = (clone $base)
-            ->selectRaw("alertes.contribuable_id, "
-                . "MAX(CASE alertes.niveau WHEN 'eleve' THEN 3 WHEN 'moyen' THEN 2 ELSE 1 END) as rang, "
-                . 'MAX(alertes.annee_fiscale) as annee_max, MAX(alertes.traite_le) as traite_max, MAX(alertes.type_impot) as impot_max')
+            ->selectRaw('alertes.contribuable_id, '
+                ."MAX(CASE alertes.niveau WHEN 'eleve' THEN 3 WHEN 'moyen' THEN 2 ELSE 1 END) as rang, "
+                .'MAX(alertes.annee_fiscale) as annee_max, MAX(alertes.traite_le) as traite_max, MAX(alertes.type_impot) as impot_max, '
+                .'MIN(alertes.created_at) as cree_min')
             ->groupBy('alertes.contribuable_id');
 
         match ($sort) {
             'annee_fiscale' => $groupes->orderBy('annee_max', $dir),
             'traite_le' => $groupes->orderBy('traite_max', $dir),
             'type_impot' => $groupes->orderBy('impot_max', $dir),
+            'cree_le' => $groupes->orderBy('cree_min', $dir),
             default => $groupes->orderBy('rang', $dir)->orderBy('annee_max', 'desc'),
         };
         $groupes->orderBy('alertes.contribuable_id');
@@ -130,7 +164,7 @@ class DefaillanceController extends Controller
     {
         foreach (['regle', 'niveau', 'type_impot', 'annee_fiscale'] as $champ) {
             if (! empty($data[$champ])) {
-                $query->where('alertes.' . $champ, $data[$champ]);
+                $query->where('alertes.'.$champ, $data[$champ]);
             }
         }
 
@@ -144,11 +178,38 @@ class DefaillanceController extends Controller
         }
 
         if (! empty($data['search'])) {
-            $term = '%' . mb_strtolower(trim($data['search'])) . '%';
+            $term = '%'.mb_strtolower(trim($data['search'])).'%';
             $query->whereHas('contribuable', function ($q) use ($term) {
                 // LOWER + LIKE : insensible à la casse, quel que soit le SGBD (Oracle, PostgreSQL, SQLite)
                 $q->where(fn ($x) => $x->whereRaw('LOWER(nom) LIKE ?', [$term])->orWhereRaw('LOWER(nif) LIKE ?', [$term]));
             });
+        }
+
+        // Ancienneté : dossiers créés depuis moins de N jours, c.-à-d. dont la plus ancienne anomalie
+        // (parmi celles affichées, les mêmes que celles comptées dans la colonne Âge) est postérieure à la limite.
+        if (! empty($data['age_min'])) {
+            $recentes = (clone $query)
+                ->reorder()
+                ->select('alertes.contribuable_id')
+                ->groupBy('alertes.contribuable_id')
+                ->havingRaw('MIN(alertes.created_at) >= ?', [now()->subDays((int) $data['age_min'])]);
+
+            $query->whereIn('alertes.contribuable_id', $recentes);
+        }
+
+        // Archives : un dossier est clôturé quand TOUTES ses anomalies sont traitées ou régularisées
+        // (agrégation MIN + CASE, portable SQLite/PostgreSQL/Oracle).
+        $clotures = (clone $query)
+            ->reorder()
+            ->select('alertes.contribuable_id')
+            ->groupBy('alertes.contribuable_id')
+            ->havingRaw("MIN(CASE WHEN alertes.statut IN ('".Alerte::TRAITEE."', '".Alerte::REGULARISEE."') THEN 1 ELSE 0 END) = 1");
+
+        if (! empty($data['archive'])) {
+            $query->whereIn('alertes.contribuable_id', $clotures);
+        } elseif (empty($data['statut'])) {
+            // Liste de travail : « Tous les statuts » garde les dossiers ouverts, jamais les clôturés.
+            $query->whereNotIn('alertes.contribuable_id', $clotures);
         }
     }
 
@@ -161,8 +222,8 @@ class DefaillanceController extends Controller
     /**
      * Présentation d'un dossier contribuable : ses alertes et l'état agrégé (niveau maximal, statut, verrou).
      *
-     * @param \Illuminate\Support\Collection<int, Alerte> $alertes
-     * @param array<int, string> $noms
+     * @param  Collection<int, Alerte>  $alertes
+     * @param  array<int, string>  $noms
      * @return array<string, mixed>|null
      */
     private function presentGroupe($alertes, array $noms, ?User $me): ?array
@@ -206,7 +267,9 @@ class DefaillanceController extends Controller
             'nb_alertes' => $presentes->count(),
             'regles' => $presentes->pluck('regle')->unique()->values()->all(),
             'types_impot' => $presentes->pluck('type_impot')->unique()->values()->all(),
-            'annees' => $presentes->pluck('annee_fiscale')->unique()->sort()->values()->all(),
+            'annees' => $presentes->pluck('annee_fiscale')->unique()->sortDesc()->values()->all(),
+            // Age du dossier : date de la plus ancienne anomalie qu'il contient
+            'cree_le' => $presentes->pluck('cree_le')->filter()->sort()->first(),
         ];
     }
 
@@ -266,9 +329,133 @@ class DefaillanceController extends Controller
             ->where('alertes.statut', Alerte::TRAITEE)
             ->distinct()->count('alertes.contribuable_id');
 
+        // Pilotage : délais en jours, calculés en PHP après agrégation par dossier
+        // (aucune fonction de date propre au SGBD : tests SQLite, développement PostgreSQL, production Oracle).
+        $delais = [];
+        $attentes = [];
+        $enRetard = 0;
+        $seuilRetard = now()->subDays(self::SEUIL_RETARD);
+
+        $dossiers = $this->scopedQuery($request)
+            ->selectRaw('alertes.contribuable_id, MIN(alertes.created_at) as ouverture, '
+                .'MIN(alertes.pris_le) as prise, MAX(alertes.traite_le) as cloture, '
+                ."MAX(CASE WHEN alertes.statut = '".Alerte::A_TRAITER."' THEN 1 ELSE 0 END) as reste")
+            ->groupBy('alertes.contribuable_id')
+            ->get();
+
+        foreach ($dossiers as $d) {
+            $ouverture = $d->ouverture ? Carbon::parse($d->ouverture) : null;
+
+            if ($ouverture === null) {
+                continue;
+            }
+
+            if ($d->prise) {
+                $attentes[] = max(0, $ouverture->diffInMinutes(Carbon::parse($d->prise)) / 1440);
+            }
+
+            if ((int) $d->reste === 1) {
+                // Dossier encore ouvert (au moins une anomalie à traiter) : compte s'il traîne.
+                if ($ouverture->lte($seuilRetard)) {
+                    $enRetard++;
+                }
+            } elseif ($d->cloture) {
+                $delais[] = max(0, $ouverture->diffInMinutes(Carbon::parse($d->cloture)) / 1440);
+            }
+        }
+
+        $moyenne = fn (array $valeurs): ?float => $valeurs === [] ? null : round(array_sum($valeurs) / count($valeurs), 1);
+
+        $summary['delai_moyen_jours'] = $moyenne($delais);
+        $summary['attente_moyenne_jours'] = $moyenne($attentes);
+        $summary['dossiers_en_retard'] = $enRetard;
+
+        // Exercices proposés dans le filtre : seulement ceux qui existent, du plus récent au plus ancien
+        $summary['exercices'] = $this->scopedQuery($request)
+            ->distinct()
+            ->orderByDesc('alertes.annee_fiscale')
+            ->pluck('alertes.annee_fiscale')
+            ->map(fn ($annee) => (int) $annee)
+            ->values()
+            ->all();
+
         return response()->json($summary + [
             'derniere_analyse' => Cache::get(AnomalieAnalyseur::CACHE_DERNIERE_ANALYSE),
         ]);
+    }
+
+    /**
+     * Export CSV de la liste filtrée : une ligne par dossier contribuable.
+     * Mêmes filtres et même périmètre que la liste (agent/admin = leur centre).
+     */
+    public function export(Request $request): StreamedResponse
+    {
+        $data = $request->validate($this->reglesFiltres());
+
+        $query = $this->scopedQuery($request)->with(['contribuable.centre', 'traitePar']);
+        $this->appliquerFiltres($query, $data);
+        $query->orderByRaw("CASE alertes.niveau WHEN 'eleve' THEN 3 WHEN 'moyen' THEN 2 ELSE 1 END DESC")
+            ->orderByDesc('alertes.annee_fiscale')
+            ->orderBy('alertes.contribuable_id')
+            ->orderBy('alertes.id');
+
+        // Plafond : un export reste un fichier de travail, pas une extraction de toute la base.
+        $alertes = $query->limit(10000)->get()->groupBy(fn (Alerte $a) => (int) $a->contribuable_id);
+        $noms = $this->nomsPreneurs($alertes->flatten());
+
+        $lignes = [];
+        foreach ($alertes as $groupe) {
+            $g = $this->presentGroupe($groupe, $noms, $request->user());
+            if ($g === null) {
+                continue;
+            }
+
+            $lignes[] = [
+                $g['contribuable']['nif'],
+                $g['contribuable']['nom'],
+                $g['contribuable']['centre'] ?? '',
+                self::LIBELLES_NIVEAU[$g['niveau']] ?? $g['niveau'],
+                implode(', ', array_map(fn ($r) => self::LIBELLES_REGLE[$r] ?? mb_strtoupper($r), $g['regles'])),
+                implode(' / ', $g['types_impot']),
+                implode(', ', $g['annees']),
+                $g['nb_alertes'],
+                self::LIBELLES_STATUT[$g['statut']] ?? $g['statut'],
+                $g['pris_par'] ?? '',
+                $g['cree_le'] ? Carbon::parse($g['cree_le'])->format('d/m/Y') : '',
+                $g['traite_par'] ?? '',
+                $g['traite_le'] ? Carbon::parse($g['traite_le'])->format('d/m/Y') : '',
+                $g['commentaire'] ?? '',
+            ];
+        }
+
+        $entetes = [
+            'NIF', 'Contribuable', 'Centre', 'Niveau', 'Anomalies', 'Impôts', 'Exercices', 'Nb anomalies',
+            'Statut', 'Pris par', 'Créé le', 'Traité par', 'Traité le', 'Commentaire',
+        ];
+
+        return response()->streamDownload(function () use ($lignes, $entetes): void {
+            $sortie = fopen('php://output', 'w');
+            fwrite($sortie, "\xEF\xBB\xBF"); // BOM : accents corrects à l'ouverture dans Excel
+            fwrite($sortie, $this->ligneCsv($entetes));
+            foreach ($lignes as $ligne) {
+                fwrite($sortie, $this->ligneCsv($ligne));
+            }
+            fclose($sortie);
+        }, 'dossiers-defaillances-'.now()->format('Y-m-d').'.csv', [
+            'Content-Type' => 'text/csv; charset=UTF-8',
+        ]);
+    }
+
+    /** Une ligne CSV séparée par des points-virgules (Excel français), champs entre guillemets si nécessaire. @param array<int, mixed> $champs */
+    private function ligneCsv(array $champs): string
+    {
+        $cellules = array_map(function ($valeur): string {
+            $texte = (string) $valeur;
+
+            return strpbrk($texte, ";\"\r\n") === false ? $texte : '"'.str_replace('"', '""', $texte).'"';
+        }, $champs);
+
+        return implode(';', $cellules)."\r\n";
     }
 
     /** EXF-008 : marquer une alerte comme traitée (ou la rouvrir) avec un commentaire libre. */
@@ -289,7 +476,7 @@ class DefaillanceController extends Controller
 
         // Dossier pris par un autre utilisateur : modification refusée (sauf admin, central, superadmin)
         if (VerrouAlerte::verrouille($alerte) && (int) $alerte->getAttribute('pris_par') !== $me->id && ! $this->peutReprendre($me)) {
-            return response()->json(['message' => 'Ce dossier est en cours de traitement par ' . $this->nomPreneur($alerte) . '.'], 423);
+            return response()->json(['message' => 'Ce dossier est en cours de traitement par '.$this->nomPreneur($alerte).'.'], 423);
         }
 
         if (array_key_exists('statut', $data) && $alerte->statut === Alerte::REGULARISEE) {
@@ -343,7 +530,7 @@ class DefaillanceController extends Controller
      * Mise à jour du dossier contribuable : le statut et le commentaire s'appliquent à toutes ses anomalies
      * non régularisées. Un dossier pris par un autre agent est refusé, sauf pour un admin/central/superadmin.
      *
-     * @param array<string, mixed> $data
+     * @param  array<string, mixed>  $data
      */
     private function updateGroupe(Request $request, Alerte $alerte, array $data, User $me): JsonResponse
     {
@@ -351,7 +538,7 @@ class DefaillanceController extends Controller
 
         foreach ($alertes as $a) {
             if (VerrouAlerte::verrouille($a) && (int) $a->getAttribute('pris_par') !== $me->id && ! $this->peutReprendre($me)) {
-                return response()->json(['message' => 'Ce dossier est en cours de traitement par ' . $this->nomPreneur($a) . '.'], 423);
+                return response()->json(['message' => 'Ce dossier est en cours de traitement par '.$this->nomPreneur($a).'.'], 423);
             }
         }
 
@@ -447,7 +634,7 @@ class DefaillanceController extends Controller
             $message = match (true) {
                 $alerte->statut === Alerte::REGULARISEE => "Cette alerte est régularisée (l'anomalie n'est plus constatée) : il n'y a plus rien à traiter.",
                 $alerte->statut === Alerte::TRAITEE => 'Ce dossier est déjà traité.',
-                default => 'Ce dossier est en cours de traitement par ' . $this->nomPreneur($alerte) . '.',
+                default => 'Ce dossier est en cours de traitement par '.$this->nomPreneur($alerte).'.',
             };
 
             return response()->json(['message' => $message, 'alerte' => $this->present($alerte, [], $me)], $alerte->statut === Alerte::A_TRAITER ? 409 : 422);
@@ -485,7 +672,7 @@ class DefaillanceController extends Controller
                 $alerte = $alerte->fresh(['contribuable.centre', 'traitePar']);
 
                 return response()->json([
-                    'message' => 'Ce dossier est en cours de traitement par ' . $this->nomPreneur($bloquee) . '.',
+                    'message' => 'Ce dossier est en cours de traitement par '.$this->nomPreneur($bloquee).'.',
                     'alerte' => $this->present($alerte, [], $me),
                     'groupe' => $this->presentGroupeComplet($request, $alerte),
                 ], 409);
@@ -518,7 +705,7 @@ class DefaillanceController extends Controller
 
             foreach ($alertes as $a) {
                 if (VerrouAlerte::verrouille($a) && (int) $a->getAttribute('pris_par') !== $me->id && ! $this->peutReprendre($me)) {
-                    return response()->json(['message' => 'Ce dossier est en cours de traitement par ' . $this->nomPreneur($a) . '.'], 423);
+                    return response()->json(['message' => 'Ce dossier est en cours de traitement par '.$this->nomPreneur($a).'.'], 423);
                 }
             }
 
@@ -534,7 +721,7 @@ class DefaillanceController extends Controller
         }
 
         if (VerrouAlerte::verrouille($alerte) && (int) $alerte->getAttribute('pris_par') !== $me->id && ! $this->peutReprendre($me)) {
-            return response()->json(['message' => 'Ce dossier est en cours de traitement par ' . $this->nomPreneur($alerte) . '.'], 423);
+            return response()->json(['message' => 'Ce dossier est en cours de traitement par '.$this->nomPreneur($alerte).'.'], 423);
         }
 
         $etaitPris = VerrouAlerte::verrouille($alerte);
@@ -630,7 +817,7 @@ class DefaillanceController extends Controller
                 $stats['baisse_ca']['crees'],
                 $stats['mis_a_jour'],
                 $stats['regularisees']
-            ) . ($stats['desactivees'] !== [] ? ' Règle(s) désactivée(s) dans les réglages : ' . implode(', ', $stats['desactivees']) . '.' : ''),
+            ).($stats['desactivees'] !== [] ? ' Règle(s) désactivée(s) dans les réglages : '.implode(', ', $stats['desactivees']).'.' : ''),
         ]);
     }
 
@@ -747,7 +934,7 @@ class DefaillanceController extends Controller
     }
 
     /**
-     * @param array<int, string> $noms  id => nom des preneurs (évite une requête par alerte)
+     * @param  array<int, string>  $noms  id => nom des preneurs (évite une requête par alerte)
      * @return array<string, mixed>
      */
     private function present(Alerte $a, array $noms = [], ?User $me = null): array
@@ -777,6 +964,7 @@ class DefaillanceController extends Controller
             'commentaire' => $a->commentaire,
             'traite_par' => $a->traitePar?->nom,
             'traite_le' => $a->traite_le?->toIso8601String(),
+            'cree_le' => $a->created_at?->toIso8601String(),
             'pris_par' => $pris ? ($noms[$prisPar] ?? $this->nomPreneur($a)) : null,
             'pris_le' => $pris ? Carbon::parse($a->getAttribute('pris_le'))->toIso8601String() : null,
             'pris_par_moi' => $pris && $me !== null && (int) $prisPar === $me->id,

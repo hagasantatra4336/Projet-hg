@@ -2,10 +2,26 @@ import { useEffect, useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import api, { getErrorMessage } from "../services/api";
 import { useAuth } from "../context/AuthContext";
-import { ROLE_LABELS, type AppUser, type Centre, type Fonction, type Paginated } from "../types";
+import {
+  ROLE_LABELS,
+  type AppUser,
+  type Centre,
+  type DefaillanceSummary,
+  type Fonction,
+  type Paginated,
+} from "../types";
 import { ErrorBox, RoleBadge, primaryButtonClass } from "../components/ui";
 import AgentAlertes from "../components/AgentAlertes";
-import { IconBriefcase, IconBuilding, IconChevron, IconSearch, IconUsers } from "../components/icons";
+import {
+  IconAlert,
+  IconBriefcase,
+  IconBuilding,
+  IconChevron,
+  IconClock,
+  IconHourglass,
+  IconSearch,
+  IconUsers,
+} from "../components/icons";
 
 interface Stat {
   label: string;
@@ -94,8 +110,7 @@ function pageWindow(current: number, last: number): number[] {
 }
 
 /** Initiales pour l'avatar (2 lettres max). */
-function initials(name?: string | null): string {
-  if (!name) return "?";
+function initials(name?: string | null): string {  if (!name) return "?";
   const parts = name.trim().split(/\s+/).filter(Boolean);
   return ((parts[0]?.[0] ?? "") + (parts.length > 1 ? parts[parts.length - 1][0] : "")).toUpperCase() || "?";
 }
@@ -112,8 +127,80 @@ function Avatar({ name, size = "md" }: { name?: string | null; size?: "md" | "lg
   );
 }
 
-function SkeletonRows() {
+/** Délai moyen en jours, une décimale (« 3,4 j ») ; « — » tant qu'aucun dossier n'alimente la moyenne. */
+function libelleJours(valeur: number | null | undefined): string {
+  if (valeur === null || valeur === undefined) return "—";
+  return `${valeur.toLocaleString("fr-FR", { maximumFractionDigits: 1 })} j`;
+}
+
+/** Indicateurs de décision : délais réels des dossiers du périmètre de l'utilisateur. */
+function PilotageDossiers({ summary }: { summary: DefaillanceSummary | null }) {
+  const enRetard = summary?.dossiers_en_retard ?? 0;
+
+  const cartes = [
+    {
+      label: "Délai moyen de traitement",
+      valeur: libelleJours(summary?.delai_moyen_jours),
+      note: "de l'ouverture à la clôture",
+      icon: <IconClock className="h-4 w-4" />,
+      alerte: false,
+    },
+    {
+      label: "Attente avant prise",
+      valeur: libelleJours(summary?.attente_moyenne_jours),
+      note: "avant qu'un agent s'en saisisse",
+      icon: <IconHourglass className="h-4 w-4" />,
+      alerte: false,
+    },
+    {
+      label: "Dossiers en retard",
+      valeur: summary ? enRetard.toLocaleString("fr-FR") : "—",
+      note: "ouverts depuis plus de 30 j",
+      icon: <IconAlert className="h-4 w-4" />,
+      alerte: enRetard > 0,
+    },
+  ];
+
   return (
+    <section className="dash-rise overflow-hidden rounded-2xl border border-line bg-white" style={{ animationDelay: "120ms" }}>
+      <div className="flex items-center justify-between gap-2 border-b border-line bg-slate-50 px-5 py-3">
+        <h2 className="text-base font-semibold text-brand-blue">Pilotage des dossiers</h2>
+        <Link
+          to="/defaillances"
+          className="inline-flex items-center gap-1 text-sm font-medium text-brand-blue hover:underline"
+        >
+          Voir les dossiers
+          <IconChevron className="h-4 w-4" />
+        </Link>
+      </div>
+      <div className="grid gap-3 p-5 sm:grid-cols-3">
+        {cartes.map((c) => (
+          <div
+            key={c.label}
+            className="rounded-xl border border-line p-3 transition duration-200 hover:-translate-y-0.5 hover:border-brand-blue hover:shadow-md"
+          >
+            <div className="flex items-center gap-2">
+              <span
+                className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-white ${
+                  c.alerte ? "bg-red-600" : "bg-brand-blue"
+                }`}
+              >
+                {c.icon}
+              </span>
+              <p className="text-xs text-slate-500">{c.label}</p>
+            </div>
+            <p className={`mt-2 text-2xl font-semibold tabular-nums ${c.alerte ? "text-red-600" : "text-brand-blue"}`}>
+              {c.valeur}
+            </p>
+            <p className="text-xs text-slate-500">{c.note}</p>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function SkeletonRows() {  return (
     <>
       {Array.from({ length: 6 }, (_, i) => (
         <tr key={i} className="border-t border-line">
@@ -143,6 +230,7 @@ export default function DashboardPage() {
   const [totalUsers, setTotalUsers] = useState<number | null>(null);
   const [centresCount, setCentresCount] = useState<number | null>(null);
   const [fonctionsCount, setFonctionsCount] = useState<number | null>(null);
+  const [alerteSummary, setAlerteSummary] = useState<DefaillanceSummary | null>(null);
   const [loading, setLoading] = useState<boolean>(canUsers);
   const [error, setError] = useState<string>("");
 
@@ -192,6 +280,21 @@ export default function DashboardPage() {
       api.get<Fonction[]>("/fonctions").then((res) => setFonctionsCount(res.data.length)).catch(() => undefined);
     }
   }, [canCentres, canFonctions]);
+
+  // Délais et retards des dossiers : même périmètre que les listes (centre pour l'admin, tous pour le central)
+  useEffect(() => {
+    if (!canUsers) return;
+    let cancelled = false;
+    api
+      .get<DefaillanceSummary>("/defaillances/summary")
+      .then((res) => {
+        if (!cancelled) setAlerteSummary(res.data);
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [canUsers]);
 
   const stats: Stat[] = [];
   if (canUsers) stats.push({ label: "Total utilisateurs", value: totalUsers, icon: <IconUsers className="h-5 w-5" /> });
@@ -275,6 +378,8 @@ export default function DashboardPage() {
       ) : (
         <>
           <StatsCard stats={stats} />
+
+          <PilotageDossiers summary={alerteSummary} />
 
           <section
             className="dash-rise overflow-hidden rounded-2xl border border-line bg-white"

@@ -25,7 +25,7 @@ import {
   primaryButtonClass,
   secondaryButtonClass,
 } from "../components/ui";
-import { IconRefresh, IconSearch, IconUpload } from "../components/icons";
+import { IconChevron, IconDownload, IconRefresh, IconSearch, IconSliders, IconUpload } from "../components/icons";
 import SearchSelect from "../components/SearchSelect";
 import {
   ContribuableModal,
@@ -57,6 +57,8 @@ interface Filters {
   statut: "" | StatutAlerte;
   annee_fiscale: string;
   centre_id: string;
+  /** Dossiers créés depuis moins de N jours ("" = sans limite). */
+  age_min: string;
 }
 
 interface ImportResult {
@@ -64,13 +66,30 @@ interface ImportResult {
   erreurs: string[];
 }
 
-type SortField = "niveau" | "type_impot" | "annee_fiscale";
+type SortField = "niveau" | "type_impot" | "annee_fiscale" | "cree_le";
+
+/** Nombre de jours entiers depuis une date ISO (0 = aujourd'hui). */
+function joursDepuis(iso: string): number {
+  const debut = new Date(iso).getTime();
+  if (Number.isNaN(debut)) return 0;
+  return Math.max(0, Math.floor((Date.now() - debut) / 86_400_000));
+}
+
+/** Ancienneté lisible : « Aujourd'hui », « 1 j », « 45 j ». */
+function ageAffiche(iso: string | null): string {
+  if (!iso) return "—";
+  const jours = joursDepuis(iso);
+  return jours === 0 ? "Aujourd'hui" : `${jours.toLocaleString("fr-FR")} j`;
+}
 
 // Contrôles de filtre compacts (même hauteur, largeur selon le contenu)
 const filterInput =
   "rounded-lg border border-slate-300 bg-white px-2 py-1.5 text-xs text-slate-900 placeholder-slate-400 " +
   "focus:outline-none focus:border-brand-blue focus:ring-1 focus:ring-brand-blue transition " +
   "disabled:bg-slate-100 disabled:text-slate-500";
+
+// Libellé au-dessus de chaque contrôle de filtre
+const filterLabel = "mb-1 block text-xs font-medium text-slate-500";
 
 // ---------------------------------------------------------------------
 //  Page
@@ -98,8 +117,10 @@ export default function DefaillancesPage() {
     statut: "a_traiter",
     annee_fiscale: "",
     centre_id: "",
+    age_min: "",
   });
   const [searchInput, setSearchInput] = useState<string>("");
+  const [filtresOuverts, setFiltresOuverts] = useState<boolean>(false);
   const [search, setSearch] = useState<string>("");
   const [sort, setSort] = useState<SortField>("niveau");
   const [dir, setDir] = useState<"asc" | "desc">("desc");
@@ -124,6 +145,10 @@ export default function DefaillancesPage() {
   const [importing, setImporting] = useState<boolean>(false);
   const [importError, setImportError] = useState<string>("");
   const [importResult, setImportResult] = useState<ImportResult | null>(null);
+
+  // Export CSV
+  const [exporting, setExporting] = useState<boolean>(false);
+  const [exportError, setExportError] = useState<string>("");
 
   // Recherche avec un petit délai
   useEffect(() => {
@@ -163,6 +188,7 @@ export default function DefaillancesPage() {
           statut: filters.statut || undefined,
           annee_fiscale: filters.annee_fiscale || undefined,
           centre_id: filters.centre_id || undefined,
+          age_min: filters.age_min || undefined,
         },
       })
       .then((res) => {
@@ -208,18 +234,26 @@ export default function DefaillancesPage() {
     setPage(1);
   }
 
-  const filtresActifs =
-    searchInput.trim() !== "" ||
-    filters.regle !== "" ||
-    filters.niveau !== "" ||
-    filters.type_impot !== "" ||
-    filters.statut !== "a_traiter" ||
-    filters.annee_fiscale !== "" ||
-    filters.centre_id !== "";
+  const nbFiltresActifs =
+    (searchInput.trim() !== "" ? 1 : 0) +
+    (filters.regle !== "" ? 1 : 0) +
+    (filters.niveau !== "" ? 1 : 0) +
+    (filters.type_impot !== "" ? 1 : 0) +
+    (filters.statut !== "a_traiter" ? 1 : 0) +
+    (filters.annee_fiscale !== "" ? 1 : 0) +
+    (filters.centre_id !== "" ? 1 : 0) +
+    (filters.age_min !== "" ? 1 : 0);
+
+  const filtresActifs = nbFiltresActifs > 0;
+
+  // Le panneau se déplie dès qu'un filtre devient actif et se replie quand tout est réinitialisé.
+  useEffect(() => {
+    setFiltresOuverts(filtresActifs);
+  }, [filtresActifs]);
 
   function resetFilters() {
     setSearchInput("");
-    setFilters({ regle: "", niveau: "", type_impot: "", statut: "a_traiter", annee_fiscale: "", centre_id: "" });
+    setFilters({ regle: "", niveau: "", type_impot: "", statut: "a_traiter", annee_fiscale: "", centre_id: "", age_min: "" });
     setPage(1);
   }
 
@@ -349,6 +383,41 @@ export default function DefaillancesPage() {
     URL.revokeObjectURL(url);
   }
 
+  // ---- Export CSV de la liste filtrée ----
+
+  async function exporter() {
+    setExporting(true);
+    setExportError("");
+
+    try {
+      // Mêmes filtres que la liste : l'export contient tous les dossiers correspondants, pas seulement la page affichée.
+      const res = await api.get("/defaillances/export", {
+        params: {
+          search: search || undefined,
+          regle: filters.regle || undefined,
+          niveau: filters.niveau || undefined,
+          type_impot: filters.type_impot || undefined,
+          statut: filters.statut || undefined,
+          annee_fiscale: filters.annee_fiscale || undefined,
+          centre_id: filters.centre_id || undefined,
+          age_min: filters.age_min || undefined,
+        },
+        responseType: "blob",
+      });
+
+      const url = URL.createObjectURL(res.data as Blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `dossiers-defaillances-${new Date().toISOString().slice(0, 10)}.csv`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch {
+      setExportError("Export impossible. Réessayez dans un instant.");
+    } finally {
+      setExporting(false);
+    }
+  }
+
   const from = data && data.total > 0 ? (data.current_page - 1) * 10 + 1 : 0;
   const to = data ? Math.min(data.current_page * 10, data.total) : 0;
 
@@ -365,24 +434,36 @@ export default function DefaillancesPage() {
           <h1 className="text-xl font-semibold tracking-tight text-brand-blue">Anomalies de déclaration</h1>
         </div>
 
-        {canManage && (
-          <div className="flex flex-wrap gap-2">
-            <button type="button" className={`${secondaryButtonClass} inline-flex items-center gap-2`} onClick={openImport}>
-              <IconUpload className="h-4 w-4" /> Importer un CSV
-            </button>
-            <button
-              type="button"
-              className={`${primaryButtonClass} inline-flex items-center gap-2`}
-              onClick={() => {
-                setAnalyseMessage("");
-                setAnalyseError("");
-                setAnalyseOpen(true);
-              }}
-            >
-              <IconRefresh className="h-4 w-4" /> Lancer l'analyse
-            </button>
-          </div>
-        )}
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            className={`${secondaryButtonClass} inline-flex items-center gap-2`}
+            onClick={() => void exporter()}
+            disabled={exporting}
+            title="Exporter en CSV les dossiers correspondant aux filtres actuels"
+          >
+            <IconDownload className="h-4 w-4" /> {exporting ? "Export..." : "Exporter CSV"}
+          </button>
+
+          {canManage && (
+            <>
+              <button type="button" className={`${secondaryButtonClass} inline-flex items-center gap-2`} onClick={openImport}>
+                <IconUpload className="h-4 w-4" /> Importer un CSV
+              </button>
+              <button
+                type="button"
+                className={`${primaryButtonClass} inline-flex items-center gap-2`}
+                onClick={() => {
+                  setAnalyseMessage("");
+                  setAnalyseError("");
+                  setAnalyseOpen(true);
+                }}
+              >
+                <IconRefresh className="h-4 w-4" /> Lancer l'analyse
+              </button>
+            </>
+          )}
+        </div>
       </div>
 
       {/* Cartes : dossiers à traiter et alertes par niveau de risque */}
@@ -417,93 +498,162 @@ export default function DefaillancesPage() {
       </div>
 
       <section className="mt-4 rounded-xl bg-white p-4 border border-line sm:p-5">
-        {/* Filtres : une seule ligne sur grand écran, retour à la ligne sinon */}
-        <div role="group" aria-label="Filtres des alertes" className="mb-4 flex flex-wrap items-center gap-1.5">
-          <div className="relative w-full sm:w-36 sm:shrink-0">
-            <IconSearch className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-            <input
-              value={searchInput}
-              onChange={(e) => setSearchInput(e.target.value)}
-              placeholder="Nom ou NIF..."
-              aria-label="Rechercher un contribuable"
-              className={`${filterInput} w-full pl-8`}
+        {/* Filtres : panneau repliable, déplié automatiquement quand un filtre est actif */}
+        <div className="mb-2 flex items-center justify-between gap-2">
+          <button
+            type="button"
+            onClick={() => setFiltresOuverts((o) => !o)}
+            aria-expanded={filtresOuverts}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-xs font-semibold uppercase tracking-wide text-slate-600 transition hover:border-brand-blue/40 hover:text-brand-blue"
+          >
+            <IconSliders className="h-3.5 w-3.5" />
+            Filtres
+            {nbFiltresActifs > 0 && (
+              <span className="rounded-full bg-brand-blue px-1.5 py-0.5 text-[10px] font-bold leading-none text-white">
+                {nbFiltresActifs}
+              </span>
+            )}
+            <IconChevron
+              className={`h-3.5 w-3.5 transition-transform duration-200 ${filtresOuverts ? "rotate-90" : ""}`}
             />
-          </div>
+          </button>
+          {filtresActifs && (
+            <button
+              type="button"
+              onClick={resetFilters}
+              title="Réinitialiser les filtres"
+              className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-2 py-1 text-xs text-slate-600 transition hover:border-brand-blue/40 hover:text-brand-blue"
+            >
+              <IconRefresh className="h-3.5 w-3.5" /> Réinitialiser
+            </button>
+          )}
+        </div>
 
-          <select
-            aria-label="Type d'anomalie"
-            title="Type d'anomalie"
-            className={`${filterInput} sm:shrink-0`}
-            value={filters.regle}
-            onChange={(e) => changeFilter("regle", e.target.value as Filters["regle"])}
-          >
-            <option value="">Toutes les anomalies</option>
-            {(Object.keys(REGLE_LABELS) as Regle[]).map((r) => (
-              <option key={r} value={r}>
-                {REGLE_LABELS[r]}
-              </option>
-            ))}
-          </select>
+        {filtresOuverts && (
+        <div role="group" aria-label="Filtres des alertes" className="mb-4 grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-4">
+          <label className="block sm:col-span-2 xl:col-span-1">
+            <span className={filterLabel}>Recherche</span>
+            <div className="relative">
+              <IconSearch className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+              <input
+                value={searchInput}
+                onChange={(e) => setSearchInput(e.target.value)}
+                placeholder="Nom ou NIF..."
+                aria-label="Rechercher un contribuable"
+                className={`${filterInput} w-full pl-8`}
+              />
+            </div>
+          </label>
 
-          <select
-            aria-label="Niveau de risque"
-            title="Niveau de risque"
-            className={`${filterInput} sm:shrink-0`}
-            value={filters.niveau}
-            onChange={(e) => changeFilter("niveau", e.target.value as Filters["niveau"])}
-          >
-            <option value="">Tous les niveaux</option>
-            {(Object.keys(NIVEAU_LABELS) as NiveauRisque[]).map((n) => (
-              <option key={n} value={n}>
-                {NIVEAU_LABELS[n]}
-              </option>
-            ))}
-          </select>
+          <label className="block">
+            <span className={filterLabel}>Anomalie</span>
+            <select
+              aria-label="Type d'anomalie"
+              className={`${filterInput} w-full`}
+              value={filters.regle}
+              onChange={(e) => changeFilter("regle", e.target.value as Filters["regle"])}
+            >
+              <option value="">Toutes les anomalies</option>
+              {(Object.keys(REGLE_LABELS) as Regle[]).map((r) => (
+                <option key={r} value={r}>
+                  {REGLE_LABELS[r]}
+                </option>
+              ))}
+            </select>
+          </label>
 
-          <select
-            aria-label="Type d'impôt"
-            title="Type d'impôt"
-            className={`${filterInput} sm:shrink-0`}
-            value={filters.type_impot}
-            onChange={(e) => changeFilter("type_impot", e.target.value)}
-          >
-            <option value="">Tous les impôts</option>
-            {TYPES_IMPOT.map((t) => (
-              <option key={t} value={t}>
-                {t}
-              </option>
-            ))}
-          </select>
+          <label className="block">
+            <span className={filterLabel}>Niveau</span>
+            <select
+              aria-label="Niveau de risque"
+              className={`${filterInput} w-full`}
+              value={filters.niveau}
+              onChange={(e) => changeFilter("niveau", e.target.value as Filters["niveau"])}
+            >
+              <option value="">Tous les niveaux</option>
+              {(Object.keys(NIVEAU_LABELS) as NiveauRisque[]).map((n) => (
+                <option key={n} value={n}>
+                  {NIVEAU_LABELS[n]}
+                </option>
+              ))}
+            </select>
+          </label>
 
-          <select
-            aria-label="Statut"
-            title="Statut"
-            className={`${filterInput} sm:shrink-0`}
-            value={filters.statut}
-            onChange={(e) => changeFilter("statut", e.target.value as Filters["statut"])}
-          >
-            <option value="">Tous les statuts</option>
-            {(Object.keys(STATUT_LABELS) as StatutAlerte[]).map((s) => (
-              <option key={s} value={s}>
-                {STATUT_LABELS[s]}
-              </option>
-            ))}
-          </select>
+          <label className="block">
+            <span className={filterLabel}>Impôt</span>
+            <select
+              aria-label="Type d'impôt"
+              className={`${filterInput} w-full`}
+              value={filters.type_impot}
+              onChange={(e) => changeFilter("type_impot", e.target.value)}
+            >
+              <option value="">Tous les impôts</option>
+              {TYPES_IMPOT.map((t) => (
+                <option key={t} value={t}>
+                  {t}
+                </option>
+              ))}
+            </select>
+          </label>
 
-          <input
-            type="number"
-            min={1990}
-            max={2100}
-            aria-label="Exercice"
-            title="Exercice (année fiscale) de l'anomalie"
-            placeholder="Exercice"
-            className={`${filterInput} w-20 sm:shrink-0`}
-            value={filters.annee_fiscale}
-            onChange={(e) => changeFilter("annee_fiscale", e.target.value)}
-          />
+          <label className="block">
+            <span className={filterLabel}>Statut</span>
+            <select
+              aria-label="Statut"
+              className={`${filterInput} w-full`}
+              value={filters.statut}
+              onChange={(e) => changeFilter("statut", e.target.value as Filters["statut"])}
+            >
+              <option value="">Tous les statuts</option>
+              {/* Les dossiers clôturés (toutes anomalies traitées/régularisées) sont dans Archives */}
+              {(Object.keys(STATUT_LABELS) as StatutAlerte[])
+                .filter((s) => s === "a_traiter" || s === "en_traitement")
+                .map((s) => (
+                  <option key={s} value={s}>
+                    {STATUT_LABELS[s]}
+                  </option>
+                ))}
+            </select>
+          </label>
+
+          {/* Exercices réellement présents, le plus récent en tête */}
+          <label className="block">
+            <span className={filterLabel}>Exercice</span>
+            <select
+              aria-label="Exercice"
+              title="Exercice (année fiscale) de l'anomalie"
+              className={`${filterInput} w-full`}
+              value={filters.annee_fiscale}
+              onChange={(e) => changeFilter("annee_fiscale", e.target.value)}
+            >
+              <option value="">Tous les exercices</option>
+              {(summary?.exercices ?? []).map((annee) => (
+                <option key={annee} value={String(annee)}>
+                  {annee}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <label className="block">
+            <span className={filterLabel}>Ancienneté</span>
+            <select
+              aria-label="Ancienneté du dossier"
+              title="Dossiers dont la plus ancienne anomalie date de moins de N jours"
+              className={`${filterInput} w-full`}
+              value={filters.age_min}
+              onChange={(e) => changeFilter("age_min", e.target.value)}
+            >
+              <option value="">Toutes les anciennetés</option>
+              <option value="7">Créés depuis moins de 7 j</option>
+              <option value="30">Créés depuis moins de 30 j</option>
+              <option value="90">Créés depuis moins de 90 j</option>
+            </select>
+          </label>
 
           {canPickCentre && (
-            <div className="w-full sm:w-40 sm:shrink-0">
+            <label className="block">
+              <span className={filterLabel}>Centre</span>
               <SearchSelect
                 options={centres.map((c) => ({
                   value: String(c.id),
@@ -517,24 +667,14 @@ export default function DefaillancesPage() {
                 clearLabel="Tous les centres"
                 emptyLabel="Aucun centre trouvé"
               />
-            </div>
-          )}
-
-          {filtresActifs && (
-            <button
-              type="button"
-              onClick={resetFilters}
-              title="Réinitialiser les filtres"
-              aria-label="Réinitialiser les filtres"
-              className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-slate-300 bg-white text-slate-500 transition hover:border-brand-blue/40 hover:text-brand-blue"
-            >
-              <IconRefresh className="h-4 w-4" />
-            </button>
+            </label>
           )}
         </div>
+        )}
 
         <ErrorBox message={error} />
         <ErrorBox message={priseErreur} />
+        <ErrorBox message={exportError} />
 
         <div className="overflow-x-auto">
           <table className="w-full min-w-[760px] text-left text-sm">
@@ -558,6 +698,16 @@ export default function DefaillancesPage() {
                   </button>
                 </th>
                 <th className="px-2 py-2">Motif</th>
+                <th className="px-2 py-2">
+                  <button
+                    type="button"
+                    onClick={() => toggleSort("cree_le")}
+                    title="Date de la plus ancienne anomalie du dossier"
+                    className="hover:text-brand-blue"
+                  >
+                    Âge{sortMark("cree_le")}
+                  </button>
+                </th>
                 <th className="px-2 py-2">Statut</th>
                 <th className="sticky right-0 z-10 border-l border-line bg-slate-50 px-2 py-2 text-right">Traiter</th>
               </tr>
@@ -606,6 +756,22 @@ export default function DefaillancesPage() {
                         <p className="mt-0.5 text-[12px] text-slate-500">
                           + {g.nb_alertes - 1} autre{g.nb_alertes > 2 ? "s" : ""} anomalie{g.nb_alertes > 2 ? "s" : ""}
                         </p>
+                      )}
+                    </td>
+                    <td className="px-2 py-2.5 whitespace-nowrap">
+                      {g.cree_le ? (
+                        <span
+                          className={
+                            joursDepuis(g.cree_le) >= 30 && (g.statut === "a_traiter" || g.statut === "en_traitement")
+                              ? "font-medium text-amber-700"
+                              : "text-slate-700"
+                          }
+                          title={`Plus ancienne anomalie du dossier : ${formatDate(g.cree_le)}`}
+                        >
+                          {ageAffiche(g.cree_le)}
+                        </span>
+                      ) : (
+                        <span className="text-slate-400">—</span>
                       )}
                     </td>
                     <td className="px-2 py-2.5">
@@ -667,7 +833,7 @@ export default function DefaillancesPage() {
               })}
               {data && data.data.length === 0 && (
                 <tr>
-                  <td colSpan={8} className="px-2 py-8 text-center text-slate-500">
+                  <td colSpan={9} className="px-2 py-8 text-center text-slate-500">
                     {canManage
                       ? "Aucune alerte. Importez des déclarations puis lancez l'analyse."
                       : "Aucune anomalie pour votre centre."}
@@ -676,7 +842,7 @@ export default function DefaillancesPage() {
               )}
               {!data && loading && (
                 <tr>
-                  <td colSpan={8} className="px-2 py-8 text-center text-slate-500">
+                  <td colSpan={9} className="px-2 py-8 text-center text-slate-500">
                     Chargement...
                   </td>
                 </tr>

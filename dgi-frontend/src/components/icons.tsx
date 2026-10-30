@@ -144,6 +144,29 @@ export const IconAlert = (p: IconProps) => (
   </Svg>
 );
 
+export const IconArchive = (p: IconProps) => (
+  <Svg {...p}>
+    <rect x="3" y="4" width="18" height="4" rx="1" />
+    <path d="M5 8v11a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V8" />
+    <path d="M10 12h4" />
+  </Svg>
+);
+
+export const IconClock = (p: IconProps) => (
+  <Svg {...p}>
+    <circle cx="12" cy="12" r="9" />
+    <path d="M12 7v5l3 2" />
+  </Svg>
+);
+
+export const IconHourglass = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M6 3h12M6 21h12" />
+    <path d="M7 3v3a5 5 0 0 0 5 5 5 5 0 0 0 5-5V3M7 21v-3a5 5 0 0 1 5-5 5 5 0 0 1 5 5v3" />
+  </Svg>
+);
+
+
 export const IconUpload = (p: IconProps) => (
   <Svg {...p}>
     <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />

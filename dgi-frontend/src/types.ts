@@ -155,6 +155,14 @@ export interface DefaillanceSummary {
   dossiers_en_traitement: number;
   /** Nombre de contribuables (dossiers) ayant au moins une anomalie traitée. */
   dossiers_traites: number;
+  /** Délai moyen, en jours, entre l'ouverture du dossier et sa clôture (null = aucun dossier clos). */
+  delai_moyen_jours: number | null;
+  /** Délai moyen, en jours, entre l'ouverture du dossier et sa prise en charge (null = aucun dossier pris). */
+  attente_moyenne_jours: number | null;
+  /** Dossiers encore ouverts depuis plus de 30 jours. */
+  dossiers_en_retard: number;
+  /** Exercices présents dans le périmètre, du plus récent au plus ancien. */
+  exercices: number[];
   derniere_analyse: { at: string; date: string } | null;
 }
 
@@ -175,6 +183,8 @@ export interface GroupeAlerte {
   regles: string[];
   types_impot: string[];
   annees: number[];
+  /** Date de la plus ancienne anomalie du dossier (null si inconnue). */
+  cree_le: string | null;
 }
 
 export type AlerteContribuable = Omit<Defaillance, "contribuable">;

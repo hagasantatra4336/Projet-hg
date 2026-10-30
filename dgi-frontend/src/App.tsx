@@ -14,6 +14,7 @@ import ReglesPersonnaliseesPage from "./pages/Admin/ReglesPersonnaliseesPage";
 import DashboardPage from "./pages/DashboardPage";
 import DefaillancesPage from "./pages/DefaillancesPage";
 import TraitementsPage from "./pages/TraitementsPage";
+import ArchivesPage from "./pages/ArchivesPage";
 import DossierTraitementPage from "./pages/DossierTraitementPage";
 import ContribuableFichePage from "./pages/ContribuableFichePage";
 import ContribuableFicheApercuPage from "./pages/ContribuableFicheApercuPage";
@@ -39,8 +40,10 @@ export default function App() {
           <Route path="/profile/attente" element={<ProfileWaitingPage />} />
           {/* Défaillances de déclaration : tous les rôles (filtrées par centre côté API) */}
           <Route path="/defaillances" element={<DefaillancesPage />} />
-          {/* Dossiers de traitement : en cours de traitement et traitements effectués */}
+          {/* Dossiers en cours de traitement */}
           <Route path="/traitements" element={<TraitementsPage />} />
+          {/* Dossiers clôturés (toutes anomalies traitées/régularisées), consultation seule */}
+          <Route path="/archives" element={<ArchivesPage />} />
           {/* Page de traitement d'un dossier (alerte) */}
           <Route path="/defaillances/:id/traitement" element={<DossierTraitementPage />} />
           {/* Fiche de résultat d'un contribuable (synthèse, coordonnées, observations, export PDF) */}
