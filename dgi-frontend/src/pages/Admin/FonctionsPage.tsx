@@ -120,11 +120,11 @@ export default function FonctionsPage() {
 
       <div className="bg-white rounded-xl border border-line overflow-x-auto">
         <table className="w-full text-sm">
-          <thead className="border-b border-line bg-slate-50 text-left text-slate-600">
+          <thead className="border-b border-line bg-slate-50 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500">
             <tr>
-              <th className="px-3 py-2 font-semibold">Fonction</th>
-              <th className="px-3 py-2 font-semibold">Rôle</th>
-              <th className="px-3 py-2 font-semibold">Utilisateurs</th>
+              <th className="px-3 py-2">Fonction</th>
+              <th className="px-3 py-2">Rôle</th>
+              <th className="px-3 py-2">Utilisateurs</th>
               <th className="sticky right-0 z-10 w-[92px] border-l border-line bg-slate-50 px-3 py-2" />
             </tr>
           </thead>
@@ -144,7 +144,7 @@ export default function FonctionsPage() {
               </tr>
             )}
             {fonctions.map((f) => (
-              <tr key={f.id}>
+              <tr key={f.id} className="transition hover:bg-slate-50/70">
                 <td className="px-3 py-2 font-medium text-brand-blue">{f.nom}</td>
                 <td className="px-3 py-2">
                   <RoleBadge role={f.role} />
@@ -161,7 +161,10 @@ export default function FonctionsPage() {
       </div>
 
       <div className="bg-white rounded-xl border border-line p-5 mt-6">
-        <h2 className="text-sm font-semibold text-brand-blue mb-3">Droits de chaque rôle</h2>
+        <h2 className="mb-3 flex items-center gap-2 text-sm font-semibold text-brand-blue">
+          <span className="h-3.5 w-1 rounded-full bg-brand-gold" />
+          Droits de chaque rôle
+        </h2>
         <ul className="space-y-2 text-sm text-slate-700">
           {ROLES.map((r) => (
             <li key={r} className="flex items-start gap-3">

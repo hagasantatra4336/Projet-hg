@@ -4,26 +4,29 @@ import { ROLE_LABELS } from "../types";
 import { IconEdit, IconTrash } from "./icons";
 
 export const inputClass =
-  "w-full rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-slate-900 placeholder-slate-400 " +
-  "focus:outline-none focus:border-brand-blue focus:ring-1 focus:ring-brand-blue transition " +
-  "disabled:bg-slate-100 disabled:text-slate-500";
+  "w-full rounded-lg border border-line bg-white px-3 py-2 text-sm text-slate-900 placeholder-slate-400 shadow-sm " +
+  "focus:outline-none focus:border-brand-azure focus:ring-4 focus:ring-brand-azure/10 transition " +
+  "disabled:bg-slate-50 disabled:text-slate-500 disabled:shadow-none";
 
 export const primaryButtonClass =
-  "rounded-lg bg-brand-blue text-white font-medium px-3 py-1.5 " +
-  "hover:bg-brand-blue-light disabled:opacity-50 disabled:cursor-not-allowed transition";
+  "rounded-lg bg-brand-blue text-white font-semibold px-3.5 py-2 shadow-sm shadow-brand-blue/25 " +
+  "hover:bg-brand-blue-light active:translate-y-px disabled:opacity-50 disabled:cursor-not-allowed " +
+  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-azure focus-visible:ring-offset-2 transition";
 
 export const secondaryButtonClass =
-  "rounded-lg border border-slate-300 bg-white text-slate-700 font-medium px-3 py-1.5 " +
-  "hover:bg-slate-50 disabled:opacity-50 transition";
+  "rounded-lg border border-line bg-white text-slate-700 font-medium px-3.5 py-2 shadow-sm " +
+  "hover:border-slate-300 hover:bg-slate-50 hover:text-brand-blue disabled:opacity-50 " +
+  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-azure focus-visible:ring-offset-2 transition";
 
 export const dangerButtonClass =
-  "rounded-lg bg-red-600 text-white font-medium px-3 py-1.5 hover:bg-red-700 disabled:opacity-50 transition";
+  "rounded-lg bg-red-600 text-white font-semibold px-3.5 py-2 shadow-sm shadow-red-600/25 hover:bg-red-700 " +
+  "disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500 focus-visible:ring-offset-2 transition";
 
 export type IconButtonTone = "primary" | "neutral" | "danger";
 
 const ICON_BUTTON_TONE: Record<IconButtonTone, string> = {
-  primary: "bg-brand-blue text-white hover:bg-brand-blue-light",
-  neutral: "border border-slate-300 bg-white text-slate-700 hover:bg-slate-50",
+  primary: "bg-brand-blue text-white shadow-sm shadow-brand-blue/25 hover:bg-brand-blue-light",
+  neutral: "border border-line bg-white text-slate-600 shadow-sm hover:border-slate-300 hover:bg-slate-50 hover:text-brand-blue",
   danger: "border border-red-200 bg-white text-red-600 hover:bg-red-50",
 };
 
@@ -31,7 +34,7 @@ const ICON_BUTTON_TONE: Record<IconButtonTone, string> = {
 export function iconButtonClass(tone: IconButtonTone = "neutral"): string {
   return (
     "inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg transition " +
-    "focus:outline-none focus:ring-2 focus:ring-brand-blue " +
+    "focus:outline-none focus:ring-2 focus:ring-brand-azure " +
     "disabled:opacity-50 disabled:cursor-not-allowed " +
     ICON_BUTTON_TONE[tone]
   );
@@ -71,7 +74,7 @@ export function PasswordInput({
         onClick={() => setVisible((v) => !v)}
         aria-label={visible ? "Masquer le mot de passe" : "Afficher le mot de passe"}
         title={visible ? "Masquer le mot de passe" : "Afficher le mot de passe"}
-        className="absolute inset-y-0 right-0 flex items-center px-3 text-slate-400 hover:text-brand-blue"
+        className="absolute inset-y-0 right-0 flex items-center rounded-r-lg px-3 text-slate-400 transition hover:text-brand-azure"
       >
         <svg
           xmlns="http://www.w3.org/2000/svg"
@@ -106,9 +109,27 @@ export function PasswordInput({
 export function ErrorBox({ message }: { message: string }) {
   if (!message) return null;
   return (
-    <p className="text-sm text-red-700 bg-red-50 border border-red-200 rounded-lg px-3 py-2 mb-4">
-      {message}
-    </p>
+    <div
+      role="alert"
+      className="mb-4 flex items-start gap-2.5 rounded-lg border border-red-200 bg-red-50 px-3.5 py-2.5 text-sm text-red-700"
+    >
+      <svg
+        xmlns="http://www.w3.org/2000/svg"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth={1.8}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        className="mt-0.5 h-4 w-4 shrink-0"
+        aria-hidden="true"
+      >
+        <circle cx="12" cy="12" r="10" />
+        <line x1="12" y1="8" x2="12" y2="12" />
+        <line x1="12" y1="16" x2="12.01" y2="16" />
+      </svg>
+      <p className="min-w-0">{message}</p>
+    </div>
   );
 }
 
@@ -129,7 +150,7 @@ export function Field({
 }) {
   return (
     <label className={`block ${className}`}>
-      <span className="mb-1 flex items-baseline gap-1 text-sm font-medium text-slate-700">
+      <span className="mb-1.5 flex items-baseline gap-1 text-sm font-medium text-slate-700">
         <span>{label}</span>
         {required && (
           <span className="text-red-600" aria-hidden="true" title="Champ obligatoire">
@@ -139,7 +160,7 @@ export function Field({
         {!required && optional && <span className="text-xs font-normal text-slate-400">facultatif</span>}
       </span>
       {children}
-      {hint && <span className="mt-1 block text-xs leading-snug text-slate-500">{hint}</span>}
+      {hint && <span className="mt-1.5 block text-xs leading-snug text-slate-500">{hint}</span>}
     </label>
   );
 }
@@ -161,7 +182,8 @@ export function FormSection({
 }) {
   return (
     <fieldset className="space-y-3">
-      <legend className="mb-2 w-full border-b border-line pb-1.5 text-xs font-semibold uppercase tracking-wide text-slate-500">
+      <legend className="mb-2 flex w-full items-center gap-2 border-b border-line pb-2 text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+        <span className="h-3.5 w-1 rounded-full bg-brand-gold" aria-hidden="true" />
         {title}
       </legend>
       {hint && <p className="text-xs leading-snug text-slate-500">{hint}</p>}
@@ -180,16 +202,18 @@ export function FormActions({ children, className = "" }: { children: ReactNode;
 }
 
 const ROLE_BADGE: Record<Role, string> = {
-  agent: "bg-slate-100 text-slate-700",
-  admin: "bg-brand-blue/10 text-brand-blue",
-  central: "bg-sky-100 text-sky-900",
-  superadmin: "bg-brand-blue text-white",
+  agent: "bg-slate-100 text-slate-600 ring-1 ring-inset ring-slate-200",
+  admin: "bg-brand-azure-soft text-brand-azure ring-1 ring-inset ring-brand-azure/20",
+  central: "bg-sky-100 text-sky-900 ring-1 ring-inset ring-sky-200",
+  superadmin: "bg-brand-blue text-white shadow-sm shadow-brand-blue/25",
 };
 
 export function RoleBadge({ role }: { role: Role | null }) {
   if (!role) return <span className="text-slate-400">—</span>;
   return (
-    <span className={`inline-block rounded px-2 py-0.5 text-xs font-semibold ${ROLE_BADGE[role]}`}>
+    <span
+      className={`inline-flex items-center rounded-md px-2 py-0.5 text-[11px] font-semibold leading-5 ${ROLE_BADGE[role]}`}
+    >
       {ROLE_LABELS[role]}
     </span>
   );
@@ -206,24 +230,29 @@ export function Modal({
 }) {
   return (
     <div
-      className="fixed inset-0 z-50 bg-brand-blue-dark/55 flex items-center justify-center p-4"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-brand-blue-dark/60 p-4 backdrop-blur-[2px]"
       onMouseDown={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
     >
-      <div className="w-full max-w-lg max-h-[90vh] overflow-y-auto bg-white rounded-xl border border-line shadow-xl p-5">
-        <div className="flex items-center justify-between mb-4 border-b border-line pb-2.5">
-          <h2 className="text-lg font-semibold text-brand-blue">{title}</h2>
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label={title}
+        className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-2xl border border-line bg-white shadow-xl"
+      >
+        <div className="flex items-center justify-between gap-3 border-b border-line bg-slate-50/70 px-5 py-3.5">
+          <h2 className="text-base font-semibold tracking-tight text-brand-blue">{title}</h2>
           <button
             type="button"
             onClick={onClose}
-            className="text-slate-400 hover:text-slate-700 text-2xl leading-none"
+            className="flex h-8 w-8 items-center justify-center rounded-lg text-xl leading-none text-slate-400 transition hover:bg-slate-200/70 hover:text-slate-700"
             aria-label="Fermer"
           >
             ×
           </button>
         </div>
-        {children}
+        <div className="p-5">{children}</div>
       </div>
     </div>
   );
@@ -318,7 +347,7 @@ export function EditButton({ onClick, label = "Modifier" }: { onClick: () => voi
       onClick={onClick}
       title={label}
       aria-label={label}
-      className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-brand-blue transition hover:bg-slate-100 focus:outline-none focus:ring-2 focus:ring-brand-blue"
+      className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-brand-blue transition hover:bg-brand-azure-soft focus:outline-none focus:ring-2 focus:ring-brand-azure"
     >
       <IconEdit className="h-4 w-4" />
     </button>

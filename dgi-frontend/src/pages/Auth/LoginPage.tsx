@@ -26,17 +26,17 @@ interface LoginResponse {
 }
 
 const inputClass =
-  "w-full rounded-xl border border-gray-200 bg-gray-50/70 px-4 py-3 text-sm text-gray-800 placeholder-gray-400 " +
-  "focus:bg-white focus:outline-none focus:ring-2 focus:ring-brand-green/60 focus:border-brand-green transition";
+  "w-full rounded-lg border border-line bg-white px-4 py-3 text-sm text-slate-900 placeholder-slate-400 shadow-sm " +
+  "focus:outline-none focus:ring-4 focus:ring-brand-azure/10 focus:border-brand-azure transition";
 
 const primaryButtonClass =
-  "w-full rounded-xl bg-brand-blue py-3 text-sm font-semibold text-white shadow-md shadow-brand-blue/20 " +
+  "w-full rounded-lg bg-gradient-to-r from-brand-blue to-brand-blue-light py-3 text-sm font-semibold text-white shadow-md shadow-brand-blue/25 " +
   "hover:brightness-110 hover:shadow-lg active:scale-[0.99] disabled:opacity-50 disabled:cursor-not-allowed transition";
 
-const linkButtonClass = "w-full text-sm font-medium text-brand-blue hover:underline disabled:opacity-50";
+const linkButtonClass = "w-full text-sm font-medium text-brand-azure hover:text-brand-blue hover:underline disabled:opacity-50";
 
-const errorClass = "mb-5 rounded-xl border-l-4 border-red-500 bg-red-50 px-4 py-3 text-sm text-red-700";
-const infoClass = "mb-5 rounded-xl border-l-4 border-brand-green bg-brand-green/15 px-4 py-3 text-sm text-brand-blue";
+const errorClass = "mb-5 rounded-lg border border-red-200 border-l-4 border-l-red-500 bg-red-50 px-4 py-3 text-sm text-red-700";
+const infoClass = "mb-5 rounded-lg border border-brand-green/30 border-l-4 border-l-brand-green bg-brand-green-soft px-4 py-3 text-sm text-brand-blue";
 
 export default function LoginPage() {
   const navigate = useNavigate();
@@ -123,13 +123,18 @@ export default function LoginPage() {
 
   return (
     <AuthLayout>
+      <div className="mb-1 flex items-center gap-2">
+        <span className="h-1.5 w-8 rounded-full bg-brand-gold" aria-hidden="true" />
+        <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">Espace agent</span>
+      </div>
       <h1 className="text-2xl font-bold tracking-tight text-brand-blue">Connexion</h1>
+      <p className="mt-1 text-sm text-slate-500">Accédez au suivi des dossiers et aux alertes de votre centre.</p>
 
       <div className="mb-6 mt-5 flex items-center gap-2">
         {[1, 2].map((s) => (
-          <span key={s} className={`h-1.5 flex-1 rounded-full transition-colors ${s <= step ? "bg-brand-blue" : "bg-gray-200"}`} />
+          <span key={s} className={`h-1.5 flex-1 rounded-full transition-colors ${s <= step ? "bg-brand-blue" : "bg-slate-200"}`} />
         ))}
-        <span className="ml-1 text-xs font-medium text-gray-500">Étape {step} sur 2</span>
+        <span className="ml-1 text-xs font-medium text-slate-500">Étape {step} sur 2</span>
       </div>
 
       {error && <p className={errorClass}>{error}</p>}
@@ -162,7 +167,7 @@ export default function LoginPage() {
 
       {step === STEP_OTP && (
         <form onSubmit={handleOtp} className="space-y-4">
-          <p className="rounded-xl bg-gray-50 px-4 py-3 text-center text-sm text-gray-600">
+          <p className="rounded-lg border border-line bg-slate-50 px-4 py-3 text-center text-sm text-slate-600">
             Code à 6 chiffres envoyé à <span className="font-semibold text-brand-blue">{form.email}</span>.
             <br />
             Valable 10 minutes.

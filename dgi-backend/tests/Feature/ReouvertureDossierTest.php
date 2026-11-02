@@ -72,6 +72,11 @@ class ReouvertureDossierTest extends TestCase
 
     private function fermer(User $par): void
     {
+        // Un agent ne traite qu'un dossier qui lui est assigné (liste de travail nominative).
+        if ($par->role === Role::Agent) {
+            Alerte::whereKey($this->alerte()->id)->update(['pris_par' => $par->id, 'pris_le' => now()]);
+        }
+
         Sanctum::actingAs($par);
 
         $this->patchJson('/api/defaillances/' . $this->alerte()->id, ['groupe' => true, 'statut' => Alerte::TRAITEE])
@@ -127,14 +132,14 @@ class ReouvertureDossierTest extends TestCase
         $cloture = DossierHistorique::where('action', DossierHistorique::CLOTURE)->get();
         $this->assertCount(1, $cloture);
         $this->assertSame('Agent Trois', $cloture->first()->auteur);
-        $this->assertSame(Alerte::A_TRAITER, $cloture->first()->statut_avant);
+        $this->assertSame('en_traitement', $cloture->first()->statut_avant);
         $this->assertSame(Alerte::TRAITEE, $cloture->first()->statut_apres);
     }
 
     public function test_les_prises_repetees_ne_dupliquent_pas_le_journal(): void
     {
-        $agent = $this->utilisateur(Role::Agent, 'Agent Quatre');
-        Sanctum::actingAs($agent);
+        $chef = $this->utilisateur(Role::Admin, 'Chef Prise');
+        Sanctum::actingAs($chef);
 
         // La page de traitement renouvelle la prise toutes les 5 minutes : une seule ligne de journal.
         $this->postJson('/api/defaillances/' . $this->alerte()->id . '/prendre', ['groupe' => true])->assertOk();

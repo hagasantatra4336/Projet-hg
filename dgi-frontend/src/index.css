@@ -18,6 +18,48 @@
     @apply bg-canvas font-sans text-slate-800 antialiased;
     margin: 0;
     font-variant-numeric: tabular-nums;
+    background-image: radial-gradient(1100px 380px at 100% -10%, rgb(37 99 235 / 0.06), transparent 65%);
+    background-attachment: fixed;
+  }
+
+  ::selection {
+    background-color: #dbeafe;
+    color: #172554;
+  }
+
+  /* Barres de défilement discrètes et cohérentes avec les surfaces */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: #cbd5e1 transparent;
+  }
+
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    border: 2px solid transparent;
+    border-radius: 9999px;
+    background-color: #cbd5e1;
+    background-clip: content-box;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background-color: #94a3b8;
+  }
+
+  /* En-têtes de tableaux : petits, espacés, lisibles sans concurrencer les données */
+  table thead th {
+    text-transform: uppercase;
+    letter-spacing: 0.045em;
+  }
+
+  /* Les cartes de page se détachent par une ombre très douce en plus de leur bordure */
+  main section.rounded-xl.bg-white,
+  main section.rounded-2xl.bg-white,
+  main article.rounded-xl.bg-white {
+    box-shadow: 0 1px 2px rgb(15 23 42 / 0.04), 0 12px 32px -28px rgb(15 23 42 / 0.45);
   }
 
   h1,
@@ -28,7 +70,7 @@
 
   /* Focus clavier visible partout (les champs gardent leur propre anneau) */
   :focus-visible {
-    outline: 2px solid theme("colors.brand-blue");
+    outline: 2px solid theme("colors.brand-azure");
     outline-offset: 2px;
   }
   aside :focus-visible {
@@ -83,19 +125,26 @@
    --------------------------------------------------------------------------- */
 html.dark {
   color-scheme: dark;
-  --dk-canvas: #0e1524;
-  --dk-surface: #161e30;
-  --dk-surface-2: #1b2438;
-  --dk-surface-3: #243049;
-  --dk-border: #2b3750;
-  --dk-border-strong: #3a4865;
+  --dk-canvas: #0b1220;
+  --dk-surface: #131c2e;
+  --dk-surface-2: #18233a;
+  --dk-surface-3: #223050;
+  --dk-border: #26334d;
+  --dk-border-strong: #35466a;
   --dk-text: #edf1f8;
-  --dk-text-2: #d5dceb;
-  --dk-text-3: #b3bfd2;
-  --dk-text-4: #96a3ba;
-  --dk-brand-ink: #bcccf0;
-  --dk-brand-line: #6c88c8;
+  --dk-text-2: #d6deeb;
+  --dk-text-3: #b4c0d4;
+  --dk-text-4: #93a2ba;
+  --dk-brand-ink: #bfcff5;
+  --dk-brand-line: #6b8adb;
   --dk-ring: #7e9ad9;
+  --dk-azure-ink: #9dbbff;
+  --dk-azure-bg: #172a4d;
+  --dk-azure-line: #3b5ea8;
+  --dk-gold-ink: #e8c77f;
+  --dk-gold-bg: #372c14;
+  --dk-green-ink: #9fd8b4;
+  --dk-green-bg: #1c3324;
   --dk-amber-bg: #3a2f14;
   --dk-amber-ink: #eecb7f;
   --dk-red-bg: #3b1e21;
@@ -104,11 +153,11 @@ html.dark {
   --dk-leaf-bg: #22341f;
   --dk-sky-bg: #1a2c40;
   --dk-sky-ink: #a6c8e6;
-  --dk-green-ink: #8fd3af;
 }
 
 html.dark body {
   background-color: var(--dk-canvas);
+  background-image: radial-gradient(1100px 380px at 100% -10%, rgb(37 99 235 / 0.13), transparent 65%);
   color: var(--dk-text);
 }
 
@@ -167,6 +216,16 @@ html.dark .bg-leaf-100 { background-color: var(--dk-leaf-bg); }
 
 html.dark .bg-sky-100 { background-color: var(--dk-sky-bg); }
 
+/* Surfaces teintées introduites par la palette */
+html.dark .bg-brand-azure-soft { background-color: var(--dk-azure-bg); }
+html.dark .bg-brand-gold-soft { background-color: var(--dk-gold-bg); }
+html.dark .bg-brand-green-soft { background-color: var(--dk-green-bg); }
+html.dark .bg-emerald-50,
+html.dark .bg-emerald-100 { background-color: var(--dk-green-bg); }
+html.dark .bg-blue-50,
+html.dark .bg-blue-100 { background-color: var(--dk-azure-bg); }
+html.dark .bg-orange-100 { background-color: var(--dk-gold-bg); }
+
 /* Textes */
 html.dark .text-slate-900,
 html.dark .text-slate-800,
@@ -185,6 +244,23 @@ html.dark .text-gray-300 { color: var(--dk-text-4); }
 
 html.dark .text-brand-blue,
 html.dark .hover\:text-brand-blue:hover { color: var(--dk-brand-ink); }
+
+html.dark .text-brand-azure,
+html.dark .hover\:text-brand-azure:hover { color: var(--dk-azure-ink); }
+
+html.dark .text-brand-gold,
+html.dark .text-brand-gold-dark { color: var(--dk-gold-ink); }
+
+html.dark .text-brand-green { color: var(--dk-green-ink); }
+
+html.dark .text-emerald-700,
+html.dark .text-emerald-800 { color: var(--dk-green-ink); }
+
+html.dark .text-blue-800,
+html.dark .text-blue-900 { color: var(--dk-azure-ink); }
+
+html.dark .text-orange-700,
+html.dark .text-orange-800 { color: var(--dk-gold-ink); }
 
 html.dark .text-red-700,
 html.dark .text-red-600,
@@ -218,7 +294,21 @@ html.dark .border-brand-blue,
 html.dark .hover\:border-brand-blue:hover,
 html.dark .focus\:border-brand-blue:focus { border-color: var(--dk-brand-line); }
 
+html.dark .border-brand-azure,
+html.dark .hover\:border-brand-azure:hover,
+html.dark .focus\:border-brand-azure:focus { border-color: var(--dk-azure-line); }
+
 html.dark .border-red-200 { border-color: var(--dk-red-line); }
+
+html.dark .ring-red-200 { --tw-ring-color: var(--dk-red-line); }
+html.dark .ring-amber-200 { --tw-ring-color: #6b5320; }
+html.dark .ring-emerald-200 { --tw-ring-color: #2f5c42; }
+html.dark .ring-brand-azure { --tw-ring-color: var(--dk-azure-line); }
+html.dark .ring-brand-azure\/20 { --tw-ring-color: rgb(107 138 219 / 0.4); }
+html.dark .ring-slate-200 { --tw-ring-color: var(--dk-border-strong); }
+html.dark .ring-sky-200 { --tw-ring-color: #315a7d; }
+html.dark .ring-brand-blue\/15 { --tw-ring-color: rgb(107 138 219 / 0.35); }
+html.dark .ring-brand-gold\/30 { --tw-ring-color: rgb(232 199 127 / 0.35); }
 
 html.dark .divide-line > :not([hidden]) ~ :not([hidden]) { border-color: var(--dk-border); }
 

@@ -11,8 +11,8 @@ const REFRESH_MS = 60_000; // rafraîchissement automatique (l'analyse tourne to
 const MAX_LIGNES = 5;
 
 /**
- * Bloc du tableau de bord de l'AGENT : les alertes de défaillance de SON centre
- * (le filtrage par centre est fait par l'API selon le compte connecté).
+ * Bloc du tableau de bord de l'AGENT : les dossiers que son centre lui a assignés
+ * (le filtrage par agent est fait par l'API selon le compte connecté).
  */
 export default function AgentAlertes() {
   const { user } = useAuth();
@@ -33,7 +33,7 @@ export default function AgentAlertes() {
     Promise.all([
       api.get<DefaillanceSummary>("/defaillances/summary"),
       api.get<Paginated<GroupeAlerte>>("/defaillances", {
-        params: { grouper: 1, statut: "a_traiter", sort: "niveau", dir: "desc" },
+        params: { grouper: 1, sort: "niveau", dir: "desc" },
       }),
     ])
       .then(([s, l]) => {
@@ -51,31 +51,34 @@ export default function AgentAlertes() {
     };
   }, [tick]);
 
-  const stats: { label: string; value: number | undefined }[] = [
-    { label: "Alertes à traiter", value: summary?.a_traiter },
-    { label: `Risque ${NIVEAU_LABELS.eleve.toLowerCase()}`, value: summary?.eleve },
-    { label: `Risque ${NIVEAU_LABELS.moyen.toLowerCase()}`, value: summary?.moyen },
-    { label: `Risque ${NIVEAU_LABELS.faible.toLowerCase()}`, value: summary?.faible },
+  const stats: { label: string; value: number | undefined; bord: string; icone: string }[] = [
+    { label: "Alertes à traiter", value: summary?.a_traiter, bord: "border-l-brand-azure", icone: "bg-brand-azure-soft text-brand-azure" },
+    { label: `Risque ${NIVEAU_LABELS.eleve.toLowerCase()}`, value: summary?.eleve, bord: "border-l-red-500", icone: "bg-red-50 text-red-600" },
+    { label: `Risque ${NIVEAU_LABELS.moyen.toLowerCase()}`, value: summary?.moyen, bord: "border-l-amber-500", icone: "bg-amber-50 text-amber-700" },
+    { label: `Risque ${NIVEAU_LABELS.faible.toLowerCase()}`, value: summary?.faible, bord: "border-l-emerald-500", icone: "bg-emerald-50 text-emerald-700" },
   ];
 
   return (
     <section className="mb-6">
-      <h2 className="text-lg font-semibold text-brand-blue">Anomalies de mon centre</h2>
+      <h2 className="text-lg font-semibold text-brand-blue">Mes dossiers assignés</h2>
       <p className="mb-3 text-sm text-slate-500">
-        Anomalies des contribuables de {user?.centre?.nom ?? "votre centre"}, réunies par contribuable
+        Dossiers de {user?.centre?.nom ?? "votre centre"} que votre centre vous a confiés, réunis par contribuable
       </p>
 
       <ErrorBox message={error} />
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         {stats.map((s) => (
-          <div key={s.label} className="flex flex-row-reverse items-start justify-between gap-3 rounded-xl border border-line bg-white p-4">
-            <span className="flex shrink-0 items-center justify-center text-slate-400">
+          <div
+            key={s.label}
+            className={`flex flex-row-reverse items-start justify-between gap-3 rounded-xl border border-line border-l-4 bg-white p-4 shadow-sm transition hover:shadow-md ${s.bord}`}
+          >
+            <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ${s.icone}`}>
               <IconAlert className="h-5 w-5" />
             </span>
             <div className="min-w-0">
               <p className="truncate text-sm text-slate-600">{s.label}</p>
-              <p className="text-2xl font-semibold text-brand-blue">{s.value ?? "—"}</p>
+              <p className="text-2xl font-semibold tabular-nums text-brand-blue">{s.value ?? "—"}</p>
             </div>
           </div>
         ))}
@@ -85,7 +88,7 @@ export default function AgentAlertes() {
         <div className="overflow-x-auto">
           <table className="w-full min-w-[640px] text-left text-sm">
             <thead>
-              <tr className="bg-slate-50 text-xs font-semibold text-slate-600">
+              <tr className="bg-slate-50 text-[11px] font-semibold uppercase tracking-wider text-slate-500">
                 <th className="px-2 py-2">Contribuable</th>
                 <th className="px-2 py-2">Anomalie</th>
                 <th className="px-2 py-2">Impôt</th>
@@ -141,7 +144,7 @@ export default function AgentAlertes() {
               {alertes && alertes.length === 0 && (
                 <tr>
                   <td colSpan={6} className="px-2 py-6 text-center text-slate-500">
-                    Aucune alerte à traiter pour votre centre.
+                    Aucun dossier ne vous est assigné.
                   </td>
                 </tr>
               )}
@@ -156,8 +159,8 @@ export default function AgentAlertes() {
           </table>
         </div>
 
-        <Link to="/defaillances" className="mt-3 inline-flex items-center gap-1 text-sm font-medium text-brand-blue hover:underline">
-          Voir toutes les alertes <IconChevron className="h-4 w-4" />
+        <Link to="/traitements" className="mt-3 inline-flex items-center gap-1 text-sm font-medium text-brand-azure hover:text-brand-blue hover:underline">
+          Voir mes dossiers <IconChevron className="h-4 w-4" />
         </Link>
       </div>
 

@@ -59,7 +59,8 @@ export default function TraitementsPage() {
     return () => clearTimeout(t);
   }, [searchInput]);
 
-  // Dossiers pris par un agent (en cours)
+  // Dossiers de l'utilisateur : pour un agent, tous ses dossiers assignés (même si le verrou a expiré),
+  // pour les autres rôles, les dossiers en cours de traitement.
   useEffect(() => {
     let cancelled = false;
     if (!silentRef.current) setLoading(true);
@@ -71,7 +72,7 @@ export default function TraitementsPage() {
           page,
           grouper: 1,
           search: search || undefined,
-          statut: "en_traitement",
+          ...(role === "agent" ? {} : { statut: "en_traitement" }),
           sort: "niveau",
           dir: "desc",
         },
@@ -91,7 +92,7 @@ export default function TraitementsPage() {
     return () => {
       cancelled = true;
     };
-  }, [page, search, reloadKey]);
+  }, [page, search, reloadKey, role]);
 
   const reload = useCallback(() => setReloadKey((k) => k + 1), []);
 
@@ -134,8 +135,11 @@ export default function TraitementsPage() {
       <div className="mb-4">
         <h1 className="text-xl font-semibold tracking-tight text-brand-blue">Traitements</h1>
         <p className="mt-1 text-sm text-slate-500">
-          Dossiers en cours de traitement. Les dossiers clôturés sont dans{" "}
-          <Link to="/archives" className="font-medium text-brand-blue hover:underline">
+          {role === "agent"
+            ? "Dossiers que votre centre vous a assignés. "
+            : "Dossiers en cours de traitement. "}
+          Les dossiers clôturés sont dans{" "}
+          <Link to="/archives" className="font-medium text-brand-azure hover:underline">
             Archives
           </Link>
           .
@@ -161,7 +165,7 @@ export default function TraitementsPage() {
         <div className="overflow-x-auto">
           <table className="w-full min-w-[720px] text-left text-sm">
             <thead>
-              <tr className="bg-slate-50 text-xs font-semibold text-slate-600">
+              <tr className="border-b border-line bg-slate-50 text-[11px] font-semibold uppercase tracking-wider text-slate-500">
                 <th className="px-2 py-2">Contribuable</th>
                 <th className="px-2 py-2">Anomalie</th>
                 <th className="px-2 py-2">Impôt</th>
@@ -234,7 +238,7 @@ export default function TraitementsPage() {
                       ) : (
                         <button
                           type="button"
-                          className="text-xs font-medium text-brand-blue underline disabled:opacity-50"
+                          className="text-xs font-medium text-brand-azure underline-offset-2 hover:underline disabled:opacity-50"
                           disabled={busyId === g.representant_id}
                           onClick={() => void ouvrir(g, "consulter")}
                         >
@@ -247,8 +251,17 @@ export default function TraitementsPage() {
               })}
               {data && data.data.length === 0 && (
                 <tr>
-                  <td colSpan={7} className="px-2 py-8 text-center text-slate-500">
-                    Aucun dossier en cours de traitement : prenez-en un depuis la page Anomalies (bouton « Traiter »).
+                  <td colSpan={7} className="px-3 py-10 text-center">
+                    <p className="font-medium text-brand-blue">
+                      {role === "agent"
+                        ? "Aucun dossier assigné"
+                        : "Aucun dossier en cours de traitement"}
+                    </p>
+                    <p className="mt-1 text-slate-500">
+                      {role === "agent"
+                        ? "Votre chef de centre peut vous assigner un dossier."
+                        : "Prenez-en un depuis la page Anomalies (bouton « Traiter »)."}
+                    </p>
                   </td>
                 </tr>
               )}
@@ -274,7 +287,7 @@ export default function TraitementsPage() {
                 onClick={() => setPage((p) => Math.max(1, p - 1))}
                 disabled={data.current_page <= 1}
                 aria-label="Page précédente"
-                className="rounded-md px-2 py-1 text-sm text-slate-500 hover:bg-slate-100 disabled:opacity-40"
+                className="flex h-8 w-8 items-center justify-center rounded-full border border-line bg-white text-slate-500 shadow-sm transition hover:border-brand-azure hover:text-brand-azure disabled:opacity-40 disabled:hover:border-line disabled:hover:text-slate-500"
               >
                 ‹
               </button>
@@ -284,8 +297,10 @@ export default function TraitementsPage() {
                   type="button"
                   onClick={() => setPage(n)}
                   aria-current={n === data.current_page ? "page" : undefined}
-                  className={`h-8 min-w-8 rounded-md px-2 text-sm transition ${
-                    n === data.current_page ? "bg-brand-blue font-semibold text-white" : "text-slate-600 hover:bg-slate-100"
+                  className={`h-8 min-w-8 rounded-full px-2.5 text-sm tabular-nums transition ${
+                    n === data.current_page
+                      ? "bg-brand-blue font-semibold text-white shadow-sm"
+                      : "border border-transparent text-slate-600 hover:border-line hover:bg-white"
                   }`}
                 >
                   {n}
@@ -296,7 +311,7 @@ export default function TraitementsPage() {
                 onClick={() => setPage((p) => Math.min(data.last_page, p + 1))}
                 disabled={data.current_page >= data.last_page}
                 aria-label="Page suivante"
-                className="rounded-md px-2 py-1 text-sm text-slate-500 hover:bg-slate-100 disabled:opacity-40"
+                className="flex h-8 w-8 items-center justify-center rounded-full border border-line bg-white text-slate-500 shadow-sm transition hover:border-brand-azure hover:text-brand-azure disabled:opacity-40 disabled:hover:border-line disabled:hover:text-slate-500"
               >
                 ›
               </button>

@@ -42,7 +42,7 @@ export default function ContribuableFicheApercuPage() {
   return (
     <div className="flex h-[calc(100dvh-6rem)] flex-col gap-3 lg:h-[calc(100dvh-3rem)]">
       {/* Retour à la fiche de travail */}
-      <Link to={`/contribuables/${id}`} className="no-print shrink-0 text-sm font-medium text-brand-blue underline">
+      <Link to={`/contribuables/${id}`} className="no-print inline-flex w-fit items-center gap-1 text-sm font-medium text-brand-azure underline-offset-4 hover:underline">
         ← Retour à la fiche
       </Link>
 

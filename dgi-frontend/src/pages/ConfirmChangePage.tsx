@@ -47,7 +47,7 @@ export default function ConfirmChangePage() {
           <ThemeToggle />
         </div>
 
-        <div className="overflow-hidden rounded-xl border border-line bg-white text-center">
+        <div className="overflow-hidden rounded-2xl border border-line bg-white text-center shadow-md">
           <LogoBand />
           <div className="p-8">
             <h1 className="mb-4 text-xl font-semibold tracking-tight text-brand-blue">Confirmation des modifications</h1>
@@ -72,10 +72,10 @@ export default function ConfirmChangePage() {
 
             {status === "done" && (
               <>
-                <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-brand-green text-2xl font-semibold tracking-tight text-brand-blue">
+                <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-brand-green text-2xl font-semibold tracking-tight text-white shadow-md shadow-brand-green/30">
                   ✓
                 </div>
-                <p className="mb-4 rounded-lg border border-brand-green/60 bg-leaf-50 px-3 py-2 text-sm text-brand-blue">
+                <p className="mb-4 rounded-lg border border-brand-green/25 bg-brand-green-soft px-3 py-2 text-sm text-brand-green">
                   {message}
                 </p>
                 <p className="text-sm text-slate-600">

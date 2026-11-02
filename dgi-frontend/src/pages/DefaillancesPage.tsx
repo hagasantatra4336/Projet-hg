@@ -66,6 +66,23 @@ interface ImportResult {
   erreurs: string[];
 }
 
+/** Agent du centre susceptible de recevoir un dossier. */
+interface AgentOption {
+  id: number;
+  nom: string;
+  fonction: string | null;
+}
+
+/** Initiales affichées dans la pastille ronde d'un agent. */
+function initialesAgent(nom: string): string {
+  return nom
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((mot) => mot[0]?.toUpperCase() ?? "")
+    .join("");
+}
+
 type SortField = "niveau" | "type_impot" | "annee_fiscale" | "cree_le";
 
 /** Nombre de jours entiers depuis une date ISO (0 = aujourd'hui). */
@@ -84,12 +101,12 @@ function ageAffiche(iso: string | null): string {
 
 // Contrôles de filtre compacts (même hauteur, largeur selon le contenu)
 const filterInput =
-  "rounded-lg border border-slate-300 bg-white px-2 py-1.5 text-xs text-slate-900 placeholder-slate-400 " +
-  "focus:outline-none focus:border-brand-blue focus:ring-1 focus:ring-brand-blue transition " +
-  "disabled:bg-slate-100 disabled:text-slate-500";
+  "rounded-lg border border-line bg-white px-2 py-1.5 text-xs text-slate-900 placeholder-slate-400 shadow-sm " +
+  "focus:outline-none focus:border-brand-azure focus:ring-4 focus:ring-brand-azure/10 transition " +
+  "disabled:bg-slate-50 disabled:text-slate-500";
 
 // Libellé au-dessus de chaque contrôle de filtre
-const filterLabel = "mb-1 block text-xs font-medium text-slate-500";
+const filterLabel = "mb-1 block text-[11px] font-semibold uppercase tracking-wider text-slate-500";
 
 // ---------------------------------------------------------------------
 //  Page
@@ -98,6 +115,7 @@ const filterLabel = "mb-1 block text-xs font-medium text-slate-500";
 export default function DefaillancesPage() {
   const { user } = useAuth();
   const role = user?.role ?? null;
+  const estAgent = role === "agent";
   const canManage = role === "superadmin" || role === "central" || role === "admin";
   const canPickCentre = role === "superadmin" || role === "central";
 
@@ -131,6 +149,14 @@ export default function DefaillancesPage() {
   const [priseId, setPriseId] = useState<number | null>(null);
   const [priseErreur, setPriseErreur] = useState<string>("");
   const [aReprendre, setAReprendre] = useState<GroupeAlerte | null>(null);
+
+  // Affectation nominative d'un dossier libre (chefs de centre, central, superadmin)
+  const [aAssigner, setAAssigner] = useState<GroupeAlerte | null>(null);
+  const [agents, setAgents] = useState<AgentOption[] | null>(null); // null = chargement
+  const [agentId, setAgentId] = useState<string>("");
+  const [agentQuery, setAgentQuery] = useState<string>("");
+  const [assignErreur, setAssignErreur] = useState<string>("");
+  const [assigning, setAssigning] = useState<boolean>(false);
 
   // Lancer l'analyse
   const [analyseOpen, setAnalyseOpen] = useState<boolean>(false);
@@ -185,7 +211,8 @@ export default function DefaillancesPage() {
           regle: filters.regle || undefined,
           niveau: filters.niveau || undefined,
           type_impot: filters.type_impot || undefined,
-          statut: filters.statut || undefined,
+          // Un agent ne voit que ses dossiers assignés : le filtre de statut de l'écran ne s'applique pas à lui.
+          statut: estAgent ? undefined : filters.statut || undefined,
           annee_fiscale: filters.annee_fiscale || undefined,
           centre_id: filters.centre_id || undefined,
           age_min: filters.age_min || undefined,
@@ -309,6 +336,47 @@ export default function DefaillancesPage() {
     }
   }
 
+  // ---- Affectation d'un dossier à un agent ----
+
+  /** Ouvre la fenêtre d'assignation et charge les agents du centre du dossier. */
+  function openAssigner(g: GroupeAlerte) {
+    setAAssigner(g);
+    setAgents(null);
+    setAgentId("");
+    setAgentQuery("");
+    setAssignErreur("");
+
+    api
+      .get<AgentOption[]>(`/defaillances/${g.representant_id}/agents`)
+      .then((res) => {
+        setAgents(res.data);
+        if (res.data.length === 1) setAgentId(String(res.data[0].id));
+      })
+      .catch((err) => {
+        setAgents([]);
+        setAssignErreur(getErrorMessage(err, "Impossible de charger les agents du centre."));
+      });
+  }
+
+  async function handleAssigner(e: FormEvent) {
+    e.preventDefault();
+    if (!aAssigner || !agentId) return;
+
+    setAssigning(true);
+    setAssignErreur("");
+    try {
+      await api.post(`/defaillances/${aAssigner.representant_id}/assigner`, { user_id: Number(agentId) });
+      setAAssigner(null);
+      reload();
+    } catch (err) {
+      // Dossier pris entre-temps : la liste est rechargée pour refléter son état.
+      setAssignErreur(getErrorMessage(err, "Assignation impossible."));
+      reload();
+    } finally {
+      setAssigning(false);
+    }
+  }
+
   // ---- Analyse ----
 
   async function handleAnalyse(e: FormEvent) {
@@ -397,7 +465,8 @@ export default function DefaillancesPage() {
           regle: filters.regle || undefined,
           niveau: filters.niveau || undefined,
           type_impot: filters.type_impot || undefined,
-          statut: filters.statut || undefined,
+          // Un agent ne voit que ses dossiers assignés : le filtre de statut de l'écran ne s'applique pas à lui.
+          statut: estAgent ? undefined : filters.statut || undefined,
           annee_fiscale: filters.annee_fiscale || undefined,
           centre_id: filters.centre_id || undefined,
           age_min: filters.age_min || undefined,
@@ -426,6 +495,16 @@ export default function DefaillancesPage() {
     { niveau: "moyen", value: summary?.moyen },
     { niveau: "faible", value: summary?.faible },
   ];
+
+  // Fenêtre d'assignation : recherche interne et agent sélectionné
+  const agentQueryNorm = agentQuery.trim().toLowerCase();
+  const agentsFiltres = (agents ?? []).filter(
+    (a) =>
+      agentQueryNorm === "" ||
+      a.nom.toLowerCase().includes(agentQueryNorm) ||
+      (a.fonction ?? "").toLowerCase().includes(agentQueryNorm),
+  );
+  const agentChoisi = (agents ?? []).find((a) => String(a.id) === agentId) ?? null;
 
   return (
     <div>
@@ -466,36 +545,47 @@ export default function DefaillancesPage() {
         </div>
       </div>
 
-      {/* Cartes : dossiers à traiter et alertes par niveau de risque */}
-      <div className="grid gap-2 sm:grid-cols-4">
-        <div className="rounded-xl bg-white p-3 border border-line">
-          <p className="text-xs text-slate-500">Dossiers à traiter</p>
-          <p className="text-2xl font-semibold text-brand-blue">{summary ? summary.dossiers_a_traiter : "—"}</p>
-          {summary && (
-            <p className="text-xs text-slate-500">
-              {summary.a_traiter} alerte{summary.a_traiter > 1 ? "s" : ""}
-              {summary.dossiers_en_traitement > 0 ? ` · ${summary.dossiers_en_traitement} en traitement` : ""}
-            </p>
-          )}
+      {/* Cartes : dossiers à traiter et alertes par niveau de risque (vues de pilotage) */}
+      {!estAgent && (
+        <div className="grid gap-2 sm:grid-cols-4">
+          <div className="rounded-xl border border-line border-l-4 border-l-brand-blue bg-white p-3.5 shadow-sm">
+            <p className="text-xs text-slate-500">Dossiers à traiter</p>
+            <p className="text-2xl font-semibold tabular-nums text-brand-blue">{summary ? summary.dossiers_a_traiter : "—"}</p>
+            {summary && (
+              <p className="text-xs text-slate-500">
+                {summary.a_traiter} alerte{summary.a_traiter > 1 ? "s" : ""}
+                {summary.dossiers_en_traitement > 0 ? ` · ${summary.dossiers_en_traitement} en traitement` : ""}
+              </p>
+            )}
+          </div>
+          {cards.map((c) => {
+            const bord =
+              c.niveau === "eleve"
+                ? "border-l-red-500"
+                : c.niveau === "moyen"
+                  ? "border-l-amber-500"
+                  : "border-l-emerald-500";
+
+            return (
+              <button
+                key={c.niveau}
+                type="button"
+                onClick={() => toggleNiveau(c.niveau)}
+                aria-pressed={filters.niveau === c.niveau}
+                className={`rounded-xl border border-line border-l-4 bg-white p-3.5 text-left shadow-sm transition hover:-translate-y-0.5 hover:shadow-md ${bord} ${
+                  filters.niveau === c.niveau ? "ring-2 ring-brand-azure/50" : ""
+                }`}
+              >
+                <p className="text-xs text-slate-500">Alertes · risque {NIVEAU_LABELS[c.niveau].toLowerCase()}</p>
+                <p className="flex items-center gap-2 text-2xl font-semibold tabular-nums text-brand-blue">
+                  {c.value ?? "—"}
+                  <NiveauBadge niveau={c.niveau} />
+                </p>
+              </button>
+            );
+          })}
         </div>
-        {cards.map((c) => (
-          <button
-            key={c.niveau}
-            type="button"
-            onClick={() => toggleNiveau(c.niveau)}
-            aria-pressed={filters.niveau === c.niveau}
-            className={`rounded-xl bg-white p-3 text-left border border-line transition hover:border-brand-blue/40 ${
-              filters.niveau === c.niveau ? "ring-2 ring-brand-blue" : ""
-            }`}
-          >
-            <p className="text-xs text-slate-500">Alertes · risque {NIVEAU_LABELS[c.niveau].toLowerCase()}</p>
-            <p className="flex items-center gap-2 text-2xl font-semibold text-brand-blue">
-              {c.value ?? "—"}
-              <NiveauBadge niveau={c.niveau} />
-            </p>
-          </button>
-        ))}
-      </div>
+      )}
 
       <section className="mt-4 rounded-xl bg-white p-4 border border-line sm:p-5">
         {/* Filtres : panneau repliable, déplié automatiquement quand un filtre est actif */}
@@ -504,7 +594,7 @@ export default function DefaillancesPage() {
             type="button"
             onClick={() => setFiltresOuverts((o) => !o)}
             aria-expanded={filtresOuverts}
-            className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-xs font-semibold uppercase tracking-wide text-slate-600 transition hover:border-brand-blue/40 hover:text-brand-blue"
+            className="inline-flex items-center gap-1.5 rounded-lg border border-line bg-white px-2.5 py-1.5 text-[11px] font-semibold uppercase tracking-wider text-slate-600 shadow-sm transition hover:border-brand-azure/40 hover:text-brand-azure"
           >
             <IconSliders className="h-3.5 w-3.5" />
             Filtres
@@ -522,7 +612,7 @@ export default function DefaillancesPage() {
               type="button"
               onClick={resetFilters}
               title="Réinitialiser les filtres"
-              className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-2 py-1 text-xs text-slate-600 transition hover:border-brand-blue/40 hover:text-brand-blue"
+              className="inline-flex items-center gap-1.5 rounded-lg border border-line bg-white px-2 py-1 text-xs text-slate-600 shadow-sm transition hover:border-brand-azure/40 hover:text-brand-azure"
             >
               <IconRefresh className="h-3.5 w-3.5" /> Réinitialiser
             </button>
@@ -596,25 +686,27 @@ export default function DefaillancesPage() {
             </select>
           </label>
 
-          <label className="block">
-            <span className={filterLabel}>Statut</span>
-            <select
-              aria-label="Statut"
-              className={`${filterInput} w-full`}
-              value={filters.statut}
-              onChange={(e) => changeFilter("statut", e.target.value as Filters["statut"])}
-            >
-              <option value="">Tous les statuts</option>
-              {/* Les dossiers clôturés (toutes anomalies traitées/régularisées) sont dans Archives */}
-              {(Object.keys(STATUT_LABELS) as StatutAlerte[])
-                .filter((s) => s === "a_traiter" || s === "en_traitement")
-                .map((s) => (
-                  <option key={s} value={s}>
-                    {STATUT_LABELS[s]}
-                  </option>
-                ))}
-            </select>
-          </label>
+          {!estAgent && (
+            <label className="block">
+              <span className={filterLabel}>Statut</span>
+              <select
+                aria-label="Statut"
+                className={`${filterInput} w-full`}
+                value={filters.statut}
+                onChange={(e) => changeFilter("statut", e.target.value as Filters["statut"])}
+              >
+                <option value="">Tous les statuts</option>
+                {/* Les dossiers clôturés (toutes anomalies traitées/régularisées) sont dans Archives */}
+                {(Object.keys(STATUT_LABELS) as StatutAlerte[])
+                  .filter((s) => s === "a_traiter" || s === "en_traitement")
+                  .map((s) => (
+                    <option key={s} value={s}>
+                      {STATUT_LABELS[s]}
+                    </option>
+                  ))}
+              </select>
+            </label>
+          )}
 
           {/* Exercices réellement présents, le plus récent en tête */}
           <label className="block">
@@ -679,21 +771,21 @@ export default function DefaillancesPage() {
         <div className="overflow-x-auto">
           <table className="w-full min-w-[760px] text-left text-sm">
             <thead>
-              <tr className="bg-slate-50 text-xs font-semibold text-slate-600">
+              <tr className="bg-slate-50 text-[11px] font-semibold uppercase tracking-wider text-slate-500">
                 <th className="px-2 py-2">Contribuable</th>
                 <th className="px-2 py-2">Anomalie</th>
                 <th className="px-2 py-2">
-                  <button type="button" onClick={() => toggleSort("type_impot")} className="hover:text-brand-blue">
+                  <button type="button" onClick={() => toggleSort("type_impot")} className="hover:text-brand-azure">
                     Impôt{sortMark("type_impot")}
                   </button>
                 </th>
                 <th className="px-2 py-2">
-                  <button type="button" onClick={() => toggleSort("annee_fiscale")} className="hover:text-brand-blue">
+                  <button type="button" onClick={() => toggleSort("annee_fiscale")} className="hover:text-brand-azure">
                     Exercice / période{sortMark("annee_fiscale")}
                   </button>
                 </th>
                 <th className="px-2 py-2">
-                  <button type="button" onClick={() => toggleSort("niveau")} className="hover:text-brand-blue">
+                  <button type="button" onClick={() => toggleSort("niveau")} className="hover:text-brand-azure">
                     Risque{sortMark("niveau")}
                   </button>
                 </th>
@@ -703,7 +795,7 @@ export default function DefaillancesPage() {
                     type="button"
                     onClick={() => toggleSort("cree_le")}
                     title="Date de la plus ancienne anomalie du dossier"
-                    className="hover:text-brand-blue"
+                    className="hover:text-brand-azure"
                   >
                     Âge{sortMark("cree_le")}
                   </button>
@@ -803,7 +895,7 @@ export default function DefaillancesPage() {
                           {canManage && (
                             <button
                               type="button"
-                              className="text-xs font-medium text-brand-blue underline disabled:opacity-50"
+                              className="text-xs font-medium text-brand-azure hover:text-brand-blue hover:underline disabled:opacity-50"
                               disabled={priseId === g.representant_id}
                               onClick={() => setAReprendre(g)}
                             >
@@ -812,20 +904,32 @@ export default function DefaillancesPage() {
                           )}
                         </div>
                       ) : (
-                        <button
-                          type="button"
-                          className={primaryButtonClass + " px-2.5 py-1 text-xs"}
-                          disabled={priseId === g.representant_id}
-                          onClick={() => void traiter(g)}
-                        >
-                          {priseId === g.representant_id
-                            ? "..."
-                            : g.statut === "en_traitement"
-                              ? "Continuer"
-                              : g.statut === "a_traiter"
-                                ? "Traiter"
-                                : "Voir le dossier"}
-                        </button>
+                        <div className="flex flex-col items-end gap-0.5">
+                          <button
+                            type="button"
+                            className={primaryButtonClass + " px-2.5 py-1 text-xs"}
+                            disabled={priseId === g.representant_id}
+                            onClick={() => void traiter(g)}
+                          >
+                            {priseId === g.representant_id
+                              ? "..."
+                              : g.statut === "en_traitement"
+                                ? "Continuer"
+                                : g.statut === "a_traiter"
+                                  ? "Traiter"
+                                  : "Voir le dossier"}
+                          </button>
+                          {g.statut === "a_traiter" && canManage && (
+                            <button
+                              type="button"
+                              className="text-xs font-medium text-brand-azure underline underline-offset-2 hover:text-brand-blue disabled:opacity-50"
+                              disabled={priseId === g.representant_id}
+                              onClick={() => openAssigner(g)}
+                            >
+                              Assigner
+                            </button>
+                          )}
+                        </div>
                       )}
                     </td>
                   </tr>
@@ -834,9 +938,11 @@ export default function DefaillancesPage() {
               {data && data.data.length === 0 && (
                 <tr>
                   <td colSpan={9} className="px-2 py-8 text-center text-slate-500">
-                    {canManage
-                      ? "Aucune alerte. Importez des déclarations puis lancez l'analyse."
-                      : "Aucune anomalie pour votre centre."}
+                    {estAgent
+                      ? "Aucun dossier ne vous est assigné. Votre chef de centre peut vous en confier un."
+                      : canManage
+                        ? "Aucune alerte. Importez des déclarations puis lancez l'analyse."
+                        : "Aucune anomalie pour votre centre."}
                   </td>
                 </tr>
               )}
@@ -953,7 +1059,7 @@ export default function DefaillancesPage() {
               limite servent à détecter les anomalies. Impôts : TVA, IR, IS, IRSA. Une déclaration déjà présente est mise à jour.
               Pour charger aussi les assujettissements et l'état des contribuables, utilisez l'import depuis la base source.
             </p>
-            <button type="button" onClick={downloadTemplate} className="text-sm font-medium text-brand-blue underline">
+            <button type="button" onClick={downloadTemplate} className="text-sm font-medium text-brand-azure underline hover:text-brand-blue">
               Télécharger un modèle CSV
             </button>
 
@@ -988,6 +1094,134 @@ export default function DefaillancesPage() {
               </button>
               <button type="submit" className={primaryButtonClass} disabled={importing || !file}>
                 {importing ? "Import en cours..." : "Importer"}
+              </button>
+            </FormActions>
+          </form>
+        </Modal>
+      )}
+
+      {/* Affectation d'un dossier à un agent */}
+      {aAssigner && (
+        <Modal title="Assigner le dossier" onClose={() => setAAssigner(null)}>
+          <form onSubmit={handleAssigner} className="space-y-4">
+            {/* Rappel du dossier concerné */}
+            <div className="rounded-xl border border-line border-l-4 border-l-brand-blue bg-slate-50 p-3.5">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-semibold text-slate-900">{aAssigner.contribuable.nom}</p>
+                  <p className="text-xs text-slate-500">
+                    NIF {aAssigner.contribuable.nif}
+                    {aAssigner.contribuable.centre ? ` · ${aAssigner.contribuable.centre}` : ""}
+                  </p>
+                </div>
+                <NiveauBadge niveau={aAssigner.niveau} />
+              </div>
+              <div className="mt-2 flex flex-wrap gap-1">
+                {aAssigner.alertes.map((a) => (
+                  <RegleBadge key={a.id} regle={a.regle} court />
+                ))}
+              </div>
+              <p className="mt-1.5 text-xs text-slate-600">
+                {aAssigner.nb_alertes} anomalie{aAssigner.nb_alertes > 1 ? "s" : ""} · {aAssigner.types_impot.join(" / ")} ·
+                exercice{aAssigner.annees.length > 1 ? "s" : ""} {aAssigner.annees.join(", ")}
+              </p>
+            </div>
+
+            <p className="text-sm text-slate-600">
+              Le dossier passera « En traitement » au nom de l'agent choisi. Il apparaîtra alors dans sa liste de travail.
+            </p>
+
+            <ErrorBox message={assignErreur} />
+
+            {agents === null ? (
+              <p className="text-sm text-slate-500">Chargement des agents...</p>
+            ) : agents.length === 0 ? (
+              <p className="rounded-lg bg-slate-50 p-3 text-sm text-slate-500">
+                Aucun agent dans le centre de ce dossier.
+              </p>
+            ) : (
+              <div>
+                <div className="mb-1 flex items-center justify-between gap-2">
+                  <span className="text-sm font-medium text-slate-700">Agent</span>
+                  <span className="text-xs text-slate-500">Agents du même centre que le dossier</span>                </div>
+
+                {agents.length > 1 && (
+                  <div className="relative mb-2">
+                    <IconSearch className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                    <input
+                      value={agentQuery}
+                      onChange={(e) => setAgentQuery(e.target.value)}
+                      placeholder="Rechercher un agent..."
+                      aria-label="Rechercher un agent"
+                      className={`${inputClass} pl-8`}
+                    />
+                  </div>
+                )}
+
+                <div
+                  role="radiogroup"
+                  aria-label="Agent à qui assigner le dossier"
+                  className="max-h-64 space-y-1.5 overflow-y-auto pr-1"
+                >
+                  {agentsFiltres.map((a) => {
+                    const selectionne = String(a.id) === agentId;
+
+                    return (
+                      <label
+                        key={a.id}
+                        className={`flex cursor-pointer items-center gap-3 rounded-xl border px-3 py-2.5 transition ${
+                          selectionne
+                            ? "border-brand-azure bg-brand-azure-soft ring-1 ring-brand-azure/40"
+                            : "border-line bg-white hover:border-brand-azure/40 hover:bg-slate-50"
+                        }`}
+                      >
+                        <input
+                          type="radio"
+                          name="agent"
+                          value={a.id}
+                          checked={selectionne}
+                          onChange={() => setAgentId(String(a.id))}
+                          className="sr-only"
+                        />
+                        <span
+                          className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-xs font-semibold ${
+                            selectionne ? "bg-gradient-to-br from-brand-blue to-brand-blue-light text-white shadow-sm" : "bg-slate-100 text-slate-600"
+                          }`}
+                          aria-hidden="true"
+                        >
+                          {initialesAgent(a.nom)}
+                        </span>
+                        <span className="min-w-0 flex-1">
+                          <span className="block truncate text-sm font-medium text-slate-900">{a.nom}</span>
+                          <span className="block truncate text-xs text-slate-500">{a.fonction ?? "Agent"}</span>
+                        </span>
+                        <span
+                          className={`h-4 w-4 shrink-0 rounded-full border ${
+                            selectionne ? "border-brand-azure bg-brand-azure" : "border-slate-300"
+                          }`}
+                          aria-hidden="true"
+                        />
+                      </label>
+                    );
+                  })}
+
+                  {agentsFiltres.length === 0 && (
+                    <p className="px-1 py-2 text-sm text-slate-500">Aucun agent ne correspond à la recherche.</p>
+                  )}
+                </div>
+              </div>
+            )}
+
+            <FormActions>
+              <button type="button" className={secondaryButtonClass} onClick={() => setAAssigner(null)}>
+                Annuler
+              </button>
+              <button
+                type="submit"
+                className={primaryButtonClass}
+                disabled={assigning || !agentId || agents === null || agents.length === 0}
+              >
+                {assigning ? "Assignation..." : agentChoisi ? `Assigner à ${agentChoisi.nom}` : "Assigner"}
               </button>
             </FormActions>
           </form>

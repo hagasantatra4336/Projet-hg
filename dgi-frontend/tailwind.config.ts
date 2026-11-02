@@ -6,37 +6,43 @@ export default {
   theme: {
     extend: {
       colors: {
-        // Couleurs d'origine (inchangées)
-        "brand-green": "#7AA95C",
-        "brand-white": "#F8F8F8",
-        "brand-blue": "#212E53",
-        // Nuances tirées des logos DGI et MEF
-        "brand-blue-dark": "#161F3A",
-        "brand-blue-light": "#2E3F72",
-        "brand-teal": "#90C0C0",
+        // Bleu institutionnel : structure, titres et actions principales
+        "brand-blue": "#1E3A8A",
+        "brand-white": "#F8FAFC",
+        "brand-blue-dark": "#172554",
+        "brand-blue-light": "#1D4ED8",
+        // Azur : liens, anneaux de focus, états sélectionnés
+        "brand-azure": "#2563EB",
+        "brand-azure-soft": "#EFF4FF",
+        // Accents
+        "brand-teal": "#2B7A86",
         "brand-gold": "#C4952B",
+        "brand-gold-dark": "#8A6414",
+        "brand-gold-soft": "#FBF3E1",
+        "brand-green": "#4F8437",
+        "brand-green-soft": "#EEF6E7",
         // Surfaces
-        canvas: "#EDEFF3",
-        line: "#D9DEE7",
-        leaf: { 50: "#EEF5E9", 100: "#DDEBD2" },
+        canvas: "#F4F6FB",
+        line: "#E2E7F1",
+        leaf: { 50: "#EFF6E9", 100: "#DFEED2" },
       },
       fontFamily: {
         sans: ['"Libre Franklin"', "ui-sans-serif", "system-ui", "-apple-system", '"Segoe UI"', "Roboto", "Arial", "sans-serif"],
       },
-      // Rayons hiérarchisés : champs/boutons 4px, panneaux 6px, fenêtres 8px
+      // Rayons hiérarchisés : puces 6px, champs/boutons 8px, panneaux 12px, fenêtres 16px
       borderRadius: {
-        md: "3px",
-        lg: "4px",
-        xl: "6px",
-        "2xl": "8px",
+        md: "6px",
+        lg: "8px",
+        xl: "12px",
+        "2xl": "16px",
       },
       // Les panneaux se détachent par leur bordure ; l'ombre est réservée à ce qui flotte
       boxShadow: {
-        sm: "0 1px 0 rgb(22 31 58 / 0.04)",
-        DEFAULT: "0 1px 0 rgb(22 31 58 / 0.04)",
-        md: "0 2px 6px -2px rgb(22 31 58 / 0.18)",
-        lg: "0 14px 34px -14px rgb(22 31 58 / 0.4)",
-        xl: "0 18px 44px -16px rgb(22 31 58 / 0.45)",
+        sm: "0 1px 2px 0 rgb(15 23 42 / 0.05)",
+        DEFAULT: "0 1px 2px 0 rgb(15 23 42 / 0.05), 0 1px 3px 0 rgb(15 23 42 / 0.06)",
+        md: "0 4px 12px -4px rgb(15 23 42 / 0.12), 0 2px 4px -2px rgb(15 23 42 / 0.06)",
+        lg: "0 12px 30px -12px rgb(15 23 42 / 0.22), 0 4px 10px -4px rgb(15 23 42 / 0.08)",
+        xl: "0 24px 60px -20px rgb(15 23 42 / 0.35), 0 8px 20px -8px rgb(15 23 42 / 0.12)",
       },
     },
   },

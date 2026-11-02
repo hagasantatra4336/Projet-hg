@@ -125,7 +125,7 @@ export default function ConditionsEditor({
   const peutAjouter = total < options.max_conditions;
 
   return (
-    <div className={`space-y-3 rounded-xl border border-slate-300 p-3 ${profondeur > 1 ? "bg-slate-50" : ""}`}>
+    <div className={`space-y-3 rounded-xl border p-3.5 ${profondeur > 1 ? "border-brand-azure/25 bg-brand-azure-soft/40" : "border-line bg-slate-50/40"}`}>
       <div className="flex flex-wrap items-center gap-2 text-sm text-slate-700">
         <span>{profondeur > 1 ? "Groupe :" : "La règle se déclenche si"}</span>
         <select className={`${inputClass} w-auto`} value={groupe.operateur} onChange={(e) => onChange({ ...groupe, operateur: e.target.value as "et" | "ou" })} aria-label="Opérateur">
@@ -144,14 +144,14 @@ export default function ConditionsEditor({
       )}
 
       <div className="flex flex-wrap gap-4 text-sm">
-        <button type="button" disabled={!peutAjouter} className="font-medium text-brand-blue underline disabled:opacity-40" onClick={() => onChange({ ...groupe, conditions: [...groupe.conditions, nouvelleCondition(options.indicateurs)] })}>
+        <button type="button" disabled={!peutAjouter} className="font-medium text-brand-azure underline-offset-4 hover:underline disabled:opacity-40" onClick={() => onChange({ ...groupe, conditions: [...groupe.conditions, nouvelleCondition(options.indicateurs)] })}>
           Ajouter une condition
         </button>
         {profondeur < options.max_profondeur && (
           <button
             type="button"
             disabled={!peutAjouter}
-            className="font-medium text-brand-blue underline disabled:opacity-40"
+            className="font-medium text-brand-azure underline-offset-4 hover:underline disabled:opacity-40"
             onClick={() => onChange({ ...groupe, conditions: [...groupe.conditions, { operateur: groupe.operateur === "et" ? "ou" : "et", conditions: [nouvelleCondition(options.indicateurs)] }] })}
           >
             Ajouter un groupe

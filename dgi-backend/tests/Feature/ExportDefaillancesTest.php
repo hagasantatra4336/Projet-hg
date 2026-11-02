@@ -97,16 +97,23 @@ class ExportDefaillancesTest extends TestCase
         $this->assertNotNull($premiere->created_at);
     }
 
-    public function test_l_export_est_limite_au_centre_de_l_agent(): void
+    public function test_l_export_d_un_agent_ne_contient_que_ses_dossiers(): void
     {
-        $this->utilisateur(Role::Agent, $this->centre, 'agent@export.test');
-        $this->alerte('1111111111', 'Société export', $this->centre->id, ['annee_fiscale' => 2024]);
+        $agent = $this->utilisateur(Role::Agent, $this->centre, 'agent@export.test');
+        $this->alerte('1111111111', 'Société export', $this->centre->id, [
+            'annee_fiscale' => 2024,
+            'pris_par' => $agent->id,
+            'pris_le' => now(),
+        ]);
         $this->alerte('2222222222', 'Société voisine', $this->autreCentre->id, ['annee_fiscale' => 2024]);
+        // Dossier libre du même centre : l'agent ne l'a pas pris, il n'est pas dans son export.
+        $this->alerte('3333333333', 'Société libre', $this->centre->id, ['annee_fiscale' => 2024]);
 
         $contenu = $this->get('/api/defaillances/export')->streamedContent();
 
         $this->assertStringContainsString('Société export', $contenu);
         $this->assertStringNotContainsString('Société voisine', $contenu);
+        $this->assertStringNotContainsString('Société libre', $contenu);
     }
 
     public function test_le_filtre_d_anciennete_ne_garde_que_les_dossiers_recents(): void

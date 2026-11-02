@@ -61,6 +61,7 @@ const nombre = (v: number | null | undefined) => (v === null || v === undefined 
 const ACTIONS_DOSSIER: Record<string, string> = {
   prise: "Dossier pris",
   reprise: "Dossier repris",
+  affectation: "Dossier assigné",
   liberation: "Dossier libéré",
   cloture: "Dossier clôturé",
   reouverture: "Dossier rouvert",
@@ -78,11 +79,11 @@ function TableauSource({ titre, lignes, parMois }: { titre: string; lignes: Lign
       <h4 className="mb-1 text-xs font-semibold text-slate-600">{titre}</h4>
       <div className="overflow-x-auto rounded-lg border border-line">
         <table className="w-full min-w-[520px] text-xs">
-          <thead className="bg-slate-50 text-left text-slate-500">
+          <thead className="border-b border-line bg-slate-50 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500">
             <tr>
-              <th className="whitespace-nowrap px-3 py-2 font-medium">Période</th>
+              <th className="whitespace-nowrap px-3 py-2">Période</th>
               {colonnes.map((c) => (
-                <th key={c} className="px-3 py-2 text-right font-medium">
+                <th key={c} className="px-3 py-2 text-right">
                   {LIBELLES[c] ?? c}
                 </th>
               ))}
@@ -182,6 +183,9 @@ export default function DossierTraitementPage() {
   const navigate = useNavigate();
   const { user } = useAuth();
   const canManage = user?.role === "superadmin" || user?.role === "central" || user?.role === "admin";
+  // Un agent revient à sa liste de dossiers assignés ; les autres rôles à la page Anomalies.
+  const retour = user?.role === "agent" ? "/traitements" : "/defaillances";
+  const retourLabel = user?.role === "agent" ? "← Retour à mes dossiers" : "← Retour aux alertes";
 
   const [dossier, setDossier] = useState<DossierAlerte | null>(null);
   const [fiche, setFiche] = useState<ContribuableFiche | null>(null);
@@ -251,13 +255,13 @@ export default function DossierTraitementPage() {
   const marquerTraite = () =>
     action(async () => {
       await api.patch(`/defaillances/${id}`, { groupe: true, statut: "traitee", commentaire });
-      navigate("/defaillances");
+      navigate(retour);
     });
 
   const liberer = () =>
     action(async () => {
       await api.post(`/defaillances/${id}/liberer`, { groupe: true });
-      navigate("/defaillances");
+      navigate(retour);
     });
 
   const rouvrir = () =>
@@ -277,8 +281,8 @@ export default function DossierTraitementPage() {
   if (!dossier) {
     return (
       <div className="space-y-4">
-        <Link to="/defaillances" className="text-sm font-medium text-brand-blue underline">
-          ← Retour aux alertes
+        <Link to={retour} className="inline-flex w-fit items-center gap-1 text-sm font-medium text-brand-azure underline-offset-4 hover:underline">
+          {retourLabel}
         </Link>
         <ErrorBox message={error} />
         {!error && <p className="text-sm text-slate-500">Chargement du dossier...</p>}
@@ -293,14 +297,15 @@ export default function DossierTraitementPage() {
 
   return (
     <div className="space-y-5">
-      <Link to="/defaillances" className="text-sm font-medium text-brand-blue underline">
-        ← Retour aux alertes
+      <Link to={retour} className="inline-flex w-fit items-center gap-1 rounded-md text-sm font-medium text-brand-azure underline-offset-4 hover:underline">
+        {retourLabel}
       </Link>
 
       {/* En-tête */}
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h1 className="text-xl font-semibold text-brand-blue">{groupe.contribuable.nom}</h1>
+          <span className="mb-1 block h-1.5 w-8 rounded-full bg-brand-gold" />
+          <h1 className="text-xl font-semibold tracking-tight text-brand-blue">{groupe.contribuable.nom}</h1>
           <p className="mt-0.5 flex flex-wrap items-center gap-2 text-sm text-slate-500">
             <span>
               NIF {groupe.contribuable.nif} · {groupe.contribuable.centre ?? "Aucun centre"}
@@ -320,20 +325,23 @@ export default function DossierTraitementPage() {
         <section className="rounded-xl border border-line bg-white p-4">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div className="min-w-0">
-              <h2 className="text-sm font-semibold text-brand-blue">Coordonnées du contribuable</h2>
+              <h2 className="flex items-center gap-2 text-sm font-semibold text-brand-blue">
+                <span className="h-3.5 w-1 rounded-full bg-brand-gold" />
+                Coordonnées du contribuable
+              </h2>
               <p className="mt-0.5 text-sm text-slate-700">
                 {fiche.contribuable.activite || "Activité non renseignée"} · {fiche.contribuable.adresse || "Adresse non renseignée"}
               </p>
               <p className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm">
                 {fiche.contribuable.telephone ? (
-                  <a href={`tel:${fiche.contribuable.telephone.replace(/\s/g, "")}`} className="font-medium text-brand-blue underline">
+                  <a href={`tel:${fiche.contribuable.telephone.replace(/\s/g, "")}`} className="font-medium text-brand-azure underline-offset-4 hover:underline">
                     {fiche.contribuable.telephone}
                   </a>
                 ) : (
                   <span className="text-slate-400">Téléphone non renseigné</span>
                 )}
                 {fiche.contribuable.email ? (
-                  <a href={`mailto:${fiche.contribuable.email}`} className="font-medium text-brand-blue underline">
+                  <a href={`mailto:${fiche.contribuable.email}`} className="font-medium text-brand-azure underline-offset-4 hover:underline">
                     {fiche.contribuable.email}
                   </a>
                 ) : (
@@ -365,7 +373,10 @@ export default function DossierTraitementPage() {
 
       {/* Les anomalies du dossier */}
       <section className="rounded-xl border border-line bg-white p-5">
-        <h2 className="text-sm font-semibold text-brand-blue">Anomalies du dossier ({groupe.nb_alertes})</h2>
+        <h2 className="flex items-center gap-2 text-sm font-semibold text-brand-blue">
+          <span className="h-3.5 w-1 rounded-full bg-brand-gold" />
+          Anomalies du dossier ({groupe.nb_alertes})
+        </h2>
         <p className="text-xs text-slate-500">
           Toutes les anomalies constatées pour ce contribuable. Les commentaires et le statut s'appliquent à l'ensemble du dossier.
         </p>
@@ -427,7 +438,10 @@ export default function DossierTraitementPage() {
       {/* Données du dossier */}
       <section className="space-y-4 rounded-xl border border-line bg-white p-5">
         <div>
-          <h2 className="text-sm font-semibold text-brand-blue">Données du dossier</h2>
+          <h2 className="flex items-center gap-2 text-sm font-semibold text-brand-blue">
+            <span className="h-3.5 w-1 rounded-full bg-brand-gold" />
+            Données du dossier
+          </h2>
           <p className="text-xs text-slate-500">Valeurs lues dans les déclarations, le recoupement et la douane, sur les exercices des anomalies et les deux précédents.</p>
         </div>
         {aDesDonnees ? (
@@ -443,7 +457,10 @@ export default function DossierTraitementPage() {
       {fiche && (
         <section className="space-y-4 rounded-xl border border-line bg-white p-5">
           <div>
-            <h2 className="text-sm font-semibold text-brand-blue">Historique des déclarations</h2>
+            <h2 className="flex items-center gap-2 text-sm font-semibold text-brand-blue">
+              <span className="h-3.5 w-1 rounded-full bg-brand-gold" />
+              Historique des déclarations
+            </h2>
             <p className="text-xs text-slate-500">
               ✔ déclaré (survolez pour le CA et les dates) · ▼ baisse du CA · ✘ non déposé, date limite dépassée · … pas encore dû · · aucune obligation
             </p>
@@ -486,8 +503,11 @@ export default function DossierTraitementPage() {
 
       {/* Journal des actions */}
       <section className="rounded-xl border border-line bg-white p-5">
-        <h2 className="text-sm font-semibold text-brand-blue">Journal du dossier</h2>
-        <p className="text-xs text-slate-500">Prise, reprise, libération, clôture et réouverture, avec leur auteur et leur date.</p>
+        <h2 className="flex items-center gap-2 text-sm font-semibold text-brand-blue">
+          <span className="h-3.5 w-1 rounded-full bg-brand-gold" />
+          Journal du dossier
+        </h2>
+        <p className="text-xs text-slate-500">Prise, reprise, affectation, libération, clôture et réouverture, avec leur auteur et leur date.</p>
         {dossier.historique.length === 0 ? (
           <p className="mt-3 rounded-lg bg-slate-50 p-3 text-sm text-slate-500">Aucune action enregistrée pour ce dossier.</p>
         ) : (
@@ -495,7 +515,8 @@ export default function DossierTraitementPage() {
             {dossier.historique.map((h) => (
               <li key={h.id} className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 border-b border-line pb-2 text-sm last:border-0 last:pb-0">
                 <span className="text-slate-800">
-                  <strong className="font-medium">{ACTIONS_DOSSIER[h.action] ?? h.action}</strong> par {h.auteur}
+                  <strong className="font-medium">{ACTIONS_DOSSIER[h.action] ?? h.action}</strong>
+                  {h.action === "affectation" && h.detail ? ` à ${h.detail}` : ""} par {h.auteur}
                 </span>
                 <span className="text-xs text-slate-500">{h.le ? formatDateHeure(h.le) : ""}</span>
               </li>
@@ -506,7 +527,10 @@ export default function DossierTraitementPage() {
 
       {/* Traitement */}
       <section className="rounded-xl border border-line bg-white p-5">
-        <h2 className="text-sm font-semibold text-brand-blue">Traitement</h2>
+        <h2 className="flex items-center gap-2 text-sm font-semibold text-brand-blue">
+          <span className="h-3.5 w-1 rounded-full bg-brand-gold" />
+          Traitement
+        </h2>
         <p className="mt-1 text-xs text-slate-500">
           Le commentaire s'applique à toutes les anomalies de ce dossier et reste visible dans son historique.
         </p>

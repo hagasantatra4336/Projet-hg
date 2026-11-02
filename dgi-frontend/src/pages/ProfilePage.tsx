@@ -86,8 +86,11 @@ function Section({ title, hint, children }: { title: string; hint?: string; chil
   return (
     <section className="rounded-xl border border-line bg-white p-6">
       <div className="mb-4 border-b border-line pb-3">
-        <h2 className="font-semibold text-brand-blue">{title}</h2>
-        {hint && <p className="mt-0.5 text-xs text-slate-500">{hint}</p>}
+        <h2 className="flex items-center gap-2 font-semibold text-brand-blue">
+          <span className="h-4 w-1 rounded-full bg-brand-gold" />
+          {title}
+        </h2>
+        {hint && <p className="mt-1 pl-3 text-xs text-slate-500">{hint}</p>}
       </div>
       {children}
     </section>
@@ -223,17 +226,16 @@ export default function ProfilePage() {
   return (
     <div className="mx-auto w-full max-w-5xl">
       {/* Titre aligné à gauche, sur toute la largeur */}
-      <div className="mb-6 border-b border-line pb-4">
+      <div className="mb-4 border-b border-line pb-4">
+        <span className="mb-2 block h-1.5 w-8 rounded-full bg-brand-gold" />
         <h1 className="text-2xl font-semibold tracking-tight text-brand-blue">Mon profil</h1>
+        <p className="mt-1 text-sm text-slate-500">Vos informations, vos identifiants et votre mot de passe.</p>
       </div>
 
       <ErrorBox message={error} />
 
       {updated && (
-        <div
-          role="status"
-          className="mb-6 rounded-lg border border-brand-blue/30 bg-brand-blue/5 px-4 py-3 text-sm font-medium text-brand-blue"
-        >
+        <div className="mb-6 rounded-lg border border-brand-green/25 bg-brand-green-soft px-4 py-3 text-sm font-medium text-brand-green" role="status">
           Vos modifications ont été appliquées.
         </div>
       )}
@@ -242,23 +244,23 @@ export default function ProfilePage() {
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,19rem)_minmax(0,1fr)] lg:items-start">
         <aside className="space-y-6">
           <div className="overflow-hidden rounded-xl border border-line bg-white">
-            <div className="flex h-14 flex-col justify-end bg-brand-blue">
+            <div className="flex h-14 flex-col justify-end bg-gradient-to-r from-brand-blue to-brand-blue-dark">
               <div className="h-1 bg-brand-gold" />
             </div>
             <div className="px-6 pb-6">
-              <div className="relative z-10 -mt-8 flex h-16 w-16 items-center justify-center rounded-full bg-brand-blue text-xl font-semibold text-white ring-4 ring-white">
+              <div className="relative z-10 -mt-8 flex h-16 w-16 items-center justify-center rounded-full bg-gradient-to-br from-brand-azure to-brand-blue text-xl font-semibold text-white shadow-md ring-4 ring-white">
                 {initials(user.nom)}
               </div>
               <h2 className="mt-3 break-words text-lg font-semibold text-brand-blue">{user.nom}</h2>
               <div className="mt-3 flex flex-wrap items-center gap-2">
                 <RoleBadge role={user.role} />
                 {user.fonction && (
-                  <span className="rounded-full bg-brand-blue/10 px-2.5 py-0.5 text-xs font-semibold text-brand-blue">
+                  <span className="rounded-full bg-brand-azure-soft px-2.5 py-0.5 text-xs font-semibold text-brand-azure ring-1 ring-inset ring-brand-azure/20">
                     {user.fonction.nom}
                   </span>
                 )}
                 {user.centre && (
-                  <span className="rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-semibold text-slate-700">
+                  <span className="rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-semibold text-slate-700 ring-1 ring-inset ring-slate-200">
                     {user.centre.nom}
                   </span>
                 )}
@@ -360,7 +362,7 @@ export default function ProfilePage() {
                     setPasswords(EMPTY_PASSWORDS);
                     setMotDePasseOuvert(false);
                   }}
-                  className="text-sm font-medium text-slate-500 underline transition hover:text-brand-blue"
+                  className="text-sm font-medium text-slate-500 underline underline-offset-4 transition hover:text-brand-azure"
                 >
                   Annuler le changement de mot de passe
                 </button>

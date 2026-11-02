@@ -36,11 +36,21 @@ function pageWindow(current: number, last: number): number[] {
 
 // Mêmes contrôles compacts que la page Anomalies
 const filterInput =
-  "rounded-lg border border-slate-300 bg-white px-2 py-1.5 text-xs text-slate-900 placeholder-slate-400 " +
-  "focus:outline-none focus:border-brand-blue focus:ring-1 focus:ring-brand-blue transition " +
+  "rounded-lg border border-line bg-white px-2 py-1.5 text-xs text-slate-900 placeholder-slate-400 shadow-sm " +
+  "focus:outline-none focus:border-brand-azure focus:ring-4 focus:ring-brand-azure/10 transition " +
   "disabled:bg-slate-100 disabled:text-slate-500";
 
-const filterLabel = "mb-1 block text-xs font-medium text-slate-500";
+const filterLabel = "mb-1 block text-[11px] font-semibold uppercase tracking-wider text-slate-500";
+
+/** Agent proposé dans le filtre « Traité par » (chefs de centre, central et superadmin). */
+interface AgentOption {
+  id: number;
+  nom: string;
+  fonction: string | null;
+  centre: string | null;
+}
+
+type SortField = "traite_le" | "centre";
 
 // ---------------------------------------------------------------------
 //  Page Archives : dossiers clôturés (toutes anomalies traitées/régularisées)
@@ -49,11 +59,14 @@ const filterLabel = "mb-1 block text-xs font-medium text-slate-500";
 export default function ArchivesPage() {
   const { user } = useAuth();
   const role = user?.role ?? null;
+  const estAgent = role === "agent";
+  const canManage = role === "superadmin" || role === "central" || role === "admin";
   const canPickCentre = role === "superadmin" || role === "central";
 
   const [data, setData] = useState<Paginated<GroupeAlerte> | null>(null);
   const [summary, setSummary] = useState<DefaillanceSummary | null>(null);
   const [centres, setCentres] = useState<Centre[]>([]);
+  const [agents, setAgents] = useState<AgentOption[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string>("");
   const [reloadKey, setReloadKey] = useState<number>(0);
@@ -66,6 +79,9 @@ export default function ArchivesPage() {
   const [annee, setAnnee] = useState<string>("");
   const [impot, setImpot] = useState<string>("");
   const [centreId, setCentreId] = useState<string>("");
+  const [agentId, setAgentId] = useState<string>("");
+  const [sort, setSort] = useState<SortField>("traite_le");
+  const [dir, setDir] = useState<"asc" | "desc">("desc");
   const [page, setPage] = useState<number>(1);
 
   // Recherche avec un petit délai
@@ -86,13 +102,34 @@ export default function ArchivesPage() {
       .catch(() => undefined);
   }, [canPickCentre]);
 
-  // Exercices proposés (même périmètre que les listes)
+  // Agents pour le filtre « Traité par » (chefs de centre, central et superadmin)
+  useEffect(() => {
+    if (!canManage) return;
+    let cancelled = false;
+
+    api
+      .get<AgentOption[]>("/defaillances/agents", { params: { centre_id: centreId || undefined } })
+      .then((res) => {
+        if (!cancelled) setAgents(res.data);
+      })
+      .catch(() => {
+        if (!cancelled) setAgents([]);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [canManage, centreId]);
+
+  // Exercices proposés (calculés sur les archives, donc sur les dossiers clôturés)
   useEffect(() => {
     api
-      .get<DefaillanceSummary>("/defaillances/summary")
+      .get<DefaillanceSummary>("/defaillances/summary", {
+        params: { archive: 1, centre_id: centreId || undefined },
+      })
       .then((res) => setSummary(res.data))
       .catch(() => undefined);
-  }, [reloadKey]);
+  }, [reloadKey, centreId]);
 
   // Liste des dossiers clôturés
   useEffect(() => {
@@ -110,8 +147,9 @@ export default function ArchivesPage() {
           annee_fiscale: annee || undefined,
           type_impot: impot || undefined,
           centre_id: centreId || undefined,
-          sort: "traite_le",
-          dir: "desc",
+          agent_id: agentId || undefined,
+          sort,
+          dir,
         },
       })
       .then((res) => {
@@ -129,7 +167,22 @@ export default function ArchivesPage() {
     return () => {
       cancelled = true;
     };
-  }, [page, search, annee, impot, centreId, reloadKey]);
+  }, [page, search, annee, impot, centreId, agentId, sort, dir, reloadKey]);
+
+  function toggleSort(field: SortField) {
+    if (sort === field) {
+      setDir((d) => (d === "asc" ? "desc" : "asc"));
+    } else {
+      setSort(field);
+      setDir(field === "traite_le" ? "desc" : "asc");
+    }
+    setPage(1);
+  }
+
+  function sortMark(field: SortField): string {
+    if (sort !== field) return "";
+    return dir === "asc" ? " ▲" : " ▼";
+  }
 
   // Rafraîchissement silencieux périodique
   useEffect(() => {
@@ -218,6 +271,7 @@ export default function ArchivesPage() {
                 value={centreId}
                 onChange={(v) => {
                   setCentreId(v);
+                  setAgentId(""); // les agents proposés suivent le centre choisi
                   setPage(1);
                 }}
                 className={`${filterInput} w-full`}
@@ -227,22 +281,58 @@ export default function ArchivesPage() {
               />
             </label>
           )}
+
+          {canManage && (
+            <label className="block">
+              <span className={filterLabel}>Traité par</span>
+              <select
+                aria-label="Traité par"
+                title="Dossiers dont au moins une anomalie a été traitée par cet agent"
+                className={`${filterInput} w-full`}
+                value={agentId}
+                onChange={(e) => {
+                  setAgentId(e.target.value);
+                  setPage(1);
+                }}
+              >
+                <option value="">Tous les agents</option>
+                {agents.map((a) => (
+                  <option key={a.id} value={String(a.id)}>
+                    {a.nom}
+                    {a.centre ? ` — ${a.centre}` : ""}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
         </div>
 
         <ErrorBox message={error} />
 
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[860px] text-left text-sm">
+          <table className="w-full min-w-[960px] text-left text-sm">
             <thead>
-              <tr className="bg-slate-50 text-xs font-semibold text-slate-600">
+              <tr className="border-b border-line bg-slate-50 text-[11px] font-semibold uppercase tracking-wider text-slate-500">
                 <th className="px-2 py-2">Contribuable</th>
+                {canPickCentre && (
+                  <th className="px-2 py-2">
+                    <button type="button" onClick={() => toggleSort("centre")} className="hover:text-brand-azure">
+                      Centre{sortMark("centre")}
+                    </button>
+                  </th>
+                )}
                 <th className="px-2 py-2">Anomalie</th>
                 <th className="px-2 py-2">Impôt</th>
                 <th className="px-2 py-2">Exercices</th>
                 <th className="px-2 py-2">Risque</th>
                 <th className="px-2 py-2">Statut</th>
-                <th className="px-2 py-2">Clôture</th>
+                <th className="px-2 py-2">
+                  <button type="button" onClick={() => toggleSort("traite_le")} className="hover:text-brand-azure">
+                    Clôture{sortMark("traite_le")}
+                  </button>
+                </th>
                 <th className="sticky right-0 z-10 border-l border-line bg-slate-50 px-2 py-2 text-right">Dossier</th>
+
               </tr>
             </thead>
             <tbody className={loading ? "opacity-50 transition" : "transition"}>
@@ -262,8 +352,10 @@ export default function ArchivesPage() {
                         {g.contribuable.nom}
                       </button>
                       <p className="text-xs text-slate-500">{g.contribuable.nif}</p>
-                      {canPickCentre && <p className="text-xs text-slate-400">{g.contribuable.centre ?? "—"}</p>}
                     </td>
+                    {canPickCentre && (
+                      <td className="px-2 py-2.5 text-slate-700">{g.contribuable.centre ?? "—"}</td>
+                    )}
                     <td className="px-2 py-2.5">
                       <div className="flex max-w-[230px] flex-wrap gap-1">
                         {g.alertes.map((a) => (
@@ -303,10 +395,12 @@ export default function ArchivesPage() {
               })}
               {data && data.data.length === 0 && (
                 <tr>
-                  <td colSpan={8} className="px-3 py-10 text-center">
+                  <td colSpan={canPickCentre ? 9 : 8} className="px-3 py-10 text-center">
                     <p className="font-medium text-brand-blue">Aucune archive</p>
                     <p className="mt-1 text-slate-500">
-                      Les dossiers clôturés (toutes anomalies traitées ou régularisées) apparaîtront ici.
+                      {estAgent
+                        ? "Les dossiers que vous clôturez apparaîtront ici."
+                        : "Les dossiers clôturés (toutes anomalies traitées ou régularisées) apparaîtront ici."}
                     </p>
                   </td>
                 </tr>
@@ -328,7 +422,7 @@ export default function ArchivesPage() {
                 onClick={() => setPage((p) => Math.max(1, p - 1))}
                 disabled={data.current_page <= 1}
                 aria-label="Page précédente"
-                className="flex h-8 w-8 items-center justify-center rounded-full border border-line bg-white text-slate-500 transition hover:border-brand-blue hover:text-brand-blue disabled:opacity-40 disabled:hover:border-line disabled:hover:text-slate-500"
+                className="flex h-8 w-8 items-center justify-center rounded-full border border-line bg-white text-slate-500 shadow-sm transition hover:border-brand-azure hover:text-brand-azure disabled:opacity-40 disabled:hover:border-line disabled:hover:text-slate-500"
               >
                 ‹
               </button>
@@ -352,7 +446,7 @@ export default function ArchivesPage() {
                 onClick={() => setPage((p) => Math.min(data.last_page, p + 1))}
                 disabled={data.current_page >= data.last_page}
                 aria-label="Page suivante"
-                className="flex h-8 w-8 items-center justify-center rounded-full border border-line bg-white text-slate-500 transition hover:border-brand-blue hover:text-brand-blue disabled:opacity-40 disabled:hover:border-line disabled:hover:text-slate-500"
+                className="flex h-8 w-8 items-center justify-center rounded-full border border-line bg-white text-slate-500 shadow-sm transition hover:border-brand-azure hover:text-brand-azure disabled:opacity-40 disabled:hover:border-line disabled:hover:text-slate-500"
               >
                 ›
               </button>

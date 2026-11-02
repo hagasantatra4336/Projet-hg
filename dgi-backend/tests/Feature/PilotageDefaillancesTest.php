@@ -92,7 +92,8 @@ class PilotageDefaillancesTest extends TestCase
         $recent = $this->alerte('3333333333', $this->centre->id);
         DB::table('alertes')->where('id', $recent->id)->update(['created_at' => now()->subDays(3)]);
 
-        Sanctum::actingAs($this->agent);
+        $superadmin = $this->utilisateur(Role::Superadmin, $this->centre, 'super@pilotage.test');
+        Sanctum::actingAs($superadmin);
 
         $res = $this->getJson('/api/defaillances/summary');
         $res->assertOk();
@@ -105,16 +106,16 @@ class PilotageDefaillancesTest extends TestCase
         $this->assertSame([2026, 2024], $res->json('exercices'));
     }
 
-    public function test_le_pilotage_reste_limite_au_centre_de_l_agent(): void
+    public function test_le_pilotage_reste_limite_au_centre_du_chef(): void
     {
         $autre = Centre::create(['nom' => 'Centre lointain']);
-        $agent = $this->utilisateur(Role::Agent, $autre, 'agent@lointain.test');
+        $chef = $this->utilisateur(Role::Admin, $autre, 'chef@lointain.test');
 
         $retard = $this->alerte('2222222222', $this->centre->id);
         DB::table('alertes')->where('id', $retard->id)->update(['created_at' => now()->subDays(45)]);
         $this->alerte('4444444444', $autre->id, ['annee_fiscale' => 2023]);
 
-        Sanctum::actingAs($agent);
+        Sanctum::actingAs($chef);
 
         $res = $this->getJson('/api/defaillances/summary');
         $res->assertOk();

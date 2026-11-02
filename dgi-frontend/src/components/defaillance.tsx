@@ -74,51 +74,59 @@ export function aujourdhui(): string {
   return new Date().toLocaleDateString("en-CA");
 }
 
-const NIVEAU_BADGE: Record<NiveauRisque, string> = {
-  eleve: "bg-red-100 text-red-700",
-  moyen: "bg-amber-100 text-amber-800",
-  faible: "bg-leaf-100 text-brand-blue",
+const NIVEAU_BADGE: Record<NiveauRisque, { chip: string; dot: string }> = {
+  eleve: { chip: "bg-red-50 text-red-700 ring-red-200", dot: "bg-red-500" },
+  moyen: { chip: "bg-amber-50 text-amber-800 ring-amber-200", dot: "bg-amber-500" },
+  faible: { chip: "bg-emerald-50 text-emerald-700 ring-emerald-200", dot: "bg-emerald-500" },
 };
 
-const STATUT_BADGE: Record<StatutAlerte, string> = {
-  a_traiter: "bg-blue-100 text-blue-800",
-  en_traitement: "bg-amber-100 text-amber-800",
-  traitee: "bg-leaf-100 text-brand-blue",
-  regularisee: "bg-slate-100 text-slate-600",
+const STATUT_BADGE: Record<StatutAlerte, { chip: string; dot: string }> = {
+  a_traiter: { chip: "bg-brand-azure-soft text-brand-azure ring-brand-azure/20", dot: "bg-brand-azure" },
+  en_traitement: { chip: "bg-amber-50 text-amber-800 ring-amber-200", dot: "bg-amber-500" },
+  traitee: { chip: "bg-emerald-50 text-emerald-700 ring-emerald-200", dot: "bg-emerald-500" },
+  regularisee: { chip: "bg-slate-100 text-slate-600 ring-slate-200", dot: "bg-slate-400" },
 };
 
 export function NiveauBadge({ niveau }: { niveau: NiveauRisque }) {
+  const style = NIVEAU_BADGE[niveau];
   return (
-    <span className={`inline-block rounded px-2 py-0.5 text-xs font-semibold ${NIVEAU_BADGE[niveau]}`}>
+    <span
+      className={`inline-flex items-center gap-1.5 rounded-md px-2 py-0.5 text-[11px] font-semibold leading-5 ring-1 ring-inset ${style.chip}`}
+    >
+      <span className={`h-1.5 w-1.5 rounded-full ${style.dot}`} aria-hidden="true" />
       {NIVEAU_LABELS[niveau]}
     </span>
   );
 }
 
 export function StatutBadge({ statut }: { statut: StatutAlerte }) {
+  const style = STATUT_BADGE[statut];
   return (
-    <span className={`inline-block rounded px-2 py-0.5 text-xs font-semibold ${STATUT_BADGE[statut]}`}>
+    <span
+      className={`inline-flex items-center gap-1.5 rounded-md px-2 py-0.5 text-[11px] font-semibold leading-5 ring-1 ring-inset ${style.chip}`}
+    >
+      <span className={`h-1.5 w-1.5 rounded-full ${style.dot}`} aria-hidden="true" />
       {STATUT_LABELS[statut]}
     </span>
   );
 }
 
 const REGLE_BADGE: Record<Regle, string> = {
-  defaillance: "bg-brand-blue/10 text-brand-blue",
-  baisse_ca: "bg-orange-100 text-orange-800",
-  r1: "bg-amber-100 text-amber-900",
-  r2: "bg-amber-100 text-amber-900",
-  r3: "bg-amber-100 text-amber-900",
-  r5: "bg-amber-100 text-amber-900",
-  r6: "bg-amber-100 text-amber-900",
-  r7: "bg-amber-100 text-amber-900",
+  defaillance: "bg-brand-blue text-white",
+  baisse_ca: "bg-brand-gold-soft text-brand-gold-dark ring-brand-gold/30",
+  r1: "bg-brand-azure-soft text-brand-blue ring-brand-blue/15",
+  r2: "bg-brand-azure-soft text-brand-blue ring-brand-blue/15",
+  r3: "bg-brand-azure-soft text-brand-blue ring-brand-blue/15",
+  r5: "bg-brand-azure-soft text-brand-blue ring-brand-blue/15",
+  r6: "bg-brand-azure-soft text-brand-blue ring-brand-blue/15",
+  r7: "bg-brand-azure-soft text-brand-blue ring-brand-blue/15",
 };
 
 /** Type d'anomalie. `court` : libellé compact pour les dossiers regroupant plusieurs règles. */
 export function RegleBadge({ regle, court = false }: { regle: Regle; court?: boolean }) {
   return (
     <span
-      className={`inline-block rounded px-2 py-0.5 text-xs font-semibold ${REGLE_BADGE[regle] ?? "bg-slate-100 text-slate-700"}`}
+      className={`inline-flex items-center rounded-md px-2 py-0.5 text-[11px] font-semibold leading-5 ring-1 ring-inset ${REGLE_BADGE[regle] ?? "bg-slate-100 text-slate-700 ring-slate-200"}`}
       title={REGLE_LABELS[regle] ?? regle}
     >
       {court ? (REGLE_COURTS[regle] ?? REGLE_LABELS[regle] ?? regle) : (REGLE_LABELS[regle] ?? regle)}
@@ -181,11 +189,15 @@ export function EtatBadge({ fiche }: { fiche: ContribuableFiche["contribuable"] 
   if (fiche.etat === null) return null;
 
   const style =
-    fiche.etat === 1 ? "bg-leaf-100 text-brand-blue" : fiche.etat === 2 ? "bg-amber-100 text-amber-800" : "bg-slate-200 text-slate-700";
+    fiche.etat === 1
+      ? "bg-emerald-50 text-emerald-700 ring-emerald-200"
+      : fiche.etat === 2
+        ? "bg-amber-50 text-amber-800 ring-amber-200"
+        : "bg-slate-100 text-slate-600 ring-slate-200";
   const date = fiche.etat === 3 ? fiche.date_cessation : fiche.etat === 4 ? fiche.date_radiation : fiche.etat === 2 ? fiche.date_blocage : null;
 
   return (
-    <span className={`inline-block rounded px-2 py-0.5 text-xs font-semibold ${style}`}>
+    <span className={`inline-flex items-center rounded-md px-2 py-0.5 text-[11px] font-semibold leading-5 ring-1 ring-inset ${style}`}>
       {fiche.etat_libelle ?? ETAT_LABELS[fiche.etat] ?? "État inconnu"}
       {date ? ` · ${formatJour(date)}` : ""}
     </span>
@@ -208,7 +220,7 @@ function Cellule({ c, baisse }: { c: CelluleDeclaration; baisse: boolean }) {
     return (
       <td
         title={`${periode} : ${detail || "déclaré"}${baisse ? " · baisse du CA" : ""}`}
-        className={`rounded py-1.5 font-semibold ${baisse ? "bg-orange-100 text-orange-700" : "bg-leaf-100 text-brand-blue"}`}
+        className={`rounded-md py-1.5 font-semibold ${baisse ? "bg-brand-gold-soft text-brand-gold-dark" : "bg-leaf-100 text-brand-green"}`}
       >
         {baisse ? "▼" : "✔"}
       </td>
@@ -217,7 +229,7 @@ function Cellule({ c, baisse }: { c: CelluleDeclaration; baisse: boolean }) {
 
   if (!c.obligee) {
     return (
-      <td title={`${periode} : aucune obligation`} className="rounded bg-slate-50 py-1.5 text-gray-300">
+      <td title={`${periode} : aucune obligation`} className="rounded-md bg-slate-50 py-1.5 text-slate-300">
         ·
       </td>
     );
@@ -227,7 +239,7 @@ function Cellule({ c, baisse }: { c: CelluleDeclaration; baisse: boolean }) {
     return (
       <td
         title={`${periode} : non déposée (date limite ${formatJour(c.date_limite)})`}
-        className="rounded bg-red-100 py-1.5 font-semibold text-red-600"
+        className="rounded-md bg-red-50 py-1.5 font-semibold text-red-600"
       >
         ✘
       </td>
@@ -235,7 +247,7 @@ function Cellule({ c, baisse }: { c: CelluleDeclaration; baisse: boolean }) {
   }
 
   return (
-    <td title={`${periode} : pas encore due`} className="rounded bg-slate-100 py-1.5 text-slate-400">
+    <td title={`${periode} : pas encore due`} className="rounded-md bg-slate-100 py-1.5 text-slate-400">
       …
     </td>
   );
@@ -256,7 +268,7 @@ export function Matrice({
 
   return (
     <div>
-      <h4 className="mb-1 text-xs font-semibold text-slate-600">{titre}</h4>
+      <h4 className="mb-1.5 text-[11px] font-semibold uppercase tracking-wider text-slate-500">{titre}</h4>
       <div className="overflow-x-auto">
         <table className="w-full min-w-[560px] border-separate border-spacing-1 text-center text-xs">
           <thead>
@@ -320,12 +332,17 @@ export function ContribuableModal({ id, onClose }: { id: number; onClose: () => 
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-brand-blue-dark/55 p-4"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-brand-blue-dark/60 p-4 backdrop-blur-[2px]"
       onMouseDown={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
     >
-      <div className="max-h-[90vh] w-full max-w-4xl overflow-y-auto rounded-xl border border-line bg-white p-6 shadow-xl">
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label="Fiche contribuable"
+        className="max-h-[90vh] w-full max-w-4xl overflow-y-auto rounded-2xl border border-line bg-white p-6 shadow-xl"
+      >
         <div className="mb-4 flex items-start justify-between gap-4">
           <div>
             <h2 className="text-lg font-semibold text-brand-blue">{fiche ? fiche.contribuable.nom : "Fiche contribuable"}</h2>

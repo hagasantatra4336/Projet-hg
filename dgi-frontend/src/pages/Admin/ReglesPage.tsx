@@ -80,7 +80,7 @@ function ChampParametre({ p, valeur, onChange }: { p: ParametreSchema; valeur: u
               <label
                 key={impot}
                 className={`flex cursor-pointer items-center gap-2 rounded-lg border px-3 py-1.5 text-sm transition ${
-                  coche ? "border-brand-blue bg-brand-blue/5 font-medium text-brand-blue" : "border-slate-300 text-slate-600 hover:bg-slate-50"
+                  coche ? "border-brand-azure bg-brand-azure-soft font-medium text-brand-azure ring-1 ring-inset ring-brand-azure/20" : "border-line text-slate-600 hover:border-brand-azure/40 hover:bg-slate-50"
                 }`}
               >
                 <input
@@ -109,7 +109,7 @@ function ChampParametre({ p, valeur, onChange }: { p: ParametreSchema; valeur: u
       {titre}
       <div className="mt-2 overflow-hidden rounded-lg border border-line">
         <table className="w-full text-sm">
-          <thead className="bg-slate-50 text-left text-xs font-medium text-slate-500">
+          <thead className="border-b border-line bg-slate-50 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500">
             <tr>
               <th className="px-3 py-2">Mois non déposés, de</th>
               <th className="px-3 py-2">à</th>
@@ -138,7 +138,7 @@ function ChampParametre({ p, valeur, onChange }: { p: ParametreSchema; valeur: u
         </table>
       </div>
       {tranches.length < 6 && (
-        <button type="button" className="mt-2 text-sm font-medium text-brand-blue underline" onClick={() => onChange([...tranches, ["", "", ""]])}>
+        <button type="button" className="mt-2 text-sm font-medium text-brand-azure underline-offset-4 hover:underline" onClick={() => onChange([...tranches, ["", "", ""]])}>
           Ajouter une tranche
         </button>
       )}
@@ -239,19 +239,22 @@ function RegleCard({ regle, onChange }: { regle: RegleConfig; onChange: (r: Regl
     <section id={regle.code} className="rounded-xl border border-line bg-white p-5 sm:p-6">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
-          <h2 className="text-lg font-semibold text-brand-blue">{regle.nom}</h2>
+          <h2 className="flex items-center gap-2 text-lg font-semibold text-brand-blue">
+            <span className="h-4 w-1 rounded-full bg-brand-gold" />
+            {regle.nom}
+          </h2>
           {regle.description && <p className="mt-1 text-sm text-slate-600">{regle.description}</p>}
           <p className="mt-1.5 text-xs text-slate-500">
             {regle.personnalisee ? "Réglages personnalisés" : "Valeurs par défaut"}
             {regle.modifie_par && regle.modifie_le ? ` · modifiés par ${regle.modifie_par} le ${formatDateHeure(regle.modifie_le)}` : ""}
             {" · "}
-            <Link to={`/admin/regles/historique?regle=${regle.code}`} className="font-medium text-brand-blue underline">
+            <Link to={`/admin/regles/historique?regle=${regle.code}`} className="font-medium text-brand-azure underline-offset-4 hover:underline">
               Voir l'historique
             </Link>
           </p>
         </div>
         <label
-          className="flex items-center gap-2 rounded-lg border border-line px-3 py-1.5 text-sm font-medium text-brand-blue"
+          className="flex items-center gap-2 rounded-lg border border-line bg-slate-50/70 px-3 py-1.5 text-sm font-medium text-brand-blue shadow-sm"
           title={peutDesactiver || !actif ? undefined : "Seul un super admin peut désactiver cette règle."}
         >
           <input
@@ -270,7 +273,10 @@ function RegleCard({ regle, onChange }: { regle: RegleConfig; onChange: (r: Regl
       <form onSubmit={enregistrer} className="mt-5 space-y-6">
         {rubriques(regle.schema).map((r) => (
           <fieldset key={r.titre}>
-            <legend className="mb-3 w-full border-b border-line pb-1.5 text-sm font-semibold text-brand-blue">{r.titre}</legend>
+            <legend className="mb-3 flex w-full items-center gap-2 border-b border-line pb-1.5 text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+              <span className="h-3.5 w-1 rounded-full bg-brand-gold" />
+              {r.titre}
+            </legend>
             <div className="grid gap-x-8 gap-y-5 md:grid-cols-2">
               {r.champs.map((p) => (
                 <ChampParametre key={p.cle} p={p} valeur={valeurs[p.cle]} onChange={(v) => setValeurs((x) => ({ ...x, [p.cle]: v }))} />
@@ -280,7 +286,7 @@ function RegleCard({ regle, onChange }: { regle: RegleConfig; onChange: (r: Regl
         ))}
 
         <ErrorBox message={error} />
-        {message && <p className="rounded-lg border border-brand-green/60 bg-leaf-50 px-3 py-2 text-sm text-brand-blue">{message}</p>}
+        {message && <p className="rounded-lg border border-brand-green/25 bg-brand-green-soft px-3 py-2 text-sm text-brand-green">{message}</p>}
 
         <FormActions>
           <button type="button" className={secondaryButtonClass} onClick={() => setAReinitialiser(true)} disabled={saving}>

@@ -25,8 +25,9 @@ function formatCountdown(seconds: number): string {
 
 function Card({ children }: { children: ReactNode }) {
   return (
-    <div className="mx-auto w-full max-w-xl rounded-xl border border-line bg-white p-8 text-center">
-      {children}
+    <div className="mx-auto w-full max-w-xl overflow-hidden rounded-2xl border border-line bg-white text-center shadow-md">
+      <div className="h-1 bg-gradient-to-r from-brand-gold via-brand-gold to-brand-blue" />
+      <div className="p-8">{children}</div>
     </div>
   );
 }
@@ -138,7 +139,8 @@ export default function ProfileWaitingPage() {
 
   return (
     <div className="w-full">
-      <div className="mb-6 border-b border-line pb-4">
+      <div className="mb-4 border-b border-line pb-4">
+        <span className="mb-2 block h-1.5 w-8 rounded-full bg-brand-gold" />
         <h1 className="text-2xl font-semibold tracking-tight text-brand-blue">Validation de vos modifications</h1>
       </div>
 
@@ -149,7 +151,7 @@ export default function ProfileWaitingPage() {
           <div
             role="status"
             aria-label="En attente de validation"
-            className="mx-auto mb-5 h-14 w-14 animate-spin rounded-full border-4 border-brand-green/30 border-t-brand-blue"
+            className="mx-auto mb-5 h-14 w-14 animate-spin rounded-full border-4 border-brand-azure/15 border-t-brand-blue"
           />
           <h2 className="mb-2 text-lg font-semibold text-brand-blue">En attente de votre validation</h2>
           <p className="text-sm text-slate-600">
@@ -198,7 +200,7 @@ export default function ProfileWaitingPage() {
 
       {phase === "confirmed" && !passwordChanged && (
         <Card>
-          <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-brand-green text-2xl font-semibold tracking-tight text-brand-blue">
+          <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-brand-green text-2xl font-semibold tracking-tight text-white shadow-md shadow-brand-green/30">
             ✓
           </div>
           <h2 className="mb-1 text-lg font-semibold text-brand-blue">Modifications appliquées</h2>
@@ -211,7 +213,7 @@ export default function ProfileWaitingPage() {
 
       {phase === "confirmed" && passwordChanged && (
         <Card>
-          <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-brand-green text-2xl font-semibold tracking-tight text-brand-blue">
+          <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-brand-green text-2xl font-semibold tracking-tight text-white shadow-md shadow-brand-green/30">
             ✓
           </div>
           <h2 className="mb-1 text-lg font-semibold text-brand-blue">Modifications appliquées</h2>
@@ -227,6 +229,9 @@ export default function ProfileWaitingPage() {
 
       {phase === "failed" && (
         <Card>
+          <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-red-50 text-red-600 ring-1 ring-inset ring-red-200">
+            !
+          </div>
           <h2 className="mb-2 text-lg font-bold text-red-600">Modification impossible</h2>
           <p className="mb-6 text-sm text-slate-600">
             {serverMessage || "La modification n'a pas pu être appliquée. Refaites une demande depuis votre profil."}

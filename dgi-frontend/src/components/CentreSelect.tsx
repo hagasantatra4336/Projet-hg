@@ -196,7 +196,7 @@ export default function CentreSelect({
           id={listId}
           ref={listRef}
           role="listbox"
-          className="absolute z-30 mt-1 max-h-60 w-full overflow-auto rounded-lg border border-slate-300 bg-white py-1 shadow-lg"
+          className="absolute z-30 mt-1 max-h-60 w-full overflow-auto rounded-lg border border-line bg-white py-1 shadow-lg"
         >
           {results.length === 0 && <li className="px-3 py-2 text-sm text-slate-500">Aucun centre trouvé</li>}
           {results.map((c, i) => (
@@ -209,7 +209,7 @@ export default function CentreSelect({
                 choose(c);
               }}
               onMouseEnter={() => setActive(i)}
-              className={`cursor-pointer px-3 py-2 ${i === active ? "bg-slate-100" : ""}`}
+              className={`cursor-pointer px-3 py-2 ${i === active ? "bg-brand-azure-soft text-brand-azure" : ""}`}
             >
               <div className={`text-sm text-brand-blue ${String(c.id) === value ? "font-bold" : "font-medium"}`}>
                 {c.nom}

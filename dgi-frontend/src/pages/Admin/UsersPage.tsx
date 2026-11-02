@@ -12,7 +12,6 @@ import {
   FormGrid,
   FormSection,
   Modal,
-  PasswordInput,
   RoleBadge,
   inputClass,
   primaryButtonClass,
@@ -237,13 +236,13 @@ export default function UsersPage() {
 
       <div className="bg-white rounded-xl border border-line overflow-x-auto">
         <table className="w-full text-sm">
-          <thead className="border-b border-line bg-slate-50 text-left text-slate-600">
+          <thead className="border-b border-line bg-slate-50 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500">
             <tr>
-              <th className="px-3 py-2 font-semibold">Nom</th>
-              <th className="px-3 py-2 font-semibold">IM</th>
-              <th className="px-3 py-2 font-semibold">Téléphone</th>
-              <th className="px-3 py-2 font-semibold">Centre</th>
-              <th className="px-3 py-2 font-semibold">Fonction</th>
+              <th className="px-3 py-2">Nom</th>
+              <th className="px-3 py-2">IM</th>
+              <th className="px-3 py-2">Téléphone</th>
+              <th className="px-3 py-2">Centre</th>
+              <th className="px-3 py-2">Fonction</th>
               <th className="sticky right-0 z-10 w-[92px] border-l border-line bg-slate-50 px-3 py-2" />
             </tr>
           </thead>
@@ -264,7 +263,7 @@ export default function UsersPage() {
             )}
             {!loading &&
               users.map((u) => (
-                <tr key={u.id}>
+                <tr key={u.id} className="transition hover:bg-slate-50/70">
                   <td className="px-3 py-2">
                     <div className="font-medium text-brand-blue">{u.nom}</div>
                     <div className="text-xs text-slate-500">{u.email}</div>
@@ -416,7 +415,7 @@ export default function UsersPage() {
                     emptyLabel="Aucun centre trouvé"
                   />
                 </Field>
-                <Field
+                { /*<Field
                   label="Mot de passe"
                   required={editing === "new"}
                   optional={editing !== "new"}
@@ -435,7 +434,7 @@ export default function UsersPage() {
                     required={editing === "new"}
                     autoComplete="new-password"
                   />
-                </Field>
+                </Field>*/}
               </FormGrid>
             </FormSection>
 

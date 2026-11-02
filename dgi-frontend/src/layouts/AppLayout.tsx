@@ -41,15 +41,15 @@ const ADMIN_ITEMS: SubItem[] = [
   { to: "/admin/fonctions", label: "Fonctions & rôles", icon: <IconBriefcase className="h-4 w-4" />, roles: ["superadmin"] },
 ];
 
-const itemBase = "flex w-full items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium transition";
-const itemActive = "bg-white/10 text-white shadow-[inset_3px_0_0_#7AA95C]";
-const itemIdle = "text-white/70 hover:bg-white/5 hover:text-white";
+const itemBase = "flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition";
+const itemActive = "bg-white/10 text-white shadow-[inset_3px_0_0_#C4952B]";
+const itemIdle = "text-white/70 hover:bg-white/10 hover:text-white";
 
 const linkClass = ({ isActive }: { isActive: boolean }) => `${itemBase} ${isActive ? itemActive : itemIdle}`;
 
 const subLinkClass = ({ isActive }: { isActive: boolean }) =>
-  `flex items-center gap-2.5 rounded-md px-3 py-2 text-sm transition ${
-    isActive ? "bg-white/10 font-semibold text-white" : "text-white/60 hover:text-white"
+  `flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm transition ${
+    isActive ? "bg-white/10 font-semibold text-white" : "text-white/60 hover:bg-white/5 hover:text-white"
   }`;
 
 /** Pastille rouge avec le nombre d'éléments en attente. */
@@ -128,9 +128,10 @@ export default function AppLayout() {
   return (
     <div className="min-h-screen bg-canvas lg:flex">
       {/* Barre du haut (mobile uniquement) */}
-      <div className="sticky top-0 z-30 flex h-14 items-center justify-between bg-brand-blue px-4 lg:hidden">
+      <div className="sticky top-0 z-30 flex h-14 items-center justify-between bg-gradient-to-r from-brand-blue to-brand-blue-dark px-4 shadow-md lg:hidden">
         <div className="flex items-center gap-3">
           <img src="/logo-dgi.png" alt="Direction Générale des Impôts" className="h-8 w-auto" />
+          <span className="h-6 w-px bg-white/20" aria-hidden="true" />
           <img src="/logo-mef.png" alt="Ministère de l'Économie et des Finances" className="h-8 w-auto" />
         </div>
         <div className="flex items-center gap-1">
@@ -139,7 +140,7 @@ export default function AppLayout() {
             type="button"
             onClick={() => setMobileOpen(true)}
             aria-label="Ouvrir le menu"
-            className="relative rounded-lg p-2 text-white hover:bg-white/10"
+            className="relative rounded-lg p-2 text-white transition hover:bg-white/10"
           >
             <IconMenu />
             <Pastille
@@ -156,7 +157,7 @@ export default function AppLayout() {
       )}
 
       <aside
-        className={`fixed inset-y-0 left-0 z-50 flex w-60 flex-col bg-brand-blue px-2.5 py-4 shadow-lg transition-transform lg:sticky lg:bottom-auto lg:top-0 lg:h-screen lg:shrink-0 lg:translate-x-0 lg:shadow-none ${
+        className={`fixed inset-y-0 left-0 z-50 flex w-60 flex-col bg-gradient-to-b from-brand-blue to-brand-blue-dark px-2.5 py-4 shadow-lg transition-transform lg:sticky lg:bottom-auto lg:top-0 lg:h-screen lg:shrink-0 lg:translate-x-0 lg:shadow-none ${
           mobileOpen ? "translate-x-0" : "-translate-x-full"
         }`}
       >
@@ -185,15 +186,18 @@ export default function AppLayout() {
             <span>Tableau de bord</span>
           </NavLink>
 
-          <NavLink to="/defaillances" className={linkClass}>
-            <IconAlert />
-            <span>Anomalies</span>
-            <Pastille
-              n={notifications.defaillances}
-              titre={`${pluriel(notifications.defaillances, "dossier")} à traiter`}
-              className="ml-auto"
-            />
-          </NavLink>
+          {/* Un agent n'a pas de page Anomalies : ses dossiers figurent dans Traitements. */}
+          {user?.role !== "agent" && (
+            <NavLink to="/defaillances" className={linkClass}>
+              <IconAlert />
+              <span>Anomalies</span>
+              <Pastille
+                n={notifications.defaillances}
+                titre={`${pluriel(notifications.defaillances, "dossier")} à traiter`}
+                className="ml-auto"
+              />
+            </NavLink>
+          )}
 
           <NavLink to="/traitements" className={linkClass}>
             <IconBriefcase />
@@ -260,7 +264,7 @@ export default function AppLayout() {
               title={`${user?.nom ?? ""} — voir mon profil`}
               className="flex min-w-0 flex-1 items-center gap-2 rounded-lg py-1 pl-1 pr-1 transition hover:bg-white/10"
             >
-              <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-brand-white text-[13px] font-semibold text-brand-blue">
+              <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-white text-[13px] font-semibold text-brand-blue ring-2 ring-white/25">
                 {initial}
               </span>
               <span className="min-w-0 leading-tight">

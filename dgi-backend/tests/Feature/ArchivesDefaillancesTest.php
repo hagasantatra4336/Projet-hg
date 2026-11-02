@@ -53,18 +53,22 @@ class ArchivesDefaillancesTest extends TestCase
         ]);
     }
 
-    private function utilisateur(Role $role, Centre $centre, string $email): void
+    private function utilisateur(Role $role, Centre $centre, string $email): User
     {
         $fonction = Fonction::create(['nom' => 'Fonction '.$role->value.' '.$email, 'role' => $role]);
 
-        Sanctum::actingAs(User::create([
+        $user = User::create([
             'nom' => 'Utilisateur '.$email,
             'email' => $email,
             'password' => 'motdepasse123',
             'centre_id' => $centre->id,
             'fonction_id' => $fonction->id,
             'email_verified_at' => now(),
-        ]));
+        ]);
+
+        Sanctum::actingAs($user);
+
+        return $user;
     }
 
     /** Dossier clôturé traité, dossier clôturé régularisé, dossier mixte (une alerte encore ouverte). */
@@ -114,14 +118,75 @@ class ArchivesDefaillancesTest extends TestCase
         $this->assertSame(['Dossier régularisé'], $filtre);
     }
 
-    public function test_l_archive_est_limitee_au_centre_de_l_agent(): void
+    public function test_un_agent_ne_voit_que_les_archives_qu_il_a_traitees(): void
     {
-        $this->utilisateur(Role::Agent, $this->centre, 'agent@archives.test');
-        $this->alerte('1111111111', 'Dossier lointain', $this->autreCentre->id, ['statut' => Alerte::TRAITEE]);
+        $agent = $this->utilisateur(Role::Agent, $this->centre, 'agent@archives.test');
+        $collegue = $this->utilisateur(Role::Agent, $this->centre, 'collegue@archives.test');
 
-        $res = $this->getJson('/api/defaillances?grouper=1&archive=1');
-        $res->assertOk();
-        $this->assertCount(0, $res->json('data'));
+        $this->alerte('1111111111', 'Dossier de l\'agent', $this->centre->id, [
+            'statut' => Alerte::TRAITEE,
+            'traite_par' => $agent->id,
+            'traite_le' => now(),
+        ]);
+        $this->alerte('2222222222', 'Dossier du collègue', $this->centre->id, [
+            'statut' => Alerte::TRAITEE,
+            'traite_par' => $collegue->id,
+            'traite_le' => now(),
+        ]);
+        // Même agent, mais dossier d'un autre centre : hors périmètre.
+        $this->alerte('3333333333', 'Dossier lointain', $this->autreCentre->id, [
+            'statut' => Alerte::TRAITEE,
+            'traite_par' => $agent->id,
+            'traite_le' => now(),
+        ]);
+
+        Sanctum::actingAs($agent);
+        $noms = collect($this->getJson('/api/defaillances?grouper=1&archive=1')->json('data'))->pluck('contribuable.nom')->all();
+
+        $this->assertSame(['Dossier de l\'agent'], $noms);
+    }
+
+    public function test_un_chef_filtre_les_archives_par_agent(): void
+    {
+        $agentUn = $this->utilisateur(Role::Agent, $this->centre, 'agent1@archives.test');
+        $agentDeux = $this->utilisateur(Role::Agent, $this->centre, 'agent2@archives.test');
+        $this->utilisateur(Role::Admin, $this->centre, 'chef@archives.test');
+
+        $this->alerte('1111111111', 'Dossier agent un', $this->centre->id, [
+            'statut' => Alerte::TRAITEE,
+            'traite_par' => $agentUn->id,
+            'traite_le' => now(),
+        ]);
+        $this->alerte('2222222222', 'Dossier agent deux', $this->centre->id, [
+            'statut' => Alerte::TRAITEE,
+            'traite_par' => $agentDeux->id,
+            'traite_le' => now(),
+        ]);
+
+        $toutes = $this->getJson('/api/defaillances?grouper=1&archive=1')->json('data');
+        $this->assertCount(2, $toutes);
+
+        $filtrees = collect($this->getJson('/api/defaillances?grouper=1&archive=1&agent_id='.$agentUn->id)->json('data'))
+            ->pluck('contribuable.nom')
+            ->all();
+        $this->assertSame(['Dossier agent un'], $filtrees);
+    }
+
+    public function test_central_et_superadmin_trient_les_archives_par_centre(): void
+    {
+        $this->utilisateur(Role::Superadmin, $this->centre, 'super4@archives.test');
+        $this->alerte('1111111111', 'Dossier centre archives', $this->centre->id, ['statut' => Alerte::TRAITEE]);
+        $this->alerte('2222222222', 'Dossier centre voisin', $this->autreCentre->id, ['statut' => Alerte::TRAITEE]);
+
+        $asc = collect($this->getJson('/api/defaillances?grouper=1&archive=1&sort=centre&dir=asc')->json('data'))
+            ->pluck('contribuable.nom')
+            ->all();
+        $this->assertSame(['Dossier centre archives', 'Dossier centre voisin'], $asc);
+
+        $desc = collect($this->getJson('/api/defaillances?grouper=1&archive=1&sort=centre&dir=desc')->json('data'))
+            ->pluck('contribuable.nom')
+            ->all();
+        $this->assertSame(['Dossier centre voisin', 'Dossier centre archives'], $desc);
     }
 
     public function test_rouvrir_un_dossier_le_fait_sortir_des_archives(): void

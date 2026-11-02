@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import api, { getErrorMessage } from "../services/api";
+import { useAuth } from "../context/AuthContext";
 import { ErrorBox, Field, IconButton, inputClass } from "../components/ui";
 import { IconCheck, IconClose, IconDownload, IconEdit, IconEye, IconPlus, IconPrinter } from "../components/icons";
 import {
@@ -21,12 +22,12 @@ import {
   type Regle,
 } from "../types";
 
-const STAT_TONE: Record<string, string> = {
-  neutral: "text-brand-blue",
-  warning: "text-amber-700",
-  danger: "text-red-700",
-  success: "text-brand-blue",
-  muted: "text-slate-500",
+const STAT_TONE: Record<string, { box: string; text: string }> = {
+  neutral: { box: "border-line bg-slate-50", text: "text-brand-blue" },
+  warning: { box: "border-amber-200 bg-amber-50/60", text: "text-amber-700" },
+  danger: { box: "border-red-200 bg-red-50/60", text: "text-red-700" },
+  success: { box: "border-brand-green/25 bg-brand-green-soft", text: "text-brand-green" },
+  muted: { box: "border-line bg-slate-50", text: "text-slate-500" },
 };
 
 // Montant en ariary, ou « — » si la donnée manque
@@ -41,10 +42,11 @@ function pourcent(v: number | null): string {
 
 // Petite tuile de chiffre clé (compteur de la synthèse)
 function Stat({ label, value, tone = "neutral" }: { label: string; value: number | string; tone?: keyof typeof STAT_TONE }) {
+  const t = STAT_TONE[tone];
   return (
-    <div className="rounded-xl bg-slate-50 p-3">
+    <div className={`rounded-xl border p-3 ${t.box}`}>
       <p className="text-xs text-slate-500">{label}</p>
-      <p className={`text-xl font-semibold ${STAT_TONE[tone]}`}>{value}</p>
+      <p className={`text-xl font-semibold tabular-nums ${t.text}`}>{value}</p>
     </div>
   );
 }
@@ -55,6 +57,10 @@ type ContactForm = { telephone: string; email: string; adresse: string; activite
 export default function ContribuableFichePage() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const { user } = useAuth();
+  // Un agent revient à sa liste de dossiers assignés ; les autres rôles à la page Anomalies.
+  const retour = user?.role === "agent" ? "/traitements" : "/defaillances";
+  const retourLabel = user?.role === "agent" ? "← Retour à mes dossiers" : "← Retour aux alertes";
   const [fiche, setFiche] = useState<Fiche | null>(null);
   const [error, setError] = useState<string>("");
   const [message, setMessage] = useState<string>("");
@@ -140,8 +146,8 @@ export default function ContribuableFichePage() {
   if (!fiche) {
     return (
       <div className="space-y-4">
-        <Link to="/defaillances" className="text-sm font-medium text-brand-blue underline">
-          ← Retour aux alertes
+        <Link to={retour} className="inline-flex w-fit items-center gap-1 text-sm font-medium text-brand-azure underline-offset-4 hover:underline">
+          {retourLabel}
         </Link>
         <ErrorBox message={error} />
         {!error && <p className="text-sm text-slate-500">Chargement de la fiche...</p>}
@@ -194,8 +200,8 @@ export default function ContribuableFichePage() {
 
   return (
     <div className="space-y-5">
-      <Link to="/defaillances" className="no-print inline-block text-sm font-medium text-brand-blue underline">
-        ← Retour aux alertes
+      <Link to={retour} className="no-print inline-flex items-center gap-1 text-sm font-medium text-brand-azure underline-offset-4 hover:underline">
+        {retourLabel}
       </Link>
 
       <div className="hidden border-b-2 border-brand-blue pb-2 print:block">
@@ -212,7 +218,8 @@ export default function ContribuableFichePage() {
       <section className="rounded-xl border border-line bg-white p-5">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
-            <h1 className="text-xl font-semibold text-brand-blue">{c.nom}</h1>
+            <span className="mb-1 block h-1.5 w-8 rounded-full bg-brand-gold" />
+            <h1 className="text-xl font-semibold tracking-tight text-brand-blue">{c.nom}</h1>
             <p className="mt-0.5 flex flex-wrap items-center gap-2 text-sm text-slate-500">
               <span>
                 NIF {c.nif} · {c.centre ?? "Aucun centre"}
@@ -244,7 +251,7 @@ export default function ContribuableFichePage() {
           <LigneInfo label="Activité">{c.activite || <span className="text-slate-400">Non renseignée</span>}</LigneInfo>
           <LigneInfo label="Téléphone">
             {c.telephone ? (
-              <a href={`tel:${c.telephone.replace(/\s/g, "")}`} className="text-brand-blue underline">
+              <a href={`tel:${c.telephone.replace(/\s/g, "")}`} className="text-brand-azure underline-offset-4 hover:underline">
                 {c.telephone}
               </a>
             ) : (
@@ -253,7 +260,7 @@ export default function ContribuableFichePage() {
           </LigneInfo>
           <LigneInfo label="E-mail">
             {c.email ? (
-              <a href={`mailto:${c.email}`} className="text-brand-blue underline">
+              <a href={`mailto:${c.email}`} className="text-brand-azure underline-offset-4 hover:underline">
                 {c.email}
               </a>
             ) : (
@@ -318,7 +325,10 @@ export default function ContribuableFichePage() {
 
       {/* Résultat de l'analyse */}
       <section className="rounded-xl border border-line bg-white p-5">
-        <h2 className="text-sm font-semibold text-brand-blue">Résultat de l'analyse</h2>
+        <h2 className="flex items-center gap-2 text-sm font-semibold text-brand-blue">
+          <span className="h-3.5 w-1 rounded-full bg-brand-gold" />
+          Résultat de l'analyse
+        </h2>
         <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
           <Stat label="Anomalies" value={r.alertes_total} />
           <Stat label="À traiter" value={r.par_statut.a_traiter} tone="warning" />
@@ -344,10 +354,10 @@ export default function ContribuableFichePage() {
         <div className="mt-4 overflow-x-auto">
           <table className="w-full min-w-[420px] text-sm">
             <thead>
-              <tr className="border-b border-line text-left text-xs uppercase tracking-wide text-slate-500">
-                <th className="py-2">Règle</th>
-                <th className="py-2 text-right">Anomalies</th>
-                <th className="py-2 text-right">Part</th>
+              <tr className="border-b border-line bg-slate-50 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+                <th className="px-2 py-2">Règle</th>
+                <th className="px-2 py-2 text-right">Anomalies</th>
+                <th className="px-2 py-2 text-right">Part</th>
               </tr>
             </thead>
             <tbody>
@@ -378,7 +388,10 @@ export default function ContribuableFichePage() {
 
       {/* Chiffres clés */}
       <section className="rounded-xl border border-line bg-white p-5">
-        <h2 className="text-sm font-semibold text-brand-blue">Chiffres clés</h2>
+        <h2 className="flex items-center gap-2 text-sm font-semibold text-brand-blue">
+          <span className="h-3.5 w-1 rounded-full bg-brand-gold" />
+          Chiffres clés
+        </h2>
         <p className="text-xs text-slate-500">
           Valeurs du dernier exercice disponible dans la base d'analyse risque (déclarations, recoupement, douane).
         </p>
@@ -400,7 +413,10 @@ export default function ContribuableFichePage() {
 
       {/* Observations */}
       <section className="rounded-xl border border-line bg-white p-5">
-        <h2 className="text-sm font-semibold text-brand-blue">Observations</h2>
+        <h2 className="flex items-center gap-2 text-sm font-semibold text-brand-blue">
+          <span className="h-3.5 w-1 rounded-full bg-brand-gold" />
+          Observations
+        </h2>
         <p className="text-xs text-slate-500">
           Constats de l'agent, décision et suites à donner. Chaque note est datée et signée ; les observations sont reprises dans le PDF.
         </p>
@@ -450,7 +466,10 @@ export default function ContribuableFichePage() {
 
       {/* Obligations déclaratives */}
       <section className="rounded-xl border border-line bg-white p-5">
-        <h2 className="text-sm font-semibold text-brand-blue">Obligations déclaratives</h2>
+        <h2 className="flex items-center gap-2 text-sm font-semibold text-brand-blue">
+          <span className="h-3.5 w-1 rounded-full bg-brand-gold" />
+          Obligations déclaratives
+        </h2>
         {fiche.obligations.length === 0 ? (
           <p className="mt-2 rounded-lg bg-slate-50 p-3 text-sm text-slate-500">
             Aucun assujettissement connu : l'obligation est déduite de la première déclaration de chaque impôt.
@@ -475,7 +494,10 @@ export default function ContribuableFichePage() {
 
       {/* Anomalies constatées */}
       <section className="rounded-xl border border-line bg-white p-5">
-        <h2 className="text-sm font-semibold text-brand-blue">Anomalies constatées ({fiche.alertes.length})</h2>
+        <h2 className="flex items-center gap-2 text-sm font-semibold text-brand-blue">
+          <span className="h-3.5 w-1 rounded-full bg-brand-gold" />
+          Anomalies constatées ({fiche.alertes.length})
+        </h2>
         {fiche.alertes.length === 0 ? (
           <p className="mt-2 rounded-lg bg-slate-50 p-3 text-sm text-slate-500">Aucune alerte pour ce contribuable.</p>
         ) : (
@@ -504,7 +526,7 @@ export default function ContribuableFichePage() {
                 )}
                 {a.statut !== "regularisee" && (
                   <p className="no-print mt-2">
-                    <Link to={`/defaillances/${a.id}/traitement`} className="text-xs font-medium text-brand-blue underline">
+                    <Link to={`/defaillances/${a.id}/traitement`} className="text-xs font-medium text-brand-azure underline-offset-4 hover:underline">
                       Ouvrir le dossier de traitement →
                     </Link>
                   </p>
@@ -518,7 +540,10 @@ export default function ContribuableFichePage() {
       {/* Historique des déclarations */}
       <section className="space-y-4 rounded-xl border border-line bg-white p-5">
         <div>
-          <h2 className="text-sm font-semibold text-brand-blue">Historique des déclarations</h2>
+          <h2 className="flex items-center gap-2 text-sm font-semibold text-brand-blue">
+            <span className="h-3.5 w-1 rounded-full bg-brand-gold" />
+            Historique des déclarations
+          </h2>
           <p className="text-xs text-slate-500">
             ✔ déclaré · ▼ baisse du CA · ✘ non déposé, date limite dépassée · … pas encore dû · · aucune obligation
           </p>

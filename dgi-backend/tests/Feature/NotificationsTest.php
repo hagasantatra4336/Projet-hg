@@ -129,7 +129,8 @@ class NotificationsTest extends TestCase
         Sanctum::actingAs($agentB);
         $this->getJson('/api/notifications')
             ->assertOk()
-            ->assertJsonPath('defaillances', 1)
+            // Un agent ne voit que ses dossiers assignés : rien ne lui a été confié.
+            ->assertJsonPath('defaillances', 0)
             ->assertJsonPath('traitements', 0);
 
         // Un dossier pris par un agent n'est plus « à traiter » pour les autres, mais reste en cours pour lui.

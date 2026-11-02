@@ -88,7 +88,10 @@ export default function IndicateursSection({ impots, onChange }: { impots: strin
 
   return (
     <details className="rounded-xl bg-white p-5 border border-line sm:p-6">
-      <summary className="cursor-pointer text-lg font-semibold text-brand-blue">Indicateurs ({data?.indicateurs.length ?? "…"})</summary>
+      <summary className="flex cursor-pointer items-center gap-2 text-lg font-semibold text-brand-blue">
+        <span className="h-4 w-1 rounded-full bg-brand-gold" />
+        Indicateurs ({data?.indicateurs.length ?? "…"})
+      </summary>
       <p className="mt-2 max-w-3xl text-sm text-slate-600">
         Un indicateur est une valeur lue dans une colonne numérique de la table des déclarations (chiffre d'affaires, montant dû, etc.). Les règles personnalisées s'appuient sur eux.
       </p>
@@ -120,7 +123,10 @@ export default function IndicateursSection({ impots, onChange }: { impots: strin
       </ul>
 
       <form onSubmit={ajouter} className="mt-5 border-t border-line pt-4">
-        <p className="mb-3 text-sm font-semibold text-brand-blue">Ajouter un indicateur</p>
+        <p className="mb-3 flex items-center gap-2 text-sm font-semibold text-brand-blue">
+          <span className="h-3.5 w-1 rounded-full bg-brand-gold" />
+          Ajouter un indicateur
+        </p>
         <FormGrid>
           <Field label="Libellé" required hint="Nom affiché dans les règles et les conditions.">
             <input className={inputClass} value={libelle} onChange={(e) => setLibelle(e.target.value)} required maxLength={150} />

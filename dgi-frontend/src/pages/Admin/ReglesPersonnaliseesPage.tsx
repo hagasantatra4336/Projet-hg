@@ -20,9 +20,9 @@ import IndicateursSection from "./reglesPerso/IndicateursSection";
 type Valeurs = Record<string, string | number>;
 
 const badge: Record<string, string> = {
-  brouillon: "bg-slate-100 text-slate-700",
-  active: "bg-leaf-100 text-brand-blue",
-  desactivee: "bg-orange-100 text-orange-800",
+  brouillon: "bg-slate-50 text-slate-600 ring-1 ring-inset ring-slate-200",
+  active: "bg-brand-green-soft text-brand-green ring-1 ring-inset ring-brand-green/25",
+  desactivee: "bg-brand-gold-soft text-brand-gold-dark ring-1 ring-inset ring-brand-gold/30",
 };
 
 function ImpotsChoix({ options, choisis, onChange }: { options: string[]; choisis: string[]; onChange: (v: string[]) => void }) {
@@ -82,7 +82,10 @@ function NouvelleRegle({ options, onCree }: { options: OptionsReglesPerso; onCre
 
   return (
     <section className="rounded-xl bg-white p-5 border border-line sm:p-6">
-      <h2 className="text-lg font-semibold text-brand-blue">Nouvelle règle à partir d'un modèle</h2>
+      <h2 className="flex items-center gap-2 text-lg font-semibold text-brand-blue">
+        <span className="h-4 w-1 rounded-full bg-brand-gold" />
+        Nouvelle règle à partir d'un modèle
+      </h2>
       <p className="mt-1 text-sm text-slate-600">La règle est créée en brouillon : elle ne produit aucune alerte tant qu'elle n'est pas simulée puis activée. Vous pourrez ensuite modifier ses conditions.</p>
 
       <form onSubmit={creer} className="mt-5 space-y-4">
@@ -302,14 +305,17 @@ function RegleCard({ regle, options, onChange, onSupprimee }: { regle: ReglePers
     <section className="rounded-xl bg-white p-5 border border-line sm:p-6">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
-          <h3 className="text-lg font-semibold text-brand-blue">{regle.nom}</h3>
+          <h3 className="flex items-center gap-2 text-lg font-semibold text-brand-blue">
+            <span className="h-4 w-1 rounded-full bg-brand-gold" />
+            {regle.nom}
+          </h3>
           <p className="mt-1 text-sm text-slate-600">{decrire(regle.conditions, options.indicateurs)}</p>
           <p className="mt-1 text-xs text-slate-500">
             {regle.impots.join(", ")} · risque {NIVEAU_REGLE_LABELS[regle.niveau] ?? regle.niveau} · version {regle.version} · {regle.nb_alertes} alerte{regle.nb_alertes > 1 ? "s" : ""} produite{regle.nb_alertes > 1 ? "s" : ""}
             {regle.modifie_par && regle.modifie_le ? ` · modifiée par ${regle.modifie_par} le ${formatDateHeure(regle.modifie_le)}` : ""}
           </p>
         </div>
-        <span className={`rounded px-2 py-0.5 text-xs font-semibold ${badge[regle.statut]}`}>{STATUT_REGLE_LABELS[regle.statut]}</span>
+        <span className={`inline-flex items-center rounded-md px-2 py-0.5 text-[11px] font-semibold leading-5 ${badge[regle.statut]}`}>{STATUT_REGLE_LABELS[regle.statut]}</span>
       </div>
 
       {edition && (
@@ -349,7 +355,7 @@ function RegleCard({ regle, options, onChange, onSupprimee }: { regle: ReglePers
 
       <div className="mt-4">
         <ErrorBox message={error} />
-        {message && <p className="mb-3 rounded-lg border border-brand-green/60 bg-leaf-50 px-3 py-2 text-sm text-brand-blue">{message}</p>}
+        {message && <p className="mb-3 rounded-lg border border-brand-green/25 bg-brand-green-soft px-3 py-2 text-sm text-brand-green">{message}</p>}
       </div>
 
       <div className="flex flex-wrap justify-end gap-3">
@@ -451,7 +457,7 @@ export default function ReglesPersonnaliseesPage() {
 
   return (
     <div className="space-y-5">
-      <Link to="/admin/regles" className="inline-block text-sm font-medium text-brand-blue underline">
+      <Link to="/admin/regles" className="inline-flex items-center gap-1 text-sm font-medium text-brand-azure underline-offset-4 hover:underline">
         ← Retour aux règles de détection
       </Link>
       <p className="max-w-3xl text-sm text-slate-600">

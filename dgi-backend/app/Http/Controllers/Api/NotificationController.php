@@ -15,8 +15,8 @@ use Illuminate\Http\Request;
 /**
  * Compteurs affichés dans la navigation : ce qui attend une action de l'utilisateur connecté.
  *
- *  - defaillances : dossiers (contribuables) ayant au moins une alerte libre « à traiter » ;
- *  - traitements  : dossiers que l'utilisateur a lui-même pris et qui sont encore en cours ;
+ *  - defaillances : dossiers en attente d'action (agent : ses dossiers assignés ; autres rôles : dossiers libres) ;
+ *  - traitements  : dossiers en cours pour l'utilisateur (agent : ses dossiers assignés ; autres rôles : ceux qu'il a pris) ;
  *  - demandes     : demandes d'inscription en attente qu'il peut approuver.
  *
  * Les périmètres reprennent ceux des écrans correspondants : centre pour agent et admin,
@@ -30,11 +30,19 @@ class NotificationController extends Controller
         abort_if($me->role === null, 403, "Votre compte n'a pas de fonction attribuée.");
 
         $aTraiter = $this->alertesVisibles($me);
-        VerrouAlerte::libres($aTraiter);
+        // Un agent ne voit que ses dossiers assignés : le compteur « à traiter » les compte directement.
+        if ($me->role !== Role::Agent) {
+            VerrouAlerte::libres($aTraiter);
+        }
 
         $enCours = $this->alertesVisibles($me);
-        VerrouAlerte::verrouillees($enCours);
-        $enCours->where('alertes.pris_par', $me->id);
+        if ($me->role === Role::Agent) {
+            // Ses dossiers assignés restent comptés même si le verrou a expiré (il doit les reprendre).
+            $enCours->where('alertes.statut', Alerte::A_TRAITER);
+        } else {
+            VerrouAlerte::verrouillees($enCours);
+            $enCours->where('alertes.pris_par', $me->id);
+        }
 
         $compteurs = [
             'defaillances' => $aTraiter->distinct()->count('alertes.contribuable_id'),
@@ -60,7 +68,17 @@ class NotificationController extends Controller
             return $query->whereRaw('1 = 0');
         }
 
-        return $query->whereHas('contribuable', fn (Builder $q) => $q->where('centre_id', $me->centre_id));
+        $query->whereHas('contribuable', fn (Builder $q) => $q->where('centre_id', $me->centre_id));
+
+        // Agent : uniquement les dossiers qui lui sont assignés (les dossiers libres ne lui sont plus visibles).
+        if ($me->role === Role::Agent) {
+            $query->whereIn(
+                'alertes.contribuable_id',
+                Alerte::query()->select('contribuable_id')->where('pris_par', $me->id)
+            );
+        }
+
+        return $query;
     }
 
     /** Demandes en attente que l'utilisateur peut réellement approuver (voir DemandeInscriptionController). */

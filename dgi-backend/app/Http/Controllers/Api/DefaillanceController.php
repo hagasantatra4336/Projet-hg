@@ -27,9 +27,11 @@ use Throwable;
  * Alertes d'anomalies (défaillance de déclaration, baisse du chiffre d'affaires).
  *
  *  - Consultation et traitement : tous les rôles.
- *      agent / admin        → uniquement les alertes de LEUR centre ;
+ *      agent                → uniquement les dossiers qui lui sont assignés (archives : ceux qu'il a clôturés) ;
+ *      admin                → tous les dossiers de LEUR centre ;
  *      central / superadmin → tous les centres.
  *  - Lancer l'analyse : superadmin, central, admin (l'admin est limité à son centre).
+ *  - Affectation d'un dossier libre à un agent : chefs de centre, central et superadmin.
  *  - Traitement d'un dossier : « Traiter » PREND le dossier (statut affiché « En traitement ») ; les autres utilisateurs ne peuvent
  *    plus le prendre (verrou VerrouAlerte). Un admin, central ou superadmin peut reprendre ou libérer un dossier pris.
  */
@@ -59,7 +61,7 @@ class DefaillanceController extends Controller
     public function index(Request $request): JsonResponse
     {
         $data = $request->validate($this->reglesFiltres() + [
-            'sort' => ['nullable', Rule::in(['niveau', 'type_impot', 'annee_fiscale', 'traite_le', 'cree_le'])],
+            'sort' => ['nullable', Rule::in(['niveau', 'type_impot', 'annee_fiscale', 'traite_le', 'cree_le', 'centre'])],
             'dir' => ['nullable', Rule::in(['asc', 'desc'])],
             'grouper' => ['nullable', 'boolean'],
         ]);
@@ -69,7 +71,7 @@ class DefaillanceController extends Controller
             return $this->indexGroupes($request, $data);
         }
 
-        $query = $this->scopedQuery($request)->with(['contribuable.centre', 'traitePar']);
+        $query = $this->scopedQuery($request, ! empty($data['archive']))->with(['contribuable.centre', 'traitePar']);
         $this->appliquerFiltres($query, $data);
 
         // Tri par défaut : les plus risquées d'abord, puis les plus récentes.
@@ -79,6 +81,9 @@ class DefaillanceController extends Controller
         if ($sort === 'niveau') {
             $query->orderByRaw("CASE alertes.niveau WHEN 'eleve' THEN 3 WHEN 'moyen' THEN 2 ELSE 1 END {$dir}")
                 ->orderBy('alertes.annee_fiscale', 'desc');
+        } elseif ($sort === 'centre') {
+            // Tri par nom du centre du dossier (central et superadmin).
+            $query->orderByRaw($this->expressionCentre().' '.$dir);
         } else {
             // « cree_le » est le nom d'affichage : la colonne réelle est created_at.
             $query->orderBy('alertes.'.($sort === 'cree_le' ? 'created_at' : $sort), $dir);
@@ -104,6 +109,8 @@ class DefaillanceController extends Controller
             'annee_fiscale' => ['nullable', 'integer', 'between:1990,2100'],
             'centre_id' => ['nullable', 'integer'],
             'search' => ['nullable', 'string', 'max:100'],
+            // Archives : dossier traité par cet agent (filtre des chefs de centre, central et superadmin)
+            'agent_id' => ['nullable', 'integer'],
             // Ancienneté du dossier en jours : « créé depuis moins de N jours »
             'age_min' => ['nullable', 'integer', 'between:1,3650'],
         ];
@@ -118,7 +125,7 @@ class DefaillanceController extends Controller
      */
     private function indexGroupes(Request $request, array $data): JsonResponse
     {
-        $base = $this->scopedQuery($request);
+        $base = $this->scopedQuery($request, ! empty($data['archive']));
         $this->appliquerFiltres($base, $data);
 
         $dir = ($data['dir'] ?? 'desc') === 'asc' ? 'asc' : 'desc';
@@ -136,6 +143,7 @@ class DefaillanceController extends Controller
             'traite_le' => $groupes->orderBy('traite_max', $dir),
             'type_impot' => $groupes->orderBy('impot_max', $dir),
             'cree_le' => $groupes->orderBy('cree_min', $dir),
+            'centre' => $groupes->orderByRaw($this->expressionCentre().' '.$dir),
             default => $groupes->orderBy('rang', $dir)->orderBy('annee_max', 'desc'),
         };
         $groupes->orderBy('alertes.contribuable_id');
@@ -185,6 +193,12 @@ class DefaillanceController extends Controller
             });
         }
 
+        // Dossier dont au moins une anomalie a été traitée par cet agent (archives « traité par »).
+        if (! empty($data['agent_id'])) {
+            $parAgent = Alerte::query()->select('contribuable_id')->where('traite_par', (int) $data['agent_id']);
+            $query->whereIn('alertes.contribuable_id', $parAgent);
+        }
+
         // Ancienneté : dossiers créés depuis moins de N jours, c.-à-d. dont la plus ancienne anomalie
         // (parmi celles affichées, les mêmes que celles comptées dans la colonne Âge) est postérieure à la limite.
         if (! empty($data['age_min'])) {
@@ -213,10 +227,26 @@ class DefaillanceController extends Controller
         }
     }
 
-    /** Toutes les alertes visibles d'un contribuable (même périmètre que les listes). */
+    /** Nom du centre du dossier, pour le tri « par centre » (central et superadmin). */
+    private function expressionCentre(): string
+    {
+        return '(SELECT centres.nom FROM contribuables INNER JOIN centres ON centres.id = contribuables.centre_id '
+            .'WHERE contribuables.id = alertes.contribuable_id)';
+    }
+
+    /** Toutes les anomalies du dossier contribuable, dans le périmètre de centre de l'utilisateur.
+     *  L'assignation nominative n'est pas appliquée : l'accès au dossier est déjà contrôlé par assertAccess. */
     private function requeteGroupe(Request $request, Alerte $alerte): Builder
     {
-        return $this->scopedQuery($request)->where('alertes.contribuable_id', $alerte->contribuable_id);
+        $me = $request->user();
+        $query = Alerte::query();
+        ReglesDetection::limiterAlertes($query);
+
+        if (in_array($me->role, [Role::Agent, Role::Admin], true)) {
+            $query->whereHas('contribuable', fn ($q) => $q->where('centre_id', $me->centre_id));
+        }
+
+        return $query->where('alertes.contribuable_id', $alerte->contribuable_id);
     }
 
     /**
@@ -289,7 +319,10 @@ class DefaillanceController extends Controller
     /** Compteurs pour les cartes du haut de page (alertes à traiter par niveau + totaux). */
     public function summary(Request $request): JsonResponse
     {
-        $rows = $this->scopedQuery($request)
+        // archive=1 : mêmes compteurs, calculés sur les dossiers clôturés (liste des exercices des archives).
+        $archives = $request->boolean('archive');
+
+        $rows = $this->scopedQuery($request, $archives)
             ->selectRaw('alertes.statut, alertes.niveau, count(*) as total')
             ->groupBy('alertes.statut', 'alertes.niveau')
             ->get();
@@ -309,23 +342,26 @@ class DefaillanceController extends Controller
             }
         }
 
-        // Dossiers pris : retirés de « à traiter » (et de leur niveau), comptés à part
+        // Dossiers pris : retirés de « à traiter » (et de leur niveau), comptés à part.
+        // Un agent ne voit que ses propres dossiers : ils restent comptés « à traiter » pour lui.
         $summary['en_traitement'] = 0;
-        $pris = $this->scopedQuery($request);
+        $pris = $this->scopedQuery($request, $archives);
         VerrouAlerte::verrouillees($pris);
-        foreach ((clone $pris)->selectRaw('alertes.niveau, count(*) as total')->groupBy('alertes.niveau')->get() as $r) {
-            $n = (int) $r->total;
-            $summary['a_traiter'] -= $n;
-            $summary[$r->niveau] -= $n;
-            $summary['en_traitement'] += $n;
+        if ($request->user()->role !== Role::Agent) {
+            foreach ((clone $pris)->selectRaw('alertes.niveau, count(*) as total')->groupBy('alertes.niveau')->get() as $r) {
+                $n = (int) $r->total;
+                $summary['a_traiter'] -= $n;
+                $summary[$r->niveau] -= $n;
+                $summary['en_traitement'] += $n;
+            }
         }
 
         // Une ligne par contribuable dans les listes groupées : compteurs de dossiers pour la page Traitements
-        $libres = $this->scopedQuery($request);
+        $libres = $this->scopedQuery($request, $archives);
         VerrouAlerte::libres($libres);
         $summary['dossiers_a_traiter'] = $libres->distinct()->count('alertes.contribuable_id');
         $summary['dossiers_en_traitement'] = (clone $pris)->distinct()->count('alertes.contribuable_id');
-        $summary['dossiers_traites'] = $this->scopedQuery($request)
+        $summary['dossiers_traites'] = $this->scopedQuery($request, $archives)
             ->where('alertes.statut', Alerte::TRAITEE)
             ->distinct()->count('alertes.contribuable_id');
 
@@ -336,7 +372,7 @@ class DefaillanceController extends Controller
         $enRetard = 0;
         $seuilRetard = now()->subDays(self::SEUIL_RETARD);
 
-        $dossiers = $this->scopedQuery($request)
+        $dossiers = $this->scopedQuery($request, $archives)
             ->selectRaw('alertes.contribuable_id, MIN(alertes.created_at) as ouverture, '
                 .'MIN(alertes.pris_le) as prise, MAX(alertes.traite_le) as cloture, '
                 ."MAX(CASE WHEN alertes.statut = '".Alerte::A_TRAITER."' THEN 1 ELSE 0 END) as reste")
@@ -371,7 +407,7 @@ class DefaillanceController extends Controller
         $summary['dossiers_en_retard'] = $enRetard;
 
         // Exercices proposés dans le filtre : seulement ceux qui existent, du plus récent au plus ancien
-        $summary['exercices'] = $this->scopedQuery($request)
+        $summary['exercices'] = $this->scopedQuery($request, $archives)
             ->distinct()
             ->orderByDesc('alertes.annee_fiscale')
             ->pluck('alertes.annee_fiscale')
@@ -392,7 +428,7 @@ class DefaillanceController extends Controller
     {
         $data = $request->validate($this->reglesFiltres());
 
-        $query = $this->scopedQuery($request)->with(['contribuable.centre', 'traitePar']);
+        $query = $this->scopedQuery($request, $request->boolean('archive'))->with(['contribuable.centre', 'traitePar']);
         $this->appliquerFiltres($query, $data);
         $query->orderByRaw("CASE alertes.niveau WHEN 'eleve' THEN 3 WHEN 'moyen' THEN 2 ELSE 1 END DESC")
             ->orderByDesc('alertes.annee_fiscale')
@@ -693,6 +729,118 @@ class DefaillanceController extends Controller
         return response()->json($this->present($alerte, [], $me) + ['groupe' => $this->presentGroupeComplet($request, $alerte)]);
     }
 
+    /** Agents du centre du dossier pouvant recevoir une assignation (chefs, central, superadmin). */
+    public function agentsAssignables(Request $request, Alerte $alerte): JsonResponse
+    {
+        $me = $request->user();
+        $this->assertAccess($me, $alerte);
+
+        abort_unless($this->peutReprendre($me), 403, "Seul un chef de centre, le central ou le superadmin peuvent assigner un dossier.");
+
+        $alerte->loadMissing('contribuable');
+
+        $agents = User::query()
+            ->where('centre_id', $alerte->contribuable->centre_id)
+            ->whereHas('fonction', fn ($q) => $q->where('role', Role::Agent))
+            ->with('fonction')
+            ->orderBy('nom')
+            ->get(['id', 'nom', 'fonction_id'])
+            ->map(fn (User $u) => ['id' => $u->id, 'nom' => $u->nom, 'fonction' => $u->fonction?->nom]);
+
+        return response()->json($agents);
+    }
+
+    /** Agents proposés dans les filtres (archives « traité par ») : chefs de centre, central et superadmin. */
+    public function agents(Request $request): JsonResponse
+    {
+        $me = $request->user();
+
+        abort_unless($this->peutReprendre($me), 403, "Seul un chef de centre, le central ou le superadmin peuvent consulter la liste des agents.");
+
+        $data = $request->validate(['centre_id' => ['nullable', 'integer']]);
+
+        $query = User::query()
+            ->whereHas('fonction', fn ($q) => $q->where('role', Role::Agent))
+            ->with(['fonction', 'centre'])
+            ->orderBy('nom');
+
+        if ($me->role === Role::Admin) {
+            abort_if($me->centre_id === null, 403, "Votre compte n'est rattaché à aucun centre.");
+            $query->where('centre_id', $me->centre_id);
+        } elseif (! empty($data['centre_id'])) {
+            $query->where('centre_id', (int) $data['centre_id']);
+        }
+
+        return response()->json(
+            $query->get(['id', 'nom', 'centre_id', 'fonction_id'])
+                ->map(fn (User $u) => [
+                    'id' => $u->id,
+                    'nom' => $u->nom,
+                    'fonction' => $u->fonction?->nom,
+                    'centre' => $u->centre?->nom,
+                ])
+        );
+    }
+
+    /**
+     * Assigne un dossier LIBRE à un agent du même centre : même verrou qu'une prise, mais au nom de l'agent.
+     * Réservé aux chefs de centre, au central et au superadmin ; un dossier déjà pris doit d'abord être libéré.
+     */
+    public function assigner(Request $request, Alerte $alerte): JsonResponse
+    {
+        $me = $request->user();
+        $this->assertAccess($me, $alerte);
+
+        abort_unless($this->peutReprendre($me), 403, "Seul un chef de centre, le central ou le superadmin peuvent assigner un dossier.");
+
+        $data = $request->validate(['user_id' => ['required', 'integer']]);
+
+        $alerte->loadMissing('contribuable');
+        $cible = User::with('fonction')->find($data['user_id']);
+
+        if ($cible === null || $cible->role !== Role::Agent) {
+            return response()->json(['message' => "Choisissez un agent pour cette assignation."], 422);
+        }
+        if ((int) $cible->centre_id !== (int) $alerte->contribuable->centre_id) {
+            return response()->json(['message' => "Cet agent n'appartient pas au centre du dossier."], 422);
+        }
+
+        $alertes = $this->requeteGroupe($request, $alerte)->get();
+        $aTraiter = $alertes->filter(fn (Alerte $a) => $a->statut === Alerte::A_TRAITER);
+
+        if ($aTraiter->isEmpty()) {
+            return response()->json([
+                'message' => "Ce dossier ne contient plus d'anomalie à traiter.",
+                'alerte' => $this->present($alerte->fresh(), [], $me),
+                'groupe' => $this->presentGroupeComplet($request, $alerte),
+            ], 422);
+        }
+
+        $bloquee = $aTraiter->first(
+            fn (Alerte $a) => VerrouAlerte::verrouille($a) && (int) $a->getAttribute('pris_par') !== (int) $cible->id
+        );
+
+        if ($bloquee !== null) {
+            return response()->json([
+                'message' => 'Ce dossier est en cours de traitement par '.$this->nomPreneur($bloquee).'. Libérez-le ou reprenez-le avant de l\'assigner.',
+                'alerte' => $this->present($alerte->fresh(), [], $me),
+                'groupe' => $this->presentGroupeComplet($request, $alerte),
+            ], 409);
+        }
+
+        $dejaAssigne = $aTraiter->every(fn (Alerte $a) => $this->prisParMoi($a, $cible));
+
+        Alerte::query()->whereKey($aTraiter->pluck('id')->all())->update(['pris_par' => $cible->id, 'pris_le' => now()]);
+
+        if (! $dejaAssigne) {
+            $this->journaliser($alerte, $me, DossierHistorique::AFFECTATION, 'a_traiter', 'en_traitement', $cible->nom);
+        }
+
+        $alerte = $alerte->fresh(['contribuable.centre', 'traitePar']);
+
+        return response()->json($this->present($alerte, [], $me) + ['groupe' => $this->presentGroupeComplet($request, $alerte)]);
+    }
+
     /** Libère un dossier pris (par son propriétaire, ou un admin, central, superadmin) : il redevient « À traiter » pour tous. */
     public function liberer(Request $request, Alerte $alerte): JsonResponse
     {
@@ -823,8 +971,14 @@ class DefaillanceController extends Controller
 
     // ------------------------------------------------------------------
 
-    /** Alertes visibles par l'utilisateur connecté (filtrage par centre selon son rôle). */
-    private function scopedQuery(Request $request): Builder
+    /**
+     * Alertes visibles par l'utilisateur connecté.
+     *
+     *  - agent : uniquement les dossiers qui lui sont assignés (liste de travail) ou qu'il a clôturés (archives) ;
+     *  - admin : tous les dossiers de son centre ;
+     *  - central / superadmin : tous les centres (filtre centre_id facultatif).
+     */
+    private function scopedQuery(Request $request, bool $archives = false): Builder
     {
         $me = $request->user();
         abort_if($me->role === null, 403, "Votre compte n'a pas de fonction attribuée.");
@@ -835,6 +989,20 @@ class DefaillanceController extends Controller
         if (in_array($me->role, [Role::Agent, Role::Admin], true)) {
             abort_if($me->centre_id === null, 403, "Votre compte n'est rattaché à aucun centre.");
             $query->whereHas('contribuable', fn ($q) => $q->where('centre_id', $me->centre_id));
+
+            if ($me->role === Role::Agent) {
+                $dossiers = Alerte::query()->select('contribuable_id');
+
+                if ($archives) {
+                    // Archives : dossiers dont au moins une anomalie a été traitée par l'agent.
+                    $dossiers->where('traite_par', $me->id);
+                } else {
+                    // Liste de travail : seuls les dossiers qui lui sont assignés, jamais les dossiers libres.
+                    $dossiers->where('pris_par', $me->id);
+                }
+
+                $query->whereIn('alertes.contribuable_id', $dossiers);
+            }
         } elseif ($request->filled('centre_id')) {
             $query->whereHas('contribuable', fn ($q) => $q->where('centre_id', (int) $request->input('centre_id')));
         }
@@ -853,6 +1021,16 @@ class DefaillanceController extends Controller
                 403,
                 "Cette alerte n'appartient pas à votre centre."
             );
+        }
+
+        // Un agent n'accède qu'aux dossiers qui lui sont assignés ou qu'il a clôturés (consultation des archives).
+        if ($me->role === Role::Agent) {
+            $autorise = Alerte::query()
+                ->where('contribuable_id', $alerte->contribuable_id)
+                ->where(fn ($q) => $q->where('pris_par', $me->id)->orWhere('traite_par', $me->id))
+                ->exists();
+
+            abort_unless($autorise, 403, "Ce dossier ne vous est pas assigné.");
         }
     }
 
@@ -886,7 +1064,7 @@ class DefaillanceController extends Controller
     }
 
     /** Une ligne de journal par action de dossier (pas une par anomalie). */
-    private function journaliser(Alerte $alerte, User $me, string $action, string $avant, string $apres): void
+    private function journaliser(Alerte $alerte, User $me, string $action, string $avant, string $apres, ?string $detail = null): void
     {
         DossierHistorique::create([
             'contribuable_id' => $alerte->contribuable_id,
@@ -894,6 +1072,7 @@ class DefaillanceController extends Controller
             'user_id' => $me->id,
             'auteur' => $me->nom,
             'action' => $action,
+            'detail' => $detail,
             'statut_avant' => $avant,
             'statut_apres' => $apres,
         ]);
@@ -910,6 +1089,7 @@ class DefaillanceController extends Controller
             ->map(fn (DossierHistorique $h) => [
                 'id' => $h->id,
                 'action' => $h->action,
+                'detail' => $h->detail,
                 'auteur' => $h->auteur,
                 'statut_avant' => $h->statut_avant,
                 'statut_apres' => $h->statut_apres,

@@ -110,11 +110,11 @@ export default function CentresPage() {
 
       <div className="bg-white rounded-xl border border-line overflow-x-auto">
         <table className="w-full text-sm">
-          <thead className="border-b border-line bg-slate-50 text-left text-slate-600">
+          <thead className="border-b border-line bg-slate-50 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500">
             <tr>
-              <th className="px-3 py-2 font-semibold">Nom</th>
-              <th className="px-3 py-2 font-semibold">Adresse</th>
-              <th className="px-3 py-2 font-semibold">Utilisateurs</th>
+              <th className="px-3 py-2">Nom</th>
+              <th className="px-3 py-2">Adresse</th>
+              <th className="px-3 py-2">Utilisateurs</th>
               <th className="sticky right-0 z-10 w-[92px] border-l border-line bg-slate-50 px-3 py-2" />
             </tr>
           </thead>
@@ -134,7 +134,7 @@ export default function CentresPage() {
               </tr>
             )}
             {centres.map((c) => (
-              <tr key={c.id}>
+              <tr key={c.id} className="transition hover:bg-slate-50/70">
                 <td className="px-3 py-2 font-medium text-brand-blue">{c.nom}</td>
                 <td className="px-3 py-2 text-slate-600">{c.adresse ?? "—"}</td>
                 <td className="px-3 py-2 text-slate-600">{c.users_count ?? 0}</td>

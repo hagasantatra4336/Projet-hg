@@ -109,13 +109,13 @@ function StepIndicator({ step }: { step: number }) {
         <div key={s} className={`flex items-center ${i < steps.length - 1 ? "flex-1" : ""}`}>
           <div
             className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-sm font-semibold transition
-              ${s < step ? "bg-brand-green text-brand-blue" : ""}
+              ${s < step ? "bg-brand-green-soft text-brand-green ring-1 ring-inset ring-brand-green/30" : ""}
               ${s === step ? "bg-brand-blue text-white shadow-md shadow-brand-blue/30 ring-4 ring-brand-blue/10" : ""}
-              ${s > step ? "bg-gray-100 text-gray-400" : ""}`}
+              ${s > step ? "bg-slate-100 text-slate-400" : ""}`}
           >
             {s < step ? "✓" : s}
           </div>
-          {i < steps.length - 1 && <div className={`mx-2 h-0.5 flex-1 rounded-full ${s < step ? "bg-brand-green" : "bg-gray-200"}`} />}
+          {i < steps.length - 1 && <div className={`mx-2 h-0.5 flex-1 rounded-full ${s < step ? "bg-brand-green" : "bg-slate-200"}`} />}
         </div>
       ))}
     </div>
@@ -141,17 +141,17 @@ function libelleApprobateur(approbateur: Approbateur | null): string {
 }
 
 const inputClass =
-  "w-full rounded-xl border border-gray-200 bg-gray-50/70 px-4 py-3 text-sm text-gray-800 placeholder-gray-400 " +
-  "focus:bg-white focus:outline-none focus:ring-2 focus:ring-brand-green/60 focus:border-brand-green transition";
+  "w-full rounded-lg border border-line bg-white px-4 py-3 text-sm text-slate-900 placeholder-slate-400 shadow-sm " +
+  "focus:outline-none focus:ring-4 focus:ring-brand-azure/10 focus:border-brand-azure transition";
 
 const primaryButtonClass =
-  "w-full rounded-xl bg-brand-blue py-3 text-sm font-semibold text-white shadow-md shadow-brand-blue/20 " +
+  "w-full rounded-lg bg-gradient-to-r from-brand-blue to-brand-blue-light py-3 text-sm font-semibold text-white shadow-md shadow-brand-blue/25 " +
   "hover:brightness-110 hover:shadow-lg active:scale-[0.99] disabled:opacity-50 disabled:cursor-not-allowed transition";
 
-const linkButtonClass = "w-full text-sm font-medium text-brand-blue hover:underline disabled:opacity-50";
+const linkButtonClass = "w-full text-sm font-medium text-brand-azure hover:text-brand-blue hover:underline disabled:opacity-50";
 
-const errorClass = "mb-5 rounded-xl border-l-4 border-red-500 bg-red-50 px-4 py-3 text-sm text-red-700";
-const infoClass = "mb-5 rounded-xl border-l-4 border-brand-green bg-brand-green/15 px-4 py-3 text-sm text-brand-blue";
+const errorClass = "mb-5 rounded-lg border border-red-200 border-l-4 border-l-red-500 bg-red-50 px-4 py-3 text-sm text-red-700";
+const infoClass = "mb-5 rounded-lg border border-brand-green/30 border-l-4 border-l-brand-green bg-brand-green-soft px-4 py-3 text-sm text-brand-blue";
 
 export default function SignupPage() {
   const navigate = useNavigate();
@@ -431,8 +431,12 @@ export default function SignupPage() {
 
   return (
     <AuthLayout>
+      <div className="mb-1 flex items-center gap-2">
+        <span className="h-1.5 w-8 rounded-full bg-brand-gold" aria-hidden="true" />
+        <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">Nouvel accès</span>
+      </div>
       <h1 className="text-2xl font-bold tracking-tight text-brand-blue">Créer un compte</h1>
-      <p className="mt-1 text-sm text-gray-500">Étape {step} sur 4</p>
+      <p className="mt-1 text-sm text-slate-500">Étape {step} sur 4</p>
 
       <StepIndicator step={step} />
 
@@ -501,7 +505,7 @@ export default function SignupPage() {
             onChange={(e) => setForm({ ...form, adresse: e.target.value })}
           />
 
-          <p className="rounded-xl bg-gray-50 px-4 py-3 text-xs text-gray-600 sm:col-span-2">
+          <p className="rounded-lg border border-line bg-slate-50 px-4 py-3 text-xs text-slate-600 sm:col-span-2">
             {infoApprobation}
           </p>
 
@@ -547,16 +551,16 @@ export default function SignupPage() {
               <div
                 role="status"
                 aria-label="En attente d'approbation"
-                className="mx-auto mb-5 h-12 w-12 animate-spin rounded-full border-4 border-brand-green/30 border-t-brand-blue"
+                className="mx-auto mb-5 h-12 w-12 animate-spin rounded-full border-4 border-brand-azure/15 border-t-brand-blue"
               />
               <h2 className="mb-2 text-lg font-semibold text-brand-blue">En attente d'approbation</h2>
-              <p className="text-sm text-gray-600">
+              <p className="text-sm text-slate-600">
                 Votre demande a été envoyée à {libelleApprobateur(approbateur)}.
                 <br />
                 Dès qu'elle est approuvée, un code à 6 chiffres valable <strong>5 minutes</strong> sera envoyé à{" "}
                 <span className="font-semibold text-brand-blue">{form.email}</span>.
               </p>
-              <p className="mt-3 text-xs text-gray-500">
+              <p className="mt-3 text-xs text-slate-500">
                 Cette page se met à jour automatiquement. Vous pouvez la fermer : la demande reste valable 7 jours et
                 vous la retrouverez en revenant sur ce navigateur.
               </p>
@@ -575,7 +579,7 @@ export default function SignupPage() {
 
       {step === STEP_OTP && (
         <form onSubmit={handleStep3} className="space-y-4">
-          <div className="rounded-xl bg-gray-50 px-4 py-3 text-center text-sm text-gray-600">
+          <div className="rounded-lg border border-line bg-slate-50 px-4 py-3 text-center text-sm text-slate-600">
             {codeVerifie && !setupToken ? (
               <p>
                 Votre e-mail a déjà été vérifié sur un autre appareil. Recevez un nouveau code pour définir votre mot
@@ -641,7 +645,7 @@ export default function SignupPage() {
             type="button"
             onClick={recommencer}
             disabled={loading}
-            className="w-full text-sm text-gray-500 hover:text-brand-blue hover:underline disabled:opacity-50"
+            className="w-full text-sm text-slate-500 hover:text-brand-azure hover:underline disabled:opacity-50"
           >
             Recommencer l'inscription
           </button>
@@ -650,7 +654,7 @@ export default function SignupPage() {
 
       {step === STEP_PASSWORD && (
         <form onSubmit={handleStep4} className="space-y-4">
-          <p className="rounded-xl bg-gray-50 px-4 py-3 text-center text-sm text-gray-600">
+          <p className="rounded-lg border border-line bg-slate-50 px-4 py-3 text-center text-sm text-slate-600">
             E-mail vérifié pour <span className="font-semibold text-brand-blue">{form.email}</span>. Choisissez votre
             mot de passe pour activer le compte.
           </p>
@@ -674,7 +678,7 @@ export default function SignupPage() {
             autoComplete="new-password"
             required
           />
-          <p className="text-xs text-gray-500">8 caractères minimum.</p>
+          <p className="text-xs text-slate-500">8 caractères minimum.</p>
           <button disabled={loading} type="submit" className={primaryButtonClass}>
             {loading ? "Création..." : "Créer mon compte"}
           </button>
@@ -682,7 +686,7 @@ export default function SignupPage() {
             type="button"
             onClick={recommencer}
             disabled={loading}
-            className="w-full text-sm text-gray-500 hover:text-brand-blue hover:underline disabled:opacity-50"
+            className="w-full text-sm text-slate-500 hover:text-brand-azure hover:underline disabled:opacity-50"
           >
             Recommencer l'inscription
           </button>
@@ -690,9 +694,9 @@ export default function SignupPage() {
       )}
 
       {step === STEP_INFOS && (
-        <p className="mt-8 text-center text-sm text-gray-500">
+        <p className="mt-8 text-center text-sm text-slate-500">
           Déjà un compte ?{" "}
-          <Link to="/" className="font-semibold text-brand-blue hover:underline">
+          <Link to="/" className="font-semibold text-brand-azure hover:text-brand-blue hover:underline">
             Se connecter
           </Link>
         </p>

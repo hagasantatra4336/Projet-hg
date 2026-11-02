@@ -83,9 +83,9 @@ function StatsCard({ stats }: { stats: Stat[] }) {
         <div
           key={s.label}
           style={{ animationDelay: `${i * 80}ms` }}
-          className="dash-rise group relative flex items-center gap-3 overflow-hidden rounded-xl border border-line bg-white p-3 transition duration-300 hover:-translate-y-1 hover:shadow-lg"
+          className="dash-rise group relative flex items-center gap-3 overflow-hidden rounded-xl border border-line bg-white p-3.5 transition duration-300 hover:-translate-y-1 hover:border-brand-azure/30 hover:shadow-lg"
         >
-          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-brand-blue text-white transition duration-300 group-hover:scale-110 group-hover:rotate-3">
+          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-brand-blue to-brand-blue-light text-white shadow-sm shadow-brand-blue/25 transition duration-300 group-hover:scale-110 group-hover:rotate-3">
             {s.icon}
           </span>
           <div className="min-w-0">
@@ -95,7 +95,7 @@ function StatsCard({ stats }: { stats: Stat[] }) {
             </p>
           </div>
           {/* Barre d'accent qui se déploie au survol */}
-          <span className="absolute inset-x-0 bottom-0 h-1 origin-left scale-x-0 bg-brand-blue transition-transform duration-500 group-hover:scale-x-100" />
+          <span className="absolute inset-x-0 bottom-0 h-1 origin-left scale-x-0 bg-gradient-to-r from-brand-gold to-brand-blue transition-transform duration-500 group-hover:scale-x-100" />
         </div>
       ))}
     </div>
@@ -177,12 +177,12 @@ function PilotageDossiers({ summary }: { summary: DefaillanceSummary | null }) {
         {cartes.map((c) => (
           <div
             key={c.label}
-            className="rounded-xl border border-line p-3 transition duration-200 hover:-translate-y-0.5 hover:border-brand-blue hover:shadow-md"
+            className="rounded-xl border border-line bg-white p-3.5 transition duration-200 hover:-translate-y-0.5 hover:border-brand-azure/40 hover:shadow-md"
           >
             <div className="flex items-center gap-2">
               <span
                 className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-white ${
-                  c.alerte ? "bg-red-600" : "bg-brand-blue"
+                  c.alerte ? "bg-red-600 shadow-sm shadow-red-600/25" : "bg-gradient-to-br from-brand-blue to-brand-blue-light shadow-sm shadow-brand-blue/25"
                 }`}
               >
                 {c.icon}
@@ -309,13 +309,14 @@ export default function DashboardPage() {
       <style>{ANIMATIONS}</style>
 
       {/* En-tête de bienvenue */}
-      <header className="dash-rise relative overflow-hidden rounded-xl bg-brand-blue px-4 py-3 text-white sm:px-5">
+      <header className="dash-rise relative overflow-hidden rounded-2xl bg-gradient-to-br from-brand-blue via-brand-blue to-brand-blue-dark px-4 py-4 text-white shadow-md shadow-brand-blue/20 sm:px-5">
+        <span aria-hidden="true" className="pointer-events-none absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-brand-gold via-brand-gold/50 to-transparent" />
         <span aria-hidden="true" className="pointer-events-none absolute -right-8 -top-12 h-36 w-36 rounded-full bg-white/10" />
         <span aria-hidden="true" className="pointer-events-none absolute -bottom-14 right-20 h-28 w-28 rounded-full bg-white/5" />
         <div className="relative flex items-center gap-3">
           <span
             aria-hidden="true"
-            className="hidden h-10 w-10 shrink-0 items-center justify-center rounded-full bg-white text-sm font-semibold text-brand-blue sm:flex"
+            className="hidden h-10 w-10 shrink-0 items-center justify-center rounded-full bg-white text-sm font-semibold text-brand-blue shadow-sm sm:flex"
           >
             {initials(user?.nom)}
           </span>
@@ -388,7 +389,7 @@ export default function DashboardPage() {
             {/* Barre de titre + recherche */}
             <div className="flex flex-col gap-3 border-b border-line p-4 sm:flex-row sm:items-center sm:justify-between sm:p-5">
               <div className="flex items-center gap-3">
-                <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-brand-blue text-white">
+                <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-brand-blue to-brand-blue-light text-white shadow-sm shadow-brand-blue/25">
                   <IconUsers className="h-5 w-5" />
                 </span>
                 <div>
@@ -404,7 +405,7 @@ export default function DashboardPage() {
                     onChange={(e) => setSearchInput(e.target.value)}
                     placeholder="Rechercher..."
                     aria-label="Rechercher un utilisateur"
-                    className="w-full rounded-full border border-slate-300 bg-slate-50 py-2 pl-9 pr-9 text-sm placeholder-slate-400 transition focus:border-brand-blue focus:bg-white focus:outline-none focus:ring-2 focus:ring-brand-blue/30"
+                    className="w-full rounded-full border border-line bg-slate-50 py-2 pl-9 pr-9 text-sm placeholder-slate-400 shadow-sm transition focus:border-brand-azure focus:bg-white focus:outline-none focus:ring-4 focus:ring-brand-azure/10"
                   />
                   {searchInput && (
                     <button
@@ -435,9 +436,9 @@ export default function DashboardPage() {
             <div className="max-h-[640px] overflow-auto">
               <table className="w-full min-w-[680px] text-left text-sm">
                 <thead className="sticky top-0 z-10">
-                  <tr className="border-b-2 border-brand-blue bg-slate-50 text-slate-600">
+                  <tr className="border-b border-line bg-slate-50 text-slate-500">
                     {["Nom", "Centre", "Téléphone", "E-mail", "Fonction", "Rôle"].map((h) => (
-                      <th key={h} className="whitespace-nowrap px-3 py-2 text-xs font-semibold tracking-wide">
+                      <th key={h} className="whitespace-nowrap px-3 py-2.5 text-[11px] font-semibold tracking-wider">
                         {h}
                       </th>
                     ))}

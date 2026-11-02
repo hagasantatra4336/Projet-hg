@@ -31,13 +31,13 @@ const STATUT_LABELS: Record<StatutDemande, string> = {
 };
 
 const STATUT_BADGES: Record<StatutDemande, string> = {
-  en_attente: "bg-amber-100 text-amber-800",
-  approuvee: "bg-emerald-100 text-emerald-800",
-  refusee: "bg-red-100 text-red-700",
-  annulee: "bg-slate-100 text-slate-600",
-  expiree: "bg-slate-100 text-slate-500",
-  compte_cree: "bg-sky-100 text-sky-800",
-  introuvable: "bg-slate-100 text-slate-500",
+  en_attente: "bg-amber-50 text-amber-700 ring-1 ring-inset ring-amber-200",
+  approuvee: "bg-brand-green-soft text-brand-green ring-1 ring-inset ring-brand-green/25",
+  refusee: "bg-red-50 text-red-700 ring-1 ring-inset ring-red-200",
+  annulee: "bg-slate-50 text-slate-600 ring-1 ring-inset ring-slate-200",
+  expiree: "bg-slate-50 text-slate-500 ring-1 ring-inset ring-slate-200",
+  compte_cree: "bg-brand-azure-soft text-brand-azure ring-1 ring-inset ring-brand-azure/20",
+  introuvable: "bg-slate-50 text-slate-500 ring-1 ring-inset ring-slate-200",
 };
 
 function dateFr(iso: string | null): string {
@@ -142,7 +142,7 @@ export default function DemandesInscriptionPage() {
   return (
     <div>
       <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
-        <p className="text-sm text-slate-600">{portee}</p>
+        <p className="max-w-2xl text-sm text-slate-600">{portee}</p>
         <div className="flex items-center gap-2">
           <select className={`${inputClass} w-auto`} value={statut} onChange={(e) => setStatut(e.target.value)}>
             <option value="en_attente">En attente ({data?.en_attente_total ?? 0})</option>
@@ -166,7 +166,7 @@ export default function DemandesInscriptionPage() {
 
       <ErrorBox message={error} />
       {info && (
-        <p className="mb-4 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
+        <p className="mb-4 rounded-lg border border-brand-green/25 bg-brand-green-soft px-3 py-2 text-sm text-brand-green">
           {info}
         </p>
       )}
@@ -175,7 +175,7 @@ export default function DemandesInscriptionPage() {
         <div className="overflow-x-auto">
           <table className="w-full min-w-[820px] text-left text-sm">
             <thead>
-              <tr className="bg-slate-50 text-xs font-semibold uppercase tracking-wide text-slate-500">
+              <tr className="border-b border-line bg-slate-50 text-[11px] font-semibold uppercase tracking-wider text-slate-500">
                 <th className="px-3 py-2">Demandeur</th>
                 <th className="px-3 py-2">Centre</th>
                 <th className="px-3 py-2">Fonction</th>

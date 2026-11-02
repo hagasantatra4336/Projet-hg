@@ -1,4 +1,5 @@
 import { Routes, Route, Navigate } from "react-router-dom";
+import { useAuth } from "./context/AuthContext";
 import LoginPage from "./pages/Auth/LoginPage";
 import SignupPage from "./pages/Auth/SignupPage";
 import ProtectedRoute from "./components/ProtectedRoute";
@@ -22,6 +23,13 @@ import ProfilePage from "./pages/ProfilePage";
 import ProfileWaitingPage from "./pages/ProfileWaitingPage";
 import ConfirmChangePage from "./pages/ConfirmChangePage";
 
+/** Les agents n'ont pas de page Anomalies : leur liste de travail est la page Traitements. */
+function AnomaliesRoute() {
+  const { user } = useAuth();
+  if (user?.role === "agent") return <Navigate to="/traitements" replace />;
+  return <DefaillancesPage />;
+}
+
 export default function App() {
   return (
     <Routes>
@@ -38,8 +46,8 @@ export default function App() {
           <Route path="/profile" element={<ProfilePage />} />
           {/* Attente de la validation par e-mail d'une modification du profil */}
           <Route path="/profile/attente" element={<ProfileWaitingPage />} />
-          {/* Défaillances de déclaration : tous les rôles (filtrées par centre côté API) */}
-          <Route path="/defaillances" element={<DefaillancesPage />} />
+          {/* Défaillances de déclaration : admin, central et superadmin (l'agent travaille depuis Traitements) */}
+          <Route path="/defaillances" element={<AnomaliesRoute />} />
           {/* Dossiers en cours de traitement */}
           <Route path="/traitements" element={<TraitementsPage />} />
           {/* Dossiers clôturés (toutes anomalies traitées/régularisées), consultation seule */}

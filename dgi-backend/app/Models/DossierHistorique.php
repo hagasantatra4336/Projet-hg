@@ -13,6 +13,7 @@ class DossierHistorique extends Model
     public const LIBERATION = 'liberation';
     public const CLOTURE = 'cloture';
     public const REOUVERTURE = 'reouverture';
+    public const AFFECTATION = 'affectation';
 
     protected $fillable = [
         'contribuable_id',
@@ -20,6 +21,7 @@ class DossierHistorique extends Model
         'user_id',
         'auteur',
         'action',
+        'detail',
         'statut_avant',
         'statut_apres',
     ];

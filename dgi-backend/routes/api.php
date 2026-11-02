@@ -78,9 +78,14 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/defaillances', [DefaillanceController::class, 'index']);
     Route::get('/defaillances/export', [DefaillanceController::class, 'export'])->middleware('throttle:20,1,export');
     Route::get('/defaillances/summary', [DefaillanceController::class, 'summary']);
+    // Agents proposés dans les filtres des archives (chefs de centre, central, superadmin)
+    Route::get('/defaillances/agents', [DefaillanceController::class, 'agents']);
     Route::patch('/defaillances/{alerte}', [DefaillanceController::class, 'update']);
     Route::post('/defaillances/{alerte}/prendre', [DefaillanceController::class, 'prendre']);
     Route::post('/defaillances/{alerte}/liberer', [DefaillanceController::class, 'liberer']);
+    // Affectation nominative d'un dossier libre : chefs de centre, central et superadmin
+    Route::get('/defaillances/{alerte}/agents', [DefaillanceController::class, 'agentsAssignables']);
+    Route::post('/defaillances/{alerte}/assigner', [DefaillanceController::class, 'assigner']);
     Route::get('/defaillances/{alerte}/dossier', [DefaillanceController::class, 'dossier']);
     // Fiche d'un contribuable (informations, coordonnées, alertes, historique, synthèse, observations) :
     // même filtrage par centre. Le PDF reprend exactement les mêmes données.
