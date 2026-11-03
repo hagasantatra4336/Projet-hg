@@ -34,17 +34,19 @@ class AnomalieAnalyseur
     }
 
     /**
+     * @param int|null $fenetre Nombre d'exercices analysés en plus de l'année de référence, pour CE passage
+     *                          uniquement (null = réglage enregistré de chaque règle, 1 par défaut).
      * @return array<string, mixed>
      */
-    public function analyser(?DateTimeInterface $date = null, ?int $centreId = null): array
+    public function analyser(?DateTimeInterface $date = null, ?int $centreId = null, ?int $fenetre = null): array
     {
         $date ??= self::aujourdhui();
 
-        $d = $this->defaillances->analyser($date, $centreId);
-        $c = $this->baissesCa->analyser($date, $centreId);
+        $d = $this->defaillances->analyser($date, $centreId, $fenetre);
+        $c = $this->baissesCa->analyser($date, $centreId, $fenetre);
 
         // Critères de risque R1, R2, R3, R5, R6, R7 (base d'analyse risque). Une base vide n'a aucun effet.
-        $risque = $this->risque->analyser($date, $centreId);
+        $risque = $this->risque->analyser($date, $centreId, $fenetre);
 
         // Règles personnalisées ACTIVES (brouillons et règles désactivées sont ignorés). Une règle en erreur
         // (colonne supprimée, indicateur désactivé...) ne bloque ni les autres règles ni l'analyse.
@@ -55,7 +57,7 @@ class AnomalieAnalyseur
                 continue;
             }
             try {
-                $resultat = $this->personnalisees->analyser($regle, $date, $centreId);
+                $resultat = $this->personnalisees->analyser($regle, $date, $centreId, fenetre: $fenetre);
             } catch (Throwable $e) {
                 report($e);
                 $detailPerso[$regle->code] = ['erreur' => $e->getMessage()];

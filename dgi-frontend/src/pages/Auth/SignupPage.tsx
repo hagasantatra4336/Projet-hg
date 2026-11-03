@@ -432,7 +432,7 @@ export default function SignupPage() {
   return (
     <AuthLayout>
       <div className="mb-1 flex items-center gap-2">
-        <span className="h-1.5 w-8 rounded-full bg-brand-gold" aria-hidden="true" />
+        {/*<span className="h-1.5 w-8 rounded-full bg-brand-gold" aria-hidden="true" />*/}
         <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">Nouvel accès</span>
       </div>
       <h1 className="text-2xl font-bold tracking-tight text-brand-blue">Créer un compte</h1>

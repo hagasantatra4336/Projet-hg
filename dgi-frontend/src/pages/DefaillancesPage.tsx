@@ -32,7 +32,6 @@ import {
   NiveauBadge,
   RegleBadge,
   StatutBadge,
-  aujourdhui,
   formatDate,
   formatDateHeure,
 } from "../components/defaillance";
@@ -66,6 +65,28 @@ interface ImportResult {
   erreurs: string[];
 }
 
+/** Compteurs d'un passage d'analyse pour une famille de règles. */
+interface RegleStats {
+  analyses: number;
+  crees: number;
+  mis_a_jour: number;
+  regularisees: number;
+}
+
+/** Réponse de POST /defaillances/analyser : message de synthèse + statistiques détaillées du passage. */
+interface AnalyseStats extends RegleStats {
+  date: string;
+  defaillance: RegleStats;
+  baisse_ca: RegleStats;
+  risque: RegleStats & { par_regle: Record<string, number>; inactives?: string[] };
+  personnalisees: Record<string, Partial<RegleStats> & { erreur?: string }>;
+  desactivees: string[];
+  message: string;
+}
+
+/** Années proposées au lancement manuel : l'année en cours et les cinq précédentes (maximum de la fenêtre). */
+const ANNEES_ANALYSE: number[] = Array.from({ length: 6 }, (_, i) => new Date().getFullYear() - i);
+
 /** Agent du centre susceptible de recevoir un dossier. */
 interface AgentOption {
   id: number;
@@ -97,6 +118,73 @@ function ageAffiche(iso: string | null): string {
   if (!iso) return "—";
   const jours = joursDepuis(iso);
   return jours === 0 ? "Aujourd'hui" : `${jours.toLocaleString("fr-FR")} j`;
+}
+
+/** Détail du dernier passage d'analyse : compteurs par famille de règles. */
+function DetailsAnalyse({ stats }: { stats: AnalyseStats }) {
+  const ligne = (label: string, s: RegleStats, total = false) => (
+    <tr key={label} className={total ? "font-semibold" : ""}>
+      <th scope="row" className="px-2 py-1.5 text-left font-medium text-slate-700">
+        {label}
+      </th>
+      <td className="px-2 py-1.5 text-right tabular-nums">{s.analyses}</td>
+      <td className="px-2 py-1.5 text-right tabular-nums">{s.crees}</td>
+      <td className="px-2 py-1.5 text-right tabular-nums">{s.mis_a_jour}</td>
+      <td className="px-2 py-1.5 text-right tabular-nums">{s.regularisees}</td>
+    </tr>
+  );
+
+  const libelles = REGLE_LABELS as Record<string, string>;
+  const parCritere = Object.entries(stats.risque.par_regle).map(([code, n]) => `${libelles[code] ?? code} : ${n}`);
+  const perso = Object.entries(stats.personnalisees);
+
+  return (
+    <div className="overflow-x-auto rounded-lg border border-line bg-white">
+      <table className="w-full text-sm">
+        <thead>
+          <tr className="border-b border-line bg-slate-50 text-[11px] uppercase tracking-wider text-slate-500">
+            <th className="px-2 py-2 text-left">Règle</th>
+            <th className="px-2 py-2 text-right">Analysées</th>
+            <th className="px-2 py-2 text-right">Créées</th>
+            <th className="px-2 py-2 text-right">Mises à jour</th>
+            <th className="px-2 py-2 text-right">Régularisées</th>
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-line">
+          {ligne("Défaut de dépôt (R4)", stats.defaillance)}
+          {ligne("Baisse du chiffre d'affaires", stats.baisse_ca)}
+          {ligne("Critères de risque R1–R7", stats.risque)}
+          {(parCritere.length > 0 || (stats.risque.inactives?.length ?? 0) > 0) && (
+            <tr>
+              <td colSpan={5} className="px-2 py-1.5 text-xs text-slate-500">
+                {parCritere.length > 0 && <>Alertes (créées ou mises à jour) par critère — {parCritere.join(" · ")}</>}
+                {(stats.risque.inactives?.length ?? 0) > 0 &&
+                  ` Critères désactivés : ${(stats.risque.inactives ?? []).join(", ")}.`}
+              </td>
+            </tr>
+          )}
+          {perso.map(([code, s]) =>
+            s.erreur ? (
+              <tr key={code}>
+                <td colSpan={5} className="px-2 py-1.5 text-xs text-red-600">
+                  {code} : {s.erreur}
+                </td>
+              </tr>
+            ) : (
+              ligne(code, {
+                analyses: s.analyses ?? 0,
+                crees: s.crees ?? 0,
+                mis_a_jour: s.mis_a_jour ?? 0,
+                regularisees: s.regularisees ?? 0,
+              })
+            ),
+          )}
+          {ligne("Total du passage", stats, true)}
+        </tbody>
+      </table>
+      <p className="border-t border-line px-2 py-1.5 text-xs text-slate-500">Passage du {formatDate(stats.date)}</p>
+    </div>
+  );
 }
 
 // Contrôles de filtre compacts (même hauteur, largeur selon le contenu)
@@ -160,10 +248,12 @@ export default function DefaillancesPage() {
 
   // Lancer l'analyse
   const [analyseOpen, setAnalyseOpen] = useState<boolean>(false);
-  const [analysePeriode, setAnalysePeriode] = useState<string>(aujourdhui());
+  const [anneesChoisies, setAnneesChoisies] = useState<number[]>([ANNEES_ANALYSE[0], ANNEES_ANALYSE[1]]);
   const [analyseRunning, setAnalyseRunning] = useState<boolean>(false);
   const [analyseError, setAnalyseError] = useState<string>("");
   const [analyseMessage, setAnalyseMessage] = useState<string>("");
+  const [analyseStats, setAnalyseStats] = useState<AnalyseStats | null>(null);
+  const [analyseDetailOpen, setAnalyseDetailOpen] = useState<boolean>(false);
 
   // Import CSV
   const [importOpen, setImportOpen] = useState<boolean>(false);
@@ -381,13 +471,19 @@ export default function DefaillancesPage() {
 
   async function handleAnalyse(e: FormEvent) {
     e.preventDefault();
+    if (anneesChoisies.length === 0) return;
     setAnalyseRunning(true);
     setAnalyseError("");
     setAnalyseMessage("");
+    setAnalyseStats(null);
 
     try {
-      const res = await api.post<{ message: string }>("/defaillances/analyser", { date: analysePeriode });
+      const res = await api.post<AnalyseStats>("/defaillances/analyser", {
+        annees: [...anneesChoisies].sort((a, b) => b - a),
+      });
       setAnalyseMessage(res.data.message);
+      setAnalyseStats(res.data);
+      setAnalyseDetailOpen(true);
       setFilters((f) => ({ ...f, statut: "a_traiter", regle: "", niveau: "", type_impot: "", annee_fiscale: "" }));
       setPage(1);
       reload();
@@ -397,6 +493,10 @@ export default function DefaillancesPage() {
     } finally {
       setAnalyseRunning(false);
     }
+  }
+
+  function toggleAnnee(annee: number) {
+    setAnneesChoisies((v) => (v.includes(annee) ? v.filter((a) => a !== annee) : [...v, annee]));
   }
 
   // ---- Import CSV ----
@@ -533,7 +633,6 @@ export default function DefaillancesPage() {
                 type="button"
                 className={`${primaryButtonClass} inline-flex items-center gap-2`}
                 onClick={() => {
-                  setAnalyseMessage("");
                   setAnalyseError("");
                   setAnalyseOpen(true);
                 }}
@@ -1021,24 +1120,50 @@ export default function DefaillancesPage() {
             )}
 
             <Field
-              label="Date d'analyse"
+              label="Années à analyser"
               required
-              hint="Les dates limites dépassées à cette date sont contrôlées. Par défaut, aujourd'hui."
+              hint="La plus récente cochée est l'année de référence ; toutes les années entre la plus ancienne et la plus récente sont analysées (six au maximum)."
             >
-              <input
-                type="date"
-                required
-                className={inputClass}
-                value={analysePeriode}
-                onChange={(e) => setAnalysePeriode(e.target.value)}
-              />
+              <div className="flex flex-wrap gap-x-4 gap-y-2">
+                {ANNEES_ANALYSE.map((annee) => (
+                  <label key={annee} className="flex items-center gap-2 text-sm text-slate-700">
+                    <input
+                      type="checkbox"
+                      className="h-4 w-4 accent-brand-blue"
+                      checked={anneesChoisies.includes(annee)}
+                      onChange={() => toggleAnnee(annee)}
+                    />
+                    {annee}
+                    {annee === ANNEES_ANALYSE[0] && <span className="text-xs text-slate-500">(en cours)</span>}
+                  </label>
+                ))}
+              </div>
             </Field>
+            <p className="-mt-2 text-xs text-slate-500">
+              Une année révolue est jugée telle qu'on la connaissait au 31 décembre de cette année (seules les échéances déjà
+              dépassées à cette date sont contrôlées). Les critères R1–R7 jugent, eux, le dernier exercice fermé à cette date
+              (l'IR étant déclaré en mai, c'est l'année précédente).
+            </p>
+
+            {analyseStats && (
+              <div className="space-y-2">
+                <button
+                  type="button"
+                  className="text-sm font-medium text-brand-azure underline hover:text-brand-blue"
+                  onClick={() => setAnalyseDetailOpen((v) => !v)}
+                >
+                  {analyseDetailOpen ? "Masquer les détails du passage" : "Voir les détails du passage"}
+                </button>
+
+                {analyseDetailOpen && <DetailsAnalyse stats={analyseStats} />}
+              </div>
+            )}
 
             <FormActions>
               <button type="button" className={secondaryButtonClass} onClick={() => setAnalyseOpen(false)}>
                 Fermer
               </button>
-              <button type="submit" className={primaryButtonClass} disabled={analyseRunning || !analysePeriode}>
+              <button type="submit" className={primaryButtonClass} disabled={analyseRunning || anneesChoisies.length === 0}>
                 {analyseRunning ? "Analyse en cours..." : "Lancer l'analyse"}
               </button>
             </FormActions>

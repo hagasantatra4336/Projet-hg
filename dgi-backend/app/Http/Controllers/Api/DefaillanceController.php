@@ -20,6 +20,7 @@ use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 use Throwable;
 
@@ -937,16 +938,37 @@ class DefaillanceController extends Controller
         ]);
     }
 
-    /** Lance le moteur de détection (superadmin, central, admin) à la date indiquée (aujourd'hui par défaut). */
+    /** Lance le moteur de détection (superadmin, central, admin) à la date indiquée (aujourd'hui par défaut) ou sur les années cochées. */
     public function analyser(Request $request): JsonResponse
     {
         $me = $request->user();
 
         $data = $request->validate([
             'date' => ['nullable', 'date_format:Y-m-d'],
+            'annees' => ['nullable', 'array', 'min:1', 'max:6'],
+            'annees.*' => ['integer', 'min:1990', 'max:'.(int) now()->format('Y')],
         ]);
 
-        $date = isset($data['date']) ? new DateTimeImmutable($data['date']) : AnomalieAnalyseur::aujourdhui();
+        $aujourdhui = AnomalieAnalyseur::aujourdhui();
+        $fenetre = null;
+
+        // Choix manuel d'années : la plus récente est l'année de référence, l'écart avec la plus ancienne
+        // donne la fenêtre (années analysées en plus). Une année révolue est jugée telle qu'on la connaissait
+        // au 31 décembre : seules les échéances dépassées à cette date sont contrôlées.
+        if (! empty($data['annees'])) {
+            $annees = array_map('intval', $data['annees']);
+            $fenetre = max($annees) - min($annees);
+            if ($fenetre > 5) {
+                throw ValidationException::withMessages([
+                    'annees' => 'Choisissez au plus six années consécutives (la plus récente et les cinq précédentes).',
+                ]);
+            }
+            $date = max($annees) < (int) $aujourdhui->format('Y')
+                ? new DateTimeImmutable(max($annees).'-12-31')
+                : $aujourdhui;
+        } else {
+            $date = isset($data['date']) ? new DateTimeImmutable($data['date']) : $aujourdhui;
+        }
 
         // L'admin n'analyse que son propre centre.
         $centreId = null;
@@ -955,8 +977,9 @@ class DefaillanceController extends Controller
             $centreId = $me->centre_id;
         }
 
-        $stats = app(AnomalieAnalyseur::class)->analyser($date, $centreId);
+        $stats = app(AnomalieAnalyseur::class)->analyser($date, $centreId, $fenetre);
 
+        $anneeDebut = (int) $date->format('Y') - $fenetre;
         return response()->json($stats + [
             'message' => sprintf(
                 "Analyse terminée : %d nouvelle(s) alerte(s) (%d défaillance(s), %d baisse(s) du chiffre d'affaires), %d mise(s) à jour, %d régularisée(s).",
@@ -965,7 +988,10 @@ class DefaillanceController extends Controller
                 $stats['baisse_ca']['crees'],
                 $stats['mis_a_jour'],
                 $stats['regularisees']
-            ).($stats['desactivees'] !== [] ? ' Règle(s) désactivée(s) dans les réglages : '.implode(', ', $stats['desactivees']).'.' : ''),
+            ).($fenetre !== null
+                ? sprintf(' Années analysées : %d à %d (réglages des règles ignorés pour ce passage).', $anneeDebut, (int) $date->format('Y'))
+                : '')
+            .($stats['desactivees'] !== [] ? ' Règle(s) désactivée(s) dans les réglages : '.implode(', ', $stats['desactivees']).'.' : ''),
         ]);
     }
 

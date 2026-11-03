@@ -9,35 +9,20 @@ use DateTimeImmutable;
 use DateTimeInterface;
 use Illuminate\Support\Facades\DB;
 
-/**
- * Détection de la DÉFAILLANCE DE DÉPÔT (critère R4 de la DGI : « Défaut de dépôt de déclaration »).
- *
- * Pour chaque contribuable, impôt et exercice (année fiscale) récent :
- *   1. on détermine les périodes à déclarer (obligations) :
- *        - d'après les ASSUJETTISSEMENTS du contribuable (actif, non exonéré) : 12 mois pour une périodicité
- *          mensuelle (TVA, IRSA), 1 déclaration pour une périodicité annuelle (IR, IS) ;
- *        - à défaut d'assujettissement connu pour cet impôt : déduites de sa première déclaration ;
- *        - jamais après la date de cessation ou de radiation du contribuable ;
- *   2. on ne retient que les périodes dont la DATE LIMITE DE PAIEMENT du calendrier fiscal officiel DGI
- *      (config « echeances », ex. TVA/IRSA : le 15 du mois suivant) + le délai d'analyse (48 h) est dépassée :
- *      les déclarations peuvent encore être déposées ou corrigées jusqu'à l'échéance, on ne juge pas avant ;
- *   3. celles qui n'ont pas de déclaration sont des « défauts de dépôt ».
- * Une alerte est créée par (contribuable, impôt, exercice) avec le score R4 (sur 5) :
- *   déclaration annuelle non déposée = 5 ; mois de TVA non déposés dans l'exercice : 1-4 → 2, 5-9 → 3, 10-12 → 4.
- *   Score 5 → risque élevé (rouge), 4 → moyen (orange), 2-3 → faible (vert). Seuils : config/anomalies.php.
- */
 class DefaillanceDetector
 {
     /**
      * @return array{date: string, analyses: int, crees: int, mis_a_jour: int, regularisees: int}
      */
-    public function analyser(DateTimeInterface $date, ?int $centreId = null): array
+    public function analyser(DateTimeInterface $date, ?int $centreId = null, ?int $fenetre = null): array
     {
         $cfg = config('anomalies.defaillance');
+        if ($fenetre !== null) {
+            $cfg['fenetre_exercices'] = $fenetre; 
+        }
         $aujourdhui = $date->format('Y-m-d');
         $anneeMin = (int) $date->format('Y') - (int) $cfg['fenetre_exercices'];
 
-        // Contribuables concernés (filtre par centre pour l'admin)
         $contribuables = [];
         $q = DB::table('contribuables')->select('id', 'date_cessation', 'date_radiation');
         if ($centreId !== null) {
@@ -102,7 +87,7 @@ class DefaillanceDetector
         $stats = ['date' => $aujourdhui, 'analyses' => count($paires), 'crees' => 0, 'mis_a_jour' => 0, 'regularisees' => 0];
 
         // Écriture : création / mise à jour des alertes, puis régularisation de celles qui ne tiennent plus
-        DB::transaction(function () use ($trouvees, $anneeMin, $centreId, &$stats) {
+        DB::transaction(function () use ($trouvees, $anneeMin, $centreId, $date, &$stats) {
             $actuelles = [];
 
             foreach ($trouvees as $t) {
@@ -141,11 +126,12 @@ class DefaillanceDetector
                 $actuelles[$t['contribuable_id'] . '|' . $t['type_impot'] . '|' . $t['annee_fiscale']] = true;
             }
 
-            // Alertes encore « à traiter » dont les déclarations ont depuis été déposées → régularisées automatiquement
+            // Alertes encore « à traiter » dont les déclarations ont depuis été déposées → régularisées automatiquement.
+            // Bornées à l'année du passage : une analyse rétro sur un ancien exercice ne juge pas les années suivantes.
             $ouvertes = Alerte::query()
                 ->where('regle', Alerte::REGLE_DEFAILLANCE)
                 ->where('statut', Alerte::A_TRAITER)
-                ->where('annee_fiscale', '>=', $anneeMin)
+                ->whereBetween('annee_fiscale', [$anneeMin, (int) $date->format('Y')])
                 ->when($centreId !== null, fn ($q) => $q->whereHas(
                     'contribuable',
                     fn ($c) => $c->where('centre_id', $centreId)

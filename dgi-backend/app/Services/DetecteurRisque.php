@@ -20,7 +20,7 @@ class DetecteurRisque
     private const NOMS_MOIS = ['janvier', 'février', 'mars', 'avril', 'mai', 'juin', 'juillet', 'août', 'septembre', 'octobre', 'novembre', 'décembre'];
 
     /** @return array{analyses: int, crees: int, mis_a_jour: int, regularisees: int, par_regle: array<string, int>, inactives: array<int, string>} */
-    public function analyser(DateTimeInterface $date, ?int $centreId = null): array
+    public function analyser(DateTimeInterface $date, ?int $centreId = null, ?int $fenetre = null): array
     {
         $stats = ['analyses' => 0, 'crees' => 0, 'mis_a_jour' => 0, 'regularisees' => 0, 'par_regle' => [], 'inactives' => []];
 
@@ -28,6 +28,9 @@ class DetecteurRisque
         foreach (CalculRisque::CODES as $code) {
             if (ReglesDetection::actif($code)) {
                 $cfgs[$code] = ReglesDetection::parametres($code);
+                if ($fenetre !== null) {
+                    $cfgs[$code]['fenetre_exercices'] = $fenetre; // passage ponctuel : réglage enregistré inchangé
+                }
             } else {
                 $stats['inactives'][] = $code;
             }

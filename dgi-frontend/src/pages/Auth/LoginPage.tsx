@@ -123,10 +123,10 @@ export default function LoginPage() {
 
   return (
     <AuthLayout>
-      <div className="mb-1 flex items-center gap-2">
+      {/*<div className="mb-1 flex items-center gap-2">
         <span className="h-1.5 w-8 rounded-full bg-brand-gold" aria-hidden="true" />
         <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">Espace agent</span>
-      </div>
+      </div>*/}
       <h1 className="text-2xl font-bold tracking-tight text-brand-blue">Connexion</h1>
       <p className="mt-1 text-sm text-slate-500">Accédez au suivi des dossiers et aux alertes de votre centre.</p>
 
@@ -170,7 +170,7 @@ export default function LoginPage() {
           <p className="rounded-lg border border-line bg-slate-50 px-4 py-3 text-center text-sm text-slate-600">
             Code à 6 chiffres envoyé à <span className="font-semibold text-brand-blue">{form.email}</span>.
             <br />
-            Valable 10 minutes.
+            Valable 5 minutes.
           </p>
           <input
             className={`${inputClass} text-center tracking-[0.5em] text-xl font-semibold`}

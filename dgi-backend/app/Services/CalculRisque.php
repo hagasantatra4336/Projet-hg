@@ -11,12 +11,9 @@ namespace App\Services;
 class CalculRisque
 {
     public const CODES = ['r1', 'r2', 'r3', 'r5', 'r6', 'r7'];
-
-    /** Score maximal de chaque critère. */
     public const SCORE_MAX = ['r1' => 10, 'r2' => 5, 'r3' => 5, 'r5' => 5, 'r6' => 10, 'r7' => 10];
 
-    /** Écart relatif entre deux montants, sur 10 : |a - b| / max(a, b) * 10 (R1, R6, R7). Deux montants nuls : 0. */
-    public static function ecartSur10(float $a, float $b): float
+     public static function ecartSur10(float $a, float $b): float
     {
         $max = max($a, $b);
         if ($max <= 0) {
@@ -28,7 +25,6 @@ class CalculRisque
 
     /**
      * Niveau d'après le score : null (vert), « moyen » (orange), « eleve » (rouge).
-     * $strict = true : orange si score > seuil moyen (R1, R6, R7 : « 3 < R <= 6 ») ; false : score >= seuil (R2, R3, R5).
      */
     public static function niveau(float $score, float $seuilMoyen, float $seuilEleve, bool $strict): ?string
     {
