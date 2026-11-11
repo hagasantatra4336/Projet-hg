@@ -15,7 +15,6 @@ import ReglesPersonnaliseesPage from "./pages/Admin/ReglesPersonnaliseesPage";
 import DashboardPage from "./pages/DashboardPage";
 import DefaillancesPage from "./pages/DefaillancesPage";
 import TraitementsPage from "./pages/TraitementsPage";
-import ArchivesPage from "./pages/ArchivesPage";
 import DossierTraitementPage from "./pages/DossierTraitementPage";
 import ContribuableFichePage from "./pages/ContribuableFichePage";
 import ContribuableFicheApercuPage from "./pages/ContribuableFicheApercuPage";
@@ -48,10 +47,10 @@ export default function App() {
           <Route path="/profile/attente" element={<ProfileWaitingPage />} />
           {/* Défaillances de déclaration : admin, central et superadmin (l'agent travaille depuis Traitements) */}
           <Route path="/defaillances" element={<AnomaliesRoute />} />
-          {/* Dossiers en cours de traitement */}
+          {/* Dossiers en cours de traitement + dossiers traités (onglet de cette page) */}
           <Route path="/traitements" element={<TraitementsPage />} />
-          {/* Dossiers clôturés (toutes anomalies traitées/régularisées), consultation seule */}
-          <Route path="/archives" element={<ArchivesPage />} />
+          {/* Ancienne page Archives : les dossiers traités vivent désormais dans Traitements */}
+          <Route path="/archives" element={<Navigate to="/traitements?vue=traites" replace />} />
           {/* Page de traitement d'un dossier (alerte) */}
           <Route path="/defaillances/:id/traitement" element={<DossierTraitementPage />} />
           {/* Fiche de résultat d'un contribuable (synthèse, coordonnées, observations, export PDF) */}

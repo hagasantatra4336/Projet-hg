@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import api, { getErrorMessage } from "../services/api";
 import { useAuth } from "../context/AuthContext";
 import { REGLE_LABELS, type ContribuableFiche, type DossierAlerte, type GroupeAlerte, type LigneBaseRisque } from "../types";
@@ -181,6 +181,7 @@ function Bandeau({
 export default function DossierTraitementPage() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const { hash } = useLocation();
   const { user } = useAuth();
   const canManage = user?.role === "superadmin" || user?.role === "central" || user?.role === "admin";
   // Un agent revient à sa liste de dossiers assignés ; les autres rôles à la page Anomalies.
@@ -223,6 +224,14 @@ export default function DossierTraitementPage() {
     }, HEARTBEAT_MS);
     return () => clearInterval(t);
   }, [enTraitementParMoi, id]);
+
+  // Lien « Voir » d'une alerte : on arrive directement sur l'anomalie concernée.
+  useEffect(() => {
+    if (!dossier) return;
+    const cible = hash.replace("#", "");
+    if (!cible.startsWith("alerte-")) return;
+    document.getElementById(cible)?.scrollIntoView({ behavior: "smooth", block: "center" });
+  }, [dossier, fiche, hash]);
 
   async function action(fn: () => Promise<void>, ok?: string) {
     setBusy(true);
@@ -294,6 +303,7 @@ export default function DossierTraitementPage() {
   const baisses = new Set((fiche?.alertes ?? []).filter((x) => x.regle === "baisse_ca").map((x) => `${x.type_impot}|${x.annee_fiscale}|${x.mois}`));
   const aDesDonnees = SOURCES.some((s) => dossier.indicateurs[s.cle].length > 0);
   const lectureSeule = !(groupe.statut === "en_traitement" && groupe.pris_par_moi);
+  const alerteCible = hash.replace("#", "");
 
   return (
     <div className="space-y-5">
@@ -386,7 +396,13 @@ export default function DossierTraitementPage() {
             const indicateurs = Object.entries(x.details?.indicateurs ?? {});
 
             return (
-              <li key={x.id} className="rounded-lg border border-line p-3 text-sm">
+              <li
+                key={x.id}
+                id={`alerte-${x.id}`}
+                className={`scroll-mt-24 rounded-lg border p-3 text-sm transition ${
+                  alerteCible === `alerte-${x.id}` ? "border-brand-gold bg-brand-gold-soft/40 ring-2 ring-brand-gold/30" : "border-line"
+                }`}
+              >
                 <div className="flex flex-wrap items-center gap-2">
                   <RegleBadge regle={x.regle} />
                   <NiveauBadge niveau={x.niveau} />

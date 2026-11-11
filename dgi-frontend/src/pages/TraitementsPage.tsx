@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import api, { getErrorMessage } from "../services/api";
 import { useAuth } from "../context/AuthContext";
 import { REGLE_LABELS, type GroupeAlerte, type Paginated } from "../types";
@@ -11,6 +11,7 @@ import {
   RegleBadge,
   formatDateHeure,
 } from "../components/defaillance";
+import ArchivesPage from "./ArchivesPage";
 
 // ---------------------------------------------------------------------
 //  Petits utilitaires
@@ -25,15 +26,22 @@ function pageWindow(current: number, last: number): number[] {
   return Array.from({ length: size }, (_, i) => start + i);
 }
 
+const tabBase = "rounded-md px-3 py-1.5 text-sm font-medium transition";
+const tabActive = "bg-brand-blue text-white shadow-sm";
+const tabIdle = "text-slate-600 hover:bg-slate-50";
+
+type VueTraitements = "cours" | "traites";
+
 // ---------------------------------------------------------------------
-//  Page Traitements : dossiers pris en charge (en cours de traitement).
-//  Les dossiers clôturés sont dans la page Archives.
+//  Page Traitements : dossiers en cours + dossiers traités (onglets).
 // ---------------------------------------------------------------------
 
 export default function TraitementsPage() {
   const { user } = useAuth();
   const role = user?.role ?? null;
   const canManage = role === "superadmin" || role === "central" || role === "admin";
+  const [searchParams, setSearchParams] = useSearchParams();
+  const vue: VueTraitements = searchParams.get("vue") === "traites" ? "traites" : "cours";
 
   const [data, setData] = useState<Paginated<GroupeAlerte> | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
@@ -62,6 +70,8 @@ export default function TraitementsPage() {
   // Dossiers de l'utilisateur : pour un agent, tous ses dossiers assignés (même si le verrou a expiré),
   // pour les autres rôles, les dossiers en cours de traitement.
   useEffect(() => {
+    if (vue !== "cours") return;
+
     let cancelled = false;
     if (!silentRef.current) setLoading(true);
     silentRef.current = false;
@@ -92,9 +102,14 @@ export default function TraitementsPage() {
     return () => {
       cancelled = true;
     };
-  }, [page, search, reloadKey, role]);
+  }, [page, search, reloadKey, role, vue]);
 
   const reload = useCallback(() => setReloadKey((k) => k + 1), []);
+
+  function changerVue(v: VueTraitements) {
+    setPage(1);
+    setSearchParams(v === "traites" ? { vue: "traites" } : {}, { replace: true });
+  }
 
   // Rafraîchissement automatique : un dossier libéré ou traité ailleurs disparaît de la liste
   useEffect(() => {
@@ -132,20 +147,43 @@ export default function TraitementsPage() {
 
   return (
     <div>
-      <div className="mb-4">
-        <h1 className="text-xl font-semibold tracking-tight text-brand-blue">Traitements</h1>
-        <p className="mt-1 text-sm text-slate-500">
-          {role === "agent"
-            ? "Dossiers que votre centre vous a assignés. "
-            : "Dossiers en cours de traitement. "}
-          Les dossiers clôturés sont dans{" "}
-          <Link to="/archives" className="font-medium text-brand-azure hover:underline">
-            Archives
-          </Link>
-          .
-        </p>
+      <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h1 className="text-xl font-semibold tracking-tight text-brand-blue">Traitements</h1>
+          <p className="mt-1 text-sm text-slate-500">
+            {vue === "traites"
+              ? "Dossiers clôturés : toutes leurs anomalies sont traitées ou régularisées."
+              : role === "agent"
+                ? "Dossiers que votre centre vous a assignés."
+                : "Dossiers en cours de traitement."}
+          </p>
+        </div>
+
+        <div role="tablist" aria-label="Vue des traitements" className="inline-flex rounded-lg border border-line bg-white p-1 shadow-sm">
+          <button
+            type="button"
+            role="tab"
+            aria-selected={vue === "cours"}
+            onClick={() => changerVue("cours")}
+            className={`${tabBase} ${vue === "cours" ? tabActive : tabIdle}`}
+          >
+            En cours
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={vue === "traites"}
+            onClick={() => changerVue("traites")}
+            className={`${tabBase} ${vue === "traites" ? tabActive : tabIdle}`}
+          >
+            Dossiers traités
+          </button>
+        </div>
       </div>
 
+      {vue === "traites" && <ArchivesPage embedded />}
+
+      {vue === "cours" && (
       <section className="rounded-xl bg-white p-4 border border-line sm:p-5">
         {/* Recherche */}
         <div className="relative mb-3 sm:max-w-xs">
@@ -319,6 +357,7 @@ export default function TraitementsPage() {
           </div>
         )}
       </section>
+      )}
 
       {ficheId !== null && <ContribuableModal id={ficheId} onClose={() => setFicheId(null)} />}
 

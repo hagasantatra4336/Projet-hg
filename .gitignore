@@ -1,0 +1,7 @@
+# Scripts et fichiers de travail locaux
+.qoder-tmp/
+
+# Secrets
+.env
+.env.backup
+.env.production

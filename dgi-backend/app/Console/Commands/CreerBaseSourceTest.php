@@ -15,7 +15,8 @@ use Throwable;
  * Crée (si besoin) la base PostgreSQL de TEST utilisée comme source, avec les MÊMES tables et colonnes que la vraie base
  * de la DGI (exemples fournis) et des données SIMULÉES ET ANONYMISÉES :
  *   declaration_ir, declaration_tva (une ligne par ligne du formulaire, CA = ligne 15 / 170, DATE_ECHEANCE, versions),
- *   assujettissement (impôt, année, périodicité), info_contribuable (état, centre), centre_gestionnaire (identifiants).
+ *   assujettissement (impôt, année, périodicité), info_contribuable (état, centre), centre_gestionnaire (identifiants)
+ *   et agents (personnel E-Kajy, créé par dgi:agents-source).
  * Mêmes scénarios que DeclarationDemoSeeder (défaillances, baisses de CA, cessation, radiation, exonération...)
  * + quelques lignes invalides pour vérifier les rejets :
  *   php artisan dgi:source-test-db            # crée la base + les tables + les données (relançable)
@@ -84,6 +85,7 @@ class CreerBaseSourceTest extends Command
         try {
             $this->creerBase($cfg, $base, (bool) $this->option('reset'));
             $total = $this->remplir($connexion, $centres);
+            $this->call('dgi:agents-source'); // table du personnel, alimentée avec les comptes existants
         } catch (Throwable $e) {
             $this->error("Échec : {$e->getMessage()}");
             $this->line('Vérifiez que PostgreSQL tourne, SOURCE_DB_* dans le .env, et que le compte a le droit CREATEDB.');

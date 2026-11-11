@@ -28,6 +28,10 @@ Route::get('/signup-options', [AuthController::class, 'signupOptions'])->middlew
 // (aucun OTP n'est envoyé : le chef de centre doit d'abord approuver).
 Route::post('/register', [AuthController::class, 'register'])->middleware('throttle:10,1,signup-register');
 
+// Bouton « Vérifier » du champ e-mail : format, compte/demande existants et domaine joignable.
+// N'envoie aucun e-mail : le code OTP reste envoyé après approbation de la demande.
+Route::post('/register/check-email', [AuthController::class, 'checkEmail'])->middleware('throttle:20,1,signup-check-email');
+
 // Suivi public de la demande : la page d'attente interroge cette route jusqu'à l'approbation
 // (l'identifiant aléatoire de 48 caractères fait office de secret)
 Route::get('/register/status/{requestId}', [AuthController::class, 'signupStatus'])
@@ -154,6 +158,8 @@ Route::middleware('auth:sanctum')->group(function () {
 
     // Gestion des fonctions et de leur rôle : superadmin uniquement
     Route::middleware(EnsureRole::class.':superadmin')->group(function () {
+        // Afficher/masquer un service central dans l'inscription (le centre n'est pas supprimé).
+        Route::patch('/centres/{centre}/affichage', [CentreController::class, 'affichage']);
         Route::apiResource('fonctions', FonctionController::class)->except('show');
     });
 });

@@ -10,7 +10,7 @@ class FormulesRegles
 {
     /**
      * @param array<string, mixed> $p réglages en vigueur de la règle
-     * @return array{formules: array<int, array{label: string, expr: string}>, sources: array<int, string>, niveaux: array<int, array{couleur: string, texte: string}>}
+     * @return array{formules: array<int, array{label: string, expr: string}>, sources: array<int, string>, exemple: string, niveaux: array<int, array{couleur: string, texte: string}>}
      */
     public static function pour(string $code, array $p = []): array
     {
@@ -23,6 +23,7 @@ class FormulesRegles
                     ['label' => 'Déclarations mensuelles (TVA, IRSA)', 'expr' => 'score selon le nombre de mois non déposés dans l\'exercice : ' . self::bareme($p['bareme_mensuel'] ?? [])],
                 ],
                 'sources' => ['Déclarations déposées (date de dépôt) et obligations (assujettissements) de chaque contribuable'],
+                'exemple' => 'ex. contribuable assujetti à la TVA sans aucune déclaration de mars à décembre 2025 → 10 mois non déposés → score 4/5 → risque moyen.',
                 'niveaux' => [
                     ['couleur' => 'vert', 'texte' => 'score inférieur à ' . $n($p['score_moyen'] ?? 4) . ' : risque faible, contribuable à relancer'],
                     ['couleur' => 'orange', 'texte' => 'score de ' . $n($p['score_moyen'] ?? 4) . ' à moins de ' . $n($p['score_eleve'] ?? 5) . ' : risque moyen, à surveiller de près'],
@@ -35,6 +36,7 @@ class FormulesRegles
                     ['label' => 'Période de référence', 'expr' => 'TVA : même mois de l\'année précédente ; IR et IS : exercice précédent'],
                 ],
                 'sources' => ['CA : ligne 15 de l\'IR, ligne 170 de la TVA'],
+                'exemple' => 'ex. CA TVA de 80 M en mars 2025 contre 120 M en mars 2024 → baisse de 33 % → alerte de risque faible.',
                 'niveaux' => [
                     ['couleur' => 'vert', 'texte' => 'baisse inférieure à ' . $n($p['seuil_pourcentage'] ?? 30) . ' % : pas d\'alerte'],
                     ['couleur' => 'faible', 'texte' => 'baisse d\'au moins ' . $n($p['seuil_pourcentage'] ?? 30) . ' % : alerte de risque faible'],
@@ -45,6 +47,7 @@ class FormulesRegles
             'r1' => [
                 'formules' => [['label' => 'Score R1 (sur 10)', 'expr' => 'R1 = |CA IR − CA TVA| ÷ max(CA IR ; CA TVA) × 10']],
                 'sources' => ['CA IR : ligne 15 de l\'IR', 'CA TVA : ligne 170 de la TVA, somme des mois de l\'exercice'],
+                'exemple' => 'ex. CA IR 500 M contre CA TVA 300 M → écart de 200 M ÷ 500 M × 10 = 4 → risque moyen (CA sous-déclaré à la TVA ou sur-déclaré à l\'IR).',
                 'niveaux' => self::niveauxStrict($n($p['seuil_moyen'] ?? 3), $n($p['seuil_eleve'] ?? 6), 'écart faible', 'écart important, risque moyen', 'écart élevé, à contrôler'),
             ],
             'r2' => [
@@ -53,6 +56,7 @@ class FormulesRegles
                     ['label' => 'Score R2 (sur 5)', 'expr' => '1 exercice → 1 ; 2 exercices → 2,5 ; 3 exercices → 5'],
                 ],
                 'sources' => ['Résultat : ligne 20 de l\'IR'],
+                'exemple' => 'ex. résultat IR négatif en 2023, 2024 et 2025 → 3 exercices consécutifs → score 5/5 → risque élevé.',
                 'niveaux' => self::niveauxLarge($n($p['seuil_moyen'] ?? 2.5), $n($p['seuil_eleve'] ?? 5), 'déficit isolé', 'déficit sur 2 exercices', 'déficit sur 3 exercices'),
             ],
             'r3' => [
@@ -61,6 +65,7 @@ class FormulesRegles
                     ['label' => 'Score R3 (sur 5)', 'expr' => 'score = nombre de mois (5 mois ou plus → 5)'],
                 ],
                 'sources' => ['Crédit de TVA : ligne 400 de la TVA'],
+                'exemple' => 'ex. crédit de TVA (ligne 400) non nul de janvier à juin 2025 → 6 mois consécutifs → score 5/5 → risque élevé.',
                 'niveaux' => self::niveauxLarge($n($p['seuil_moyen'] ?? 3), $n($p['seuil_eleve'] ?? 5), 'moins de ' . $n($p['seuil_moyen'] ?? 3) . ' mois', 'à surveiller', 'crédit de TVA anormalement persistant'),
             ],
             'r5' => [
@@ -73,6 +78,7 @@ class FormulesRegles
                     ['label' => 'Score R5 (sur 5)', 'expr' => 'points pour chaque % : > 10 → 1 ; > 20 → 2 ; > 30 → 3 ; > 40 → 4 ; > 50 → 5. Score = moyenne des points IR et TVA'],
                 ],
                 'sources' => ['Recoupement par NIF et par année', 'TVA déductible : lignes 300, 340, 315-316-320 (locaux) ; 305, 345, 330-335 (importés)'],
+                'exemple' => 'ex. CA recoupé 400 M contre CA TVA 250 M → écart de 150 M, soit 60 % → score 5/5 → risque élevé (ventes non déclarées).',
                 'niveaux' => self::niveauxLarge($n($p['seuil_moyen'] ?? 3), $n($p['seuil_eleve'] ?? 5), 'dissimulation de CA ou majoration de stocks faible', 'dissimulation ou majoration de stocks importante', 'dissimulation ou majoration de stocks très élevée'),
             ],
             'r6' => [
@@ -82,6 +88,7 @@ class FormulesRegles
                     ['label' => 'Cas limites', 'expr' => 'S1 = S2 = 0 → 0 ; S2 ≠ 0 et S1 = 0 → 10 (déduction possible à tort) ; S1 ≠ 0 et S2 = 0 → 10 (dissimulation possible)'],
                 ],
                 'sources' => ['DAU modèle IM4 : colonne TVA', 'TVA : ligne 305'],
+                'exemple' => 'ex. TVA des DAU IM4 = 50 M contre TVA déductible importée (ligne 305) = 20 M → écart de 30 M ÷ 50 M × 10 = 6 → risque moyen.',
                 'niveaux' => self::niveauxStrict($n($p['seuil_moyen'] ?? 3), $n($p['seuil_eleve'] ?? 6), 'écart faible', 'écart important', 'écart élevé, à contrôler'),
             ],
             'r7' => [
@@ -91,9 +98,10 @@ class FormulesRegles
                     ['label' => 'Cas limites', 'expr' => 'S1 = S2 = 0 → 0 ; S2 ≠ 0 et S1 = 0 → 10 (blanchiment possible) ; S1 ≠ 0 et S2 = 0 → 10 (dissimulation possible)'],
                 ],
                 'sources' => ['DAU modèle EX1 : colonne VALEUR_CAF', 'TVA : ligne 100'],
+                'exemple' => 'ex. valeur CAF des DAU EX1 = 200 M contre CA export déclaré (ligne 100) = 120 M → écart de 80 M ÷ 200 M × 10 = 4 → risque moyen.',
                 'niveaux' => self::niveauxStrict($n($p['seuil_moyen'] ?? 3), $n($p['seuil_eleve'] ?? 6), 'écart faible', 'écart important', 'écart élevé, à contrôler'),
             ],
-            default => ['formules' => [], 'sources' => [], 'niveaux' => []],
+            default => ['formules' => [], 'sources' => [], 'exemple' => '', 'niveaux' => []],
         };
     }
 

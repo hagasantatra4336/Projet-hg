@@ -4,11 +4,12 @@ namespace Database\Seeders;
 
 use App\Models\BaseRisque;
 use App\Models\Contribuable;
+use App\Services\CalendrierFiscal;
 use App\Support\Nif;
 use Illuminate\Database\Seeder;
 
 /**
- * Exemples de critères de risque R1, R2, R3, R5, R6 et R7 sur les contribuables de DeclarationDemoSeeder.
+ * Exemples de critères de risque R1, R2, R3, R5, R6 et R7 (sur le dernier exercice clos).
  *
  * Un contribuable par critère, avec des valeurs choisies pour déclencher une alerte rouge
  * (et une alerte orange R2 pour l'exercice précédent, pour montrer un dossier à plusieurs anomalies) :
@@ -19,23 +20,30 @@ use Illuminate\Database\Seeder;
  *   19 → R6 : TVA des DAU IM4 (40 M) sans TVA déductible sur biens importés (2 M)
  *   25 → R7 : valeur CAF des DAU EX1 (100 M) très supérieure au CA taxable export (30 M)
  *
- * Les lignes existantes de ces six contribuables sont remplacées (les autres contribuables ne sont pas touchés).
- * Après le chargement : php artisan dgi:detecter-defaillances
+ * Les NIF de démonstration (90000xxxxx) sont utilisés s'ils existent ; sinon le seeder se rabat sur les
+ * contribuables actifs de la base, pour que la démonstration fonctionne sur n'importe quel jeu de données.
+ * Les lignes existantes de ces contribuables sont remplacées (les autres contribuables ne sont pas touchés).
+ * Après le chargement, lancez l'analyse depuis la page Anomalies pour créer les alertes.
  */
 class AnomaliesRisqueDemoSeeder extends Seeder
 {
     public function run(): void
     {
-        $annee = (int) now()->format('Y');
+        // Les critères R1 à R7 ne sont jugés que sur un exercice CLOS : on vise le dernier exercice clos.
+        $annee = CalendrierFiscal::dernierExerciceClos(now()) ?? (int) now()->format('Y') - 1;
         $nb = 0;
+        $actifs = Contribuable::query()->where('etat', 1)->orderBy('id')->get();
+        $utilises = [];
 
         foreach ($this->exemples($annee) as $numero => $lignes) {
             $nif = Nif::normaliser('90000' . sprintf('%05d', $numero));
-            $contribuable = Contribuable::where('nif', $nif)->first();
+            $contribuable = Contribuable::where('nif', $nif)->first()
+                ?? $actifs->first(fn ($c) => ! in_array($c->id, $utilises, true));
 
             if ($contribuable === null) {
-                continue; // jeu de démonstration absent : rien à enrichir
+                continue; // aucun contribuable actif disponible : rien à enrichir
             }
+            $utilises[] = $contribuable->id;
 
             BaseRisque::where('contribuable_id', $contribuable->id)->delete();
 
@@ -50,11 +58,11 @@ class AnomaliesRisqueDemoSeeder extends Seeder
             }
 
             $nb++;
-            $this->command?->line("  {$contribuable->nom} ({$nif}) : " . count($lignes) . ' ligne(s) — ' . $lignes[0]['critere']);
+            $this->command?->line("  {$contribuable->nom} ({$contribuable->nif}) : " . count($lignes) . ' ligne(s) — ' . $lignes[0]['critere']);
         }
 
         if ($nb === 0) {
-            $this->command?->warn("Aucun contribuable de démonstration trouvé : lancez d'abord DeclarationDemoSeeder.");
+            $this->command?->warn("Aucun contribuable actif trouvé : rien à enrichir.");
 
             return;
         }

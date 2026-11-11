@@ -14,6 +14,7 @@ import { ErrorBox, primaryButtonClass } from "../components/ui";
 import { IconSearch } from "../components/icons";
 import SearchSelect from "../components/SearchSelect";
 import {
+  AnomaliesDossierModal,
   ContribuableModal,
   NiveauBadge,
   RegleBadge,
@@ -53,10 +54,11 @@ interface AgentOption {
 type SortField = "traite_le" | "centre";
 
 // ---------------------------------------------------------------------
-//  Page Archives : dossiers clôturés (toutes anomalies traitées/régularisées)
+//  Dossiers traités : dossiers clôturés (toutes anomalies traitées/régularisées)
+//  Rendu dans l'onglet « Dossiers traités » de la page Traitements.
 // ---------------------------------------------------------------------
 
-export default function ArchivesPage() {
+export default function ArchivesPage({ embedded = false }: { embedded?: boolean }) {
   const { user } = useAuth();
   const role = user?.role ?? null;
   const estAgent = role === "agent";
@@ -72,6 +74,7 @@ export default function ArchivesPage() {
   const [reloadKey, setReloadKey] = useState<number>(0);
   const silentRef = useRef<boolean>(false);
   const [ficheId, setFicheId] = useState<number | null>(null);
+  const [anomaliesGroupe, setAnomaliesGroupe] = useState<GroupeAlerte | null>(null);
   const navigate = useNavigate();
 
   const [searchInput, setSearchInput] = useState<string>("");
@@ -198,9 +201,14 @@ export default function ArchivesPage() {
 
   return (
     <div>
-      <div className="mb-4">
-        <h1 className="text-xl font-semibold tracking-tight text-brand-blue">Archives</h1>
-      </div>
+      {!embedded && (
+        <div className="mb-4">
+          <h1 className="text-xl font-semibold tracking-tight text-brand-blue">Dossiers traités</h1>
+          <p className="mt-1 text-sm text-slate-500">
+            Dossiers clôturés : toutes leurs anomalies sont traitées ou régularisées.
+          </p>
+        </div>
+      )}
 
       <section className="rounded-xl bg-white p-4 border border-line sm:p-5">
         {/* Filtres : une seule ligne */}
@@ -310,7 +318,7 @@ export default function ArchivesPage() {
         <ErrorBox message={error} />
 
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[960px] text-left text-sm">
+          <table className="w-full min-w-[1040px] text-left text-sm">
             <thead>
               <tr className="border-b border-line bg-slate-50 text-[11px] font-semibold uppercase tracking-wider text-slate-500">
                 <th className="px-2 py-2">Contribuable</th>
@@ -331,7 +339,7 @@ export default function ArchivesPage() {
                     Clôture{sortMark("traite_le")}
                   </button>
                 </th>
-                <th className="sticky right-0 z-10 border-l border-line bg-slate-50 px-2 py-2 text-right">Dossier</th>
+                <th className="sticky right-0 z-10 border-l border-line bg-slate-50 px-2 py-2 text-right">Actions</th>
 
               </tr>
             </thead>
@@ -382,13 +390,23 @@ export default function ArchivesPage() {
                       {g.traite_par && <p className="text-xs text-slate-500">par {g.traite_par}</p>}
                     </td>
                     <td className="sticky right-0 z-[1] border-l border-line bg-white px-2 py-2 text-right group-hover:bg-slate-50">
-                      <button
-                        type="button"
-                        className={primaryButtonClass + " px-2.5 py-1 text-xs"}
-                        onClick={() => navigate(`/defaillances/${g.representant_id}/traitement`)}
-                      >
-                        Voir le dossier
-                      </button>
+                      <div className="flex justify-end gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => setAnomaliesGroupe(g)}
+                          title="Voir les anomalies de ce dossier"
+                          className="whitespace-nowrap rounded-lg border border-line bg-white px-2.5 py-1 text-xs font-medium text-brand-blue transition hover:border-brand-azure hover:text-brand-azure"
+                        >
+                          Voir les anomalies
+                        </button>
+                        <button
+                          type="button"
+                          className={primaryButtonClass + " whitespace-nowrap px-2.5 py-1 text-xs"}
+                          onClick={() => navigate(`/defaillances/${g.representant_id}/traitement`)}
+                        >
+                          Ouvrir
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 );
@@ -396,7 +414,7 @@ export default function ArchivesPage() {
               {data && data.data.length === 0 && (
                 <tr>
                   <td colSpan={canPickCentre ? 9 : 8} className="px-3 py-10 text-center">
-                    <p className="font-medium text-brand-blue">Aucune archive</p>
+                    <p className="font-medium text-brand-blue">Aucun dossier traité</p>
                     <p className="mt-1 text-slate-500">
                       {estAgent
                         ? "Les dossiers que vous clôturez apparaîtront ici."
@@ -414,7 +432,7 @@ export default function ArchivesPage() {
           <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-line pt-3 text-sm text-slate-600">
             <p>
               Affichage de <span className="font-medium">{from}</span> à <span className="font-medium">{to}</span> sur{" "}
-              <span className="font-medium">{data.total.toLocaleString("fr-FR")}</span> dossiers archivés
+              <span className="font-medium">{data.total.toLocaleString("fr-FR")}</span> dossiers traités
             </p>
             <div className="flex items-center gap-1.5">
               <button
@@ -456,6 +474,10 @@ export default function ArchivesPage() {
       </section>
 
       {ficheId !== null && <ContribuableModal id={ficheId} onClose={() => setFicheId(null)} />}
+
+      {anomaliesGroupe && (
+        <AnomaliesDossierModal groupe={anomaliesGroupe} onClose={() => setAnomaliesGroupe(null)} />
+      )}
     </div>
   );
 }

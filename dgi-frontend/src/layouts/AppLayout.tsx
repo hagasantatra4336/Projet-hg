@@ -1,14 +1,12 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Link, NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
-import { useAnalyseAuto } from "../hooks/useAnalyseAuto";
 import { useNotifications } from "../hooks/useNotifications";
 import ThemeToggle from "../components/ThemeToggle";
 import { ConfirmDialog } from "../components/ui";
 import { ROLE_LABELS, type Role } from "../types";
 import {
   IconAlert,
-  IconArchive,
   IconBriefcase,
   IconBuilding,
   IconChevron,
@@ -70,8 +68,7 @@ const pluriel = (n: number, mot: string) => `${n} ${mot}${n > 1 ? "s" : ""}`;
 export default function AppLayout() {
   const { user, logout } = useAuth();
 
-  // Analyse automatique des défaillances : active tant que cette session est ouverte (stoppée à la déconnexion).
-  useAnalyseAuto(user?.role);
+  // L'analyse des anomalies est lancée manuellement depuis la page Anomalies (mode manuel par défaut).
   const notifications = useNotifications(user?.role);
   const navigate = useNavigate();
   const { pathname } = useLocation();
@@ -207,11 +204,6 @@ export default function AppLayout() {
               titre={`${pluriel(notifications.traitements, "dossier")} en cours de traitement`}
               className="ml-auto"
             />
-          </NavLink>
-
-          <NavLink to="/archives" className={linkClass}>
-            <IconArchive />
-            <span>Archives</span>
           </NavLink>
 
           {adminItems.length > 0 && (

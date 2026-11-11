@@ -64,6 +64,23 @@ return [
             'colonnes' => ['code' => 'CENTRE ID', 'libelle' => 'LIBELLE CENTRE', 'abreviation' => 'CENTRE ABREV'],
         ],
 
+        // Personnel (E-Kajy) : rattachement officiel de chaque agent à un centre. Contrôlé à chaque connexion :
+        // si le centre indiqué ici diffère de celui du compte, le compte est rattaché automatiquement au nouveau
+        // centre. Le rapprochement se fait par e-mail, à défaut par matricule (IM du compte).
+        // Commande d'amorçage : php artisan dgi:agents-source
+        'agents' => [
+            'table' => env('DGI_SOURCE_TABLE_AGENTS', 'agents'),
+            'colonnes' => [
+                'email' => 'EMAIL',
+                'matricule' => 'MATRICULE',
+                'nom' => 'NOM',
+                'centre_code' => 'CENTRE_CODE',
+                'centre_libelle' => 'CENTRE_LIBELLE',
+                'grade' => 'GRADE',
+                'actif' => 'ACTIF',
+            ],
+        ],
+
         // Noms de centres ambigus de la base source => code ou nom du centre de l'application. Exemple :
         //   'ANTANANARIVO' => '21-1-702', 'MAHAJANGA' => 'CENTRE FISCAL MAHAJANGA A'
         // Jeu « fichiers Excel » : CENTRE_GEST donne la ville sans le sous-centre (A/B, I à VI).

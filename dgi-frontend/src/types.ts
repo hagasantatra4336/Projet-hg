@@ -16,10 +16,15 @@ export const ROLE_RANK: Record<Role, number> = {
 
 export const ROLES: Role[] = ["agent", "admin", "central", "superadmin"];
 
+export type TypeCentre = "central" | "-";
+
 export interface Centre {
   id: number;
   nom: string;
   adresse: string | null;
+  type_centre: TypeCentre;
+  /** Service central proposé dans l'inscription (sans effet pour un centre fiscal, toujours proposé). */
+  affiche: boolean;
   users_count?: number;
 }
 
@@ -325,6 +330,8 @@ export interface HistoriqueRegle {
 export interface FormuleRegle {
   formules: { label: string; expr: string }[];
   sources: string[];
+  /** Cas concret illustrant le déclenchement de la règle. */
+  exemple: string;
   niveaux: { couleur: "vert" | "faible" | "orange" | "rouge"; texte: string }[];
 }
 

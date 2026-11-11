@@ -118,7 +118,7 @@ class ArchivesDefaillancesTest extends TestCase
         $this->assertSame(['Dossier régularisé'], $filtre);
     }
 
-    public function test_un_agent_ne_voit_que_les_archives_qu_il_a_traitees(): void
+    public function test_un_agent_voit_les_archives_qu_il_a_traitees_y_compris_son_ancien_centre(): void
     {
         $agent = $this->utilisateur(Role::Agent, $this->centre, 'agent@archives.test');
         $collegue = $this->utilisateur(Role::Agent, $this->centre, 'collegue@archives.test');
@@ -133,8 +133,8 @@ class ArchivesDefaillancesTest extends TestCase
             'traite_par' => $collegue->id,
             'traite_le' => now(),
         ]);
-        // Même agent, mais dossier d'un autre centre : hors périmètre.
-        $this->alerte('3333333333', 'Dossier lointain', $this->autreCentre->id, [
+        // Dossier traité avant une mutation : il reste consultable pour le suivi, en lecture seule.
+        $ancien = $this->alerte('3333333333', 'Dossier lointain', $this->autreCentre->id, [
             'statut' => Alerte::TRAITEE,
             'traite_par' => $agent->id,
             'traite_le' => now(),
@@ -142,8 +142,34 @@ class ArchivesDefaillancesTest extends TestCase
 
         Sanctum::actingAs($agent);
         $noms = collect($this->getJson('/api/defaillances?grouper=1&archive=1')->json('data'))->pluck('contribuable.nom')->all();
+        sort($noms);
 
-        $this->assertSame(['Dossier de l\'agent'], $noms);
+        $this->assertSame(['Dossier de l\'agent', 'Dossier lointain'], $noms);
+
+        // Consultation possible (dossier et fiche), modification impossible.
+        $this->getJson('/api/defaillances/'.$ancien->id.'/dossier')->assertOk();
+        $this->getJson('/api/contribuables/'.$ancien->contribuable_id)->assertOk();
+        $this->patchJson('/api/defaillances/'.$ancien->id, ['statut' => Alerte::A_TRAITER])->assertForbidden();
+        $this->patchJson('/api/defaillances/'.$ancien->id, ['commentaire' => 'suivi'])->assertForbidden();
+        $this->postJson('/api/defaillances/'.$ancien->id.'/prendre')->assertForbidden();
+        $this->patchJson('/api/contribuables/'.$ancien->contribuable_id.'/contact', ['telephone' => '0340000000'])->assertForbidden();
+    }
+
+    public function test_un_chef_ne_voit_pas_les_dossiers_de_l_ancien_centre_d_un_agent_mute(): void
+    {
+        $agent = $this->utilisateur(Role::Agent, $this->autreCentre, 'agent-mute@archives.test');
+        $this->utilisateur(Role::Admin, $this->autreCentre, 'chef@archives.test');
+        $ancien = $this->alerte('3333333333', 'Dossier ancien centre', $this->centre->id, [
+            'statut' => Alerte::TRAITEE,
+            'traite_par' => $agent->id,
+            'traite_le' => now(),
+        ]);
+
+        // Le chef du nouveau centre ne récupère pas les dossiers rattachés à l'ancien centre.
+        $this->getJson('/api/defaillances?grouper=1&archive=1')->assertOk()->assertJsonCount(0, 'data');
+        $this->getJson('/api/defaillances/'.$ancien->id.'/dossier')->assertForbidden();
+        $this->getJson('/api/contribuables/'.$ancien->contribuable_id)->assertForbidden();
+        $this->patchJson('/api/defaillances/'.$ancien->id, ['statut' => Alerte::A_TRAITER])->assertForbidden();
     }
 
     public function test_un_chef_filtre_les_archives_par_agent(): void

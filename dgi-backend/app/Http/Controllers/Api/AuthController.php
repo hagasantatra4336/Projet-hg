@@ -10,6 +10,7 @@ use App\Models\DemandeInscription;
 use App\Models\Fonction;
 use App\Models\User;
 use App\Notifications\DemandeInscriptionNotification;
+use App\Services\ControleAffectationSource;
 use App\Services\OtpMailer;
 use App\Services\OtpService;
 use App\Services\SessionsAppareils;
@@ -50,6 +51,7 @@ class AuthController extends Controller
         private readonly OtpService $otp,
         private readonly OtpMailer $mailer,
         private readonly SessionsAppareils $sessions,
+        private readonly ControleAffectationSource $affectations,
     ) {
     }
 
@@ -62,7 +64,15 @@ class AuthController extends Controller
             'im' => ['nullable', 'string', 'max:50', 'unique:users,im'],
             'telephone' => ['nullable', 'string', 'max:30'],
             'adresse' => ['nullable', 'string', 'max:255'],
-            'centre_id' => ['required', 'integer', 'exists:centres,id'],
+            'centre_id' => [
+                'required',
+                'integer',
+                // Un service central masqué n'est pas proposé à l'inscription : il ne peut pas être choisi
+                // en contournant la liste (le centre reste géré depuis l'administration).
+                Rule::exists('centres', 'id')->where(fn ($q) => $q->where(fn ($x) => $x
+                    ->where('type_centre', '!=', Centre::TYPE_CENTRAL)
+                    ->orWhere('affiche', true))),
+            ],
             // Inscription publique : agent, chef de centre ou central. Jamais superadmin.
             'fonction_id' => [
                 'required',
@@ -151,6 +161,70 @@ class AuthController extends Controller
             $demande,
             "Votre demande a été envoyée {$destination}. Vous recevrez un code dès son approbation.",
             201
+        );
+    }
+
+    /**
+     * Bouton « Vérifier » du formulaire d'inscription : format, compte existant, demande en cours
+     * et capacité du domaine à recevoir des e-mails (MX, à défaut A). Aucun e-mail n'est envoyé ici :
+     * le code OTP reste envoyé après approbation de la demande.
+     */
+    public function checkEmail(Request $request): JsonResponse
+    {
+        $data = $request->validate([
+            'email' => ['required', 'email', 'max:255'],
+        ]);
+
+        $email = Str::lower(trim($data['email']));
+
+        if (User::whereRaw('lower(email) = ?', [$email])->exists()) {
+            return $this->reponseEmail(
+                $email,
+                'deja_utilise',
+                true,
+                true,
+                'Un compte existe déjà avec cette adresse. Connectez-vous plutôt que de créer un compte.'
+            );
+        }
+
+        $demande = DemandeInscription::query()
+            ->whereRaw('lower(email) = ?', [$email])
+            ->whereIn('statut', [DemandeInscription::EN_ATTENTE, DemandeInscription::APPROUVEE])
+            ->latest('id')
+            ->first();
+
+        if ($demande !== null) {
+            if ($demande->statutEffectif() !== DemandeInscription::EXPIREE) {
+                return $this->reponseEmail(
+                    $email,
+                    'demande_en_cours',
+                    true,
+                    true,
+                    "Une demande d'inscription est déjà en cours pour cette adresse. Reprenez-la depuis le navigateur où elle a été créée."
+                );
+            }
+
+            $demande->update(['statut' => DemandeInscription::EXPIREE]);
+        }
+
+        $domaineValide = $this->domaineAccepte(Str::afterLast($email, '@'));
+
+        if (! $domaineValide) {
+            return $this->reponseEmail(
+                $email,
+                'domaine_invalide',
+                true,
+                false,
+                "Cette adresse semble correcte, mais son domaine ne peut pas recevoir d'e-mails. Vérifiez l'orthographe."
+            );
+        }
+
+        return $this->reponseEmail(
+            $email,
+            'disponible',
+            true,
+            true,
+            'Adresse valide et disponible. Le code de vérification sera envoyé après approbation de votre demande.'
         );
     }
 
@@ -387,6 +461,10 @@ class AuthController extends Controller
             'setup_expires_at' => null,
         ]);
 
+        // Le centre choisi à l'inscription peut déjà avoir changé dans la base du personnel.
+        $this->affectations->synchroniser($user);
+        $user->refresh();
+
         return response()->json([
             'message' => 'Compte créé avec succès.',
             'token' => $this->sessions->ouvrir($user, $request),
@@ -503,6 +581,10 @@ class AuthController extends Controller
             return response()->json(['message' => 'Code invalide ou expiré.'], 422);
         }
 
+        // Le personnel E-Kajy fait foi : un agent muté est rattaché à son nouveau centre dès la connexion.
+        $this->affectations->synchroniser($user);
+        $user->refresh();
+
         return response()->json([
             'token' => $this->sessions->ouvrir($user, $request),
             'user' => $this->userPayload($user),
@@ -556,7 +638,7 @@ class AuthController extends Controller
             ->pluck('total', 'centre_id');
 
         return response()->json([
-            'centres' => Centre::orderBy('nom')->get(['id', 'nom'])->map(fn (Centre $c) => [
+            'centres' => Centre::proposes()->orderBy('nom')->get(['id', 'nom'])->map(fn (Centre $c) => [
                 'id' => $c->id,
                 'nom' => $c->nom,
                 'a_chef' => (int) ($chefs[$c->id] ?? 0) > 0,
@@ -708,6 +790,35 @@ class AuthController extends Controller
                 : null,
             'code_verifie' => $demande->codeVerifie(),
         ], $status);
+    }
+
+    private function reponseEmail(
+        string $email,
+        string $statut,
+        bool $valide,
+        bool $domaineValide,
+        string $message
+    ): JsonResponse {
+        return response()->json([
+            'email' => $email,
+            'statut' => $statut,
+            'valide' => $valide,
+            'disponible' => $statut === 'disponible',
+            'domaine_valide' => $domaineValide,
+            'message' => $message,
+        ]);
+    }
+
+    /** Le domaine peut-il recevoir du courrier ? (MX, à défaut A ; résultat mis en cache 30 minutes) */
+    private function domaineAccepte(string $domaine): bool
+    {
+        return Cache::remember('mail-domaine:'.sha1($domaine), now()->addMinutes(30), function () use ($domaine): bool {
+            try {
+                return @checkdnsrr($domaine, 'MX') || @checkdnsrr($domaine, 'A');
+            } catch (Throwable) {
+                return false;
+            }
+        });
     }
 
     private function modeDeveloppement(): bool

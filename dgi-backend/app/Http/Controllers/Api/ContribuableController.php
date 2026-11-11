@@ -25,7 +25,7 @@ class ContribuableController extends Controller
 
     public function show(Request $request, Contribuable $contribuable): JsonResponse
     {
-        $this->fiche->autoriser($request->user(), $contribuable);
+        $this->fiche->autoriser($request->user(), $contribuable, true);
 
         return response()->json($this->fiche->donnees($contribuable, $request->user()));
     }
@@ -129,7 +129,7 @@ class ContribuableController extends Controller
     private function donneesVue(Request $request, Contribuable $contribuable): array
     {
         $me = $request->user();
-        $this->fiche->autoriser($me, $contribuable);
+        $this->fiche->autoriser($me, $contribuable, true);
 
         return [
             'fiche' => $this->fiche->donnees($contribuable, $me),

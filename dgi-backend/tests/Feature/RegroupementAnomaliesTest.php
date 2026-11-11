@@ -9,6 +9,7 @@ use App\Models\Contribuable;
 use App\Models\Fonction;
 use App\Models\User;
 use App\Services\AnomalieAnalyseur;
+use App\Services\CalendrierFiscal;
 use App\Services\CalculRisque;
 use App\Support\Nif;
 use Database\Seeders\DeclarationDemoSeeder;
@@ -32,10 +33,10 @@ class RegroupementAnomaliesTest extends TestCase
         Centre::create(['nom' => 'Centre de test']);
         $this->seed(DeclarationDemoSeeder::class);
 
-        // L'analyse ne juge un exercice qu'une fois clos (échéance de déclaration + 48 h) :
-        // les exemples portent sur l'année en cours, on analyse donc au 1er juin de l'année suivante.
-        $analyse = new DateTimeImmutable(((int) now()->format('Y') + 1).'-06-01');
-        app(AnomalieAnalyseur::class)->analyser($analyse);
+        // L'analyse ne juge un exercice qu'une fois clos (échéance de déclaration + 48 h) : les exemples
+        // portent sur le dernier exercice clos, on analyse donc au 1er juin de l'année suivante.
+        $annee = CalendrierFiscal::dernierExerciceClos(now()) ?? (int) now()->format('Y') - 1;
+        app(AnomalieAnalyseur::class)->analyser(new DateTimeImmutable(($annee + 1).'-06-01'));
     }
 
     private function contribuable(int $numero): Contribuable

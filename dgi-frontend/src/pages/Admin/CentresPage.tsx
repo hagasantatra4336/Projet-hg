@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import api, { getErrorMessage } from "../../services/api";
+import { useAuth } from "../../context/AuthContext";
 import type { Centre } from "../../types";
 import {
   ConfirmDialog,
@@ -23,6 +24,9 @@ interface CentreForm {
 const EMPTY_FORM: CentreForm = { nom: "", adresse: "" };
 
 export default function CentresPage() {
+  const { user } = useAuth();
+  const peutGererAffichage = user?.role === "superadmin";
+
   const [centres, setCentres] = useState<Centre[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string>("");
@@ -34,6 +38,9 @@ export default function CentresPage() {
 
   const [toDelete, setToDelete] = useState<Centre | null>(null);
   const [deleting, setDeleting] = useState<boolean>(false);
+
+  const [toToggle, setToToggle] = useState<Centre | null>(null);
+  const [toggling, setToggling] = useState<boolean>(false);
 
   const load = useCallback(async () => {
     try {
@@ -97,6 +104,21 @@ export default function CentresPage() {
     }
   }
 
+  async function handleToggle() {
+    if (!toToggle) return;
+    setToggling(true);
+    try {
+      await api.patch(`/centres/${toToggle.id}/affichage`, { affiche: !toToggle.affiche });
+      setToToggle(null);
+      await load();
+    } catch (err) {
+      setToToggle(null);
+      setError(getErrorMessage(err, "Modification de l'affichage impossible."));
+    } finally {
+      setToggling(false);
+    }
+  }
+
   return (
     <div>
       <div className="flex items-center justify-between mb-4">
@@ -108,12 +130,20 @@ export default function CentresPage() {
 
       <ErrorBox message={error} />
 
+      {!peutGererAffichage && (
+        <p className="mb-3 text-xs text-slate-500">
+          Seul le super admin peut modifier l'affichage des services centraux dans l'inscription.
+        </p>
+      )}
+
       <div className="bg-white rounded-xl border border-line overflow-x-auto">
         <table className="w-full text-sm">
           <thead className="border-b border-line bg-slate-50 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500">
             <tr>
               <th className="px-3 py-2">Nom</th>
+              <th className="px-3 py-2">Type</th>
               <th className="px-3 py-2">Adresse</th>
+              <th className="px-3 py-2">Inscription</th>
               <th className="px-3 py-2">Utilisateurs</th>
               <th className="sticky right-0 z-10 w-[92px] border-l border-line bg-slate-50 px-3 py-2" />
             </tr>
@@ -121,14 +151,14 @@ export default function CentresPage() {
           <tbody className="divide-y divide-line">
             {loading && (
               <tr>
-                <td colSpan={4} className="px-3 py-4 text-center text-slate-500">
+                <td colSpan={6} className="px-3 py-4 text-center text-slate-500">
                   Chargement...
                 </td>
               </tr>
             )}
             {!loading && centres.length === 0 && (
               <tr>
-                <td colSpan={4} className="px-3 py-4 text-center text-slate-500">
+                <td colSpan={6} className="px-3 py-4 text-center text-slate-500">
                   Aucun centre. Ajoutez le premier.
                 </td>
               </tr>
@@ -136,7 +166,43 @@ export default function CentresPage() {
             {centres.map((c) => (
               <tr key={c.id} className="transition hover:bg-slate-50/70">
                 <td className="px-3 py-2 font-medium text-brand-blue">{c.nom}</td>
+                <td className="px-3 py-2 whitespace-nowrap">
+                  {c.type_centre === "central" ? (
+                    <span className="inline-flex items-center rounded-full bg-violet-50 px-2 py-0.5 text-[11px] font-semibold text-violet-700">
+                      Central
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-600">
+                      Centre fiscal
+                    </span>
+                  )}
+                </td>
                 <td className="px-3 py-2 text-slate-600">{c.adresse ?? "—"}</td>
+                <td className="px-3 py-2">
+                  {c.type_centre === "central" ? (
+                    <label
+                      className={`inline-flex items-center gap-2 ${peutGererAffichage ? "cursor-pointer" : "cursor-not-allowed opacity-70"}`}
+                      title={
+                        peutGererAffichage
+                          ? "Cocher pour afficher dans l'inscription, décocher pour masquer"
+                          : "Seul le super admin peut modifier l'affichage."
+                      }
+                    >
+                      <input
+                        type="checkbox"
+                        className="h-4 w-4 accent-brand-blue"
+                        checked={c.affiche}
+                        disabled={!peutGererAffichage}
+                        onChange={() => setToToggle(c)}
+                      />
+                      <span className="text-slate-600">{c.affiche ? "Affiché" : "Masqué"}</span>
+                    </label>
+                  ) : (
+                    <span className="text-slate-400" title="Un centre fiscal est toujours proposé.">
+                      Toujours affiché
+                    </span>
+                  )}
+                </td>
                 <td className="px-3 py-2 text-slate-600">{c.users_count ?? 0}</td>
                 <td className="sticky right-0 z-[1] border-l border-line bg-white px-3 py-2 text-right whitespace-nowrap">
                   <EditButton onClick={() => openEdit(c)} />
@@ -197,6 +263,20 @@ export default function CentresPage() {
           loading={deleting}
           onConfirm={handleDelete}
           onCancel={() => setToDelete(null)}
+        />
+      )}
+
+      {toToggle && (
+        <ConfirmDialog
+          title={toToggle.affiche ? "Masquer le centre" : "Afficher le centre"}
+          message={`${toToggle.affiche ? "Masquer" : "Afficher"} le centre « ${toToggle.nom} » dans l'inscription et les listes de choix ?`}
+          detail="Le centre n'est pas supprimé : ses utilisateurs et ses dossiers restent inchangés."
+          confirmLabel={toToggle.affiche ? "Masquer" : "Afficher"}
+          loadingLabel={toToggle.affiche ? "Masquage..." : "Affichage..."}
+          tone="primary"
+          loading={toggling}
+          onConfirm={handleToggle}
+          onCancel={() => setToToggle(null)}
         />
       )}
     </div>

@@ -101,6 +101,22 @@ interface SetPasswordResponse {
   user: AppUser;
 }
 
+type EmailCheckStatut = "disponible" | "deja_utilise" | "demande_en_cours" | "domaine_invalide" | "invalide";
+
+interface EmailCheckResponse {
+  statut: EmailCheckStatut;
+  valide: boolean;
+  disponible: boolean;
+  domaine_valide: boolean;
+  message: string;
+}
+
+function emailCheckTone(statut: EmailCheckStatut): string {
+  if (statut === "disponible") return "text-emerald-700";
+  if (statut === "demande_en_cours" || statut === "domaine_invalide") return "text-amber-700";
+  return "text-red-600";
+}
+
 function StepIndicator({ step }: { step: number }) {
   const steps = [1, 2, 3, 4];
   return (
@@ -190,6 +206,8 @@ export default function SignupPage() {
   const [info, setInfo] = useState<string>("");
   const [loading, setLoading] = useState<boolean>(false);
   const [aAnnuler, setAAnnuler] = useState<boolean>(false);
+  const [emailCheck, setEmailCheck] = useState<EmailCheckResponse | null>(null);
+  const [checkingEmail, setCheckingEmail] = useState<boolean>(false);
 
   // Listes déroulantes : centres + fonctions ouvertes à l'inscription
   useEffect(() => {
@@ -250,6 +268,36 @@ export default function SignupPage() {
     const timer = window.setInterval(() => setNow(Date.now()), 1000);
     return () => window.clearInterval(timer);
   }, [step]);
+
+  /** Vérifie l'e-mail sans rien envoyer : format, compte/demande existants et domaine joignable. */
+  async function handleCheckEmail() {
+    setError("");
+    setInfo("");
+    setEmailCheck(null);
+
+    const email = form.email.trim();
+
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      setEmailCheck({
+        statut: "invalide",
+        valide: false,
+        disponible: false,
+        domaine_valide: false,
+        message: "Adresse e-mail invalide (exemple : nom@dgi.gov.mg).",
+      });
+      return;
+    }
+
+    setCheckingEmail(true);
+    try {
+      const res = await api.post<EmailCheckResponse>("/register/check-email", { email });
+      setEmailCheck(res.data);
+    } catch (err) {
+      setError(getErrorMessage(err, "Impossible de vérifier cet e-mail pour le moment."));
+    } finally {
+      setCheckingEmail(false);
+    }
+  }
 
   async function handleStep1(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -402,6 +450,7 @@ export default function SignupPage() {
     setResendAt(0);
     setError("");
     setInfo("");
+    setEmailCheck(null);
     setStep(STEP_INFOS);
   }
 
@@ -452,14 +501,32 @@ export default function SignupPage() {
             onChange={(e) => setForm({ ...form, nom: e.target.value })}
             required
           />
-          <input
-            className={`${inputClass} sm:col-span-2`}
-            type="email"
-            placeholder="E-mail"
-            value={form.email}
-            onChange={(e) => setForm({ ...form, email: e.target.value })}
-            required
-          />
+          <div className="sm:col-span-2">
+            <div className="flex gap-2">
+              <input
+                className={`${inputClass} min-w-0 flex-1`}
+                type="email"
+                placeholder="E-mail"
+                value={form.email}
+                onChange={(e) => {
+                  setForm({ ...form, email: e.target.value });
+                  setEmailCheck(null);
+                }}
+                required
+              />
+              <button
+                type="button"
+                onClick={() => void handleCheckEmail()}
+                disabled={checkingEmail || form.email.trim() === ""}
+                className="shrink-0 rounded-lg border border-brand-azure/40 bg-white px-4 text-sm font-semibold text-brand-azure shadow-sm transition hover:bg-brand-azure-soft focus:outline-none focus:ring-4 focus:ring-brand-azure/10 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {checkingEmail ? "Vérification..." : "Vérifier"}
+              </button>
+            </div>
+            {emailCheck && (
+              <p className={`mt-1.5 text-xs ${emailCheckTone(emailCheck.statut)}`}>{emailCheck.message}</p>
+            )}
+          </div>
           <input
             className={inputClass}
             placeholder="IM (matricule)"

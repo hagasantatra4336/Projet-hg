@@ -25,16 +25,21 @@ class FicheContribuable
     private const MOIS_AFFICHES = 12;
     private const ANNEES_AFFICHEES = 5;
 
-    public function autoriser(User $me, Contribuable $contribuable): void
+    /** $lecture : un agent peut consulter la fiche d'un contribuable dont il a traité un dossier
+     *  avant un changement de centre ; la modification (coordonnées, observations) reste limitée à son centre. */
+    public function autoriser(User $me, Contribuable $contribuable, bool $lecture = false): void
     {
         abort_if($me->role === null, 403, "Votre compte n'a pas de fonction attribuée.");
 
         if (in_array($me->role, [Role::Agent, Role::Admin], true)) {
-            abort_if(
-                $me->centre_id === null || $contribuable->centre_id !== $me->centre_id,
-                403,
-                "Ce contribuable n'appartient pas à votre centre."
-            );
+            $dansMonCentre = $me->centre_id !== null
+                && (int) $contribuable->centre_id === (int) $me->centre_id;
+
+            $ancienDossier = $lecture
+                && $me->role === Role::Agent
+                && $contribuable->alertes()->where('traite_par', $me->id)->exists();
+
+            abort_unless($dansMonCentre || $ancienDossier, 403, "Ce contribuable n'appartient pas à votre centre.");
         }
     }
 

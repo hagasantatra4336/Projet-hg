@@ -40,6 +40,27 @@ class CentreController extends Controller
         return response()->json($centre);
     }
 
+    /**
+     * Affiche ou masque un service central dans l'inscription et les listes de choix (super admin uniquement).
+     * Le centre n'est jamais supprimé : ses utilisateurs et ses dossiers restent inchangés.
+     */
+    public function affichage(Request $request, Centre $centre): JsonResponse
+    {
+        abort_unless(
+            $centre->type_centre === Centre::TYPE_CENTRAL,
+            422,
+            "Seul un centre de type central peut être affiché ou masqué."
+        );
+
+        $data = $request->validate([
+            'affiche' => ['present', 'boolean'],
+        ]);
+
+        $centre->update(['affiche' => (bool) $data['affiche']]);
+
+        return response()->json($centre);
+    }
+
     public function destroy(Centre $centre): JsonResponse
     {
         $count = $centre->users()->count();

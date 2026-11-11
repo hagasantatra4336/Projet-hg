@@ -9,6 +9,7 @@ use App\Models\BaseRisque;
 use App\Models\DossierHistorique;
 use App\Models\User;
 use App\Services\AnomalieAnalyseur;
+use App\Services\CalendrierFiscal;
 use App\Services\FormulesRegles;
 use App\Services\ReglesDetection;
 use App\Services\VerrouAlerte;
@@ -244,7 +245,16 @@ class DefaillanceController extends Controller
         ReglesDetection::limiterAlertes($query);
 
         if (in_array($me->role, [Role::Agent, Role::Admin], true)) {
-            $query->whereHas('contribuable', fn ($q) => $q->where('centre_id', $me->centre_id));
+            $alerte->loadMissing('contribuable');
+            $dansMonCentre = $me->centre_id !== null
+                && (int) $alerte->contribuable->centre_id === (int) $me->centre_id;
+
+            // Un agent peut consulter en lecture seule un dossier de son ancien centre (il l'a traité) :
+            // le filtre de centre ne doit pas vider la consultation. Les mutations restent refusées par
+            // assertAccess() avant d'arriver ici.
+            if ($dansMonCentre) {
+                $query->whereHas('contribuable', fn ($q) => $q->where('centre_id', $me->centre_id));
+            }
         }
 
         return $query->where('alertes.contribuable_id', $alerte->contribuable_id);
@@ -891,7 +901,7 @@ class DefaillanceController extends Controller
     public function dossier(Request $request, Alerte $alerte): JsonResponse
     {
         $me = $request->user();
-        $this->assertAccess($me, $alerte);
+        $this->assertAccess($me, $alerte, true); // consultation autorisée sur un ancien dossier, jamais la modification
         $alerte->load(['contribuable.centre', 'traitePar']);
 
         $indicateurs = ['IR' => [], 'TVA' => [], 'RECOUPEMENT' => [], 'DAU' => []];
@@ -938,34 +948,62 @@ class DefaillanceController extends Controller
         ]);
     }
 
-    /** Lance le moteur de détection (superadmin, central, admin) à la date indiquée (aujourd'hui par défaut) ou sur les années cochées. */
+    /**
+     * Lance le moteur de détection (superadmin, central, admin).
+     *
+     *  - mode « automatique » (défaut) : comme la planification toutes les 5 minutes — date du jour et
+     *    fenêtre d'exercices enregistrée pour chaque règle ;
+     *  - mode « manuelle » : cible une année ou un intervalle d'années (six au plus). La dernière année
+     *    sert d'année de référence ; une année révolue est jugée au 31 décembre de cette année.
+     */
     public function analyser(Request $request): JsonResponse
     {
         $me = $request->user();
 
         $data = $request->validate([
+            'mode' => ['nullable', Rule::in(['automatique', 'manuelle'])],
             'date' => ['nullable', 'date_format:Y-m-d'],
-            'annees' => ['nullable', 'array', 'min:1', 'max:6'],
-            'annees.*' => ['integer', 'min:1990', 'max:'.(int) now()->format('Y')],
+            'annee_debut' => ['nullable', 'required_with:annee_fin', 'integer', 'min:1990', 'max:'.(int) now()->format('Y')],
+            'annee_fin' => ['nullable', 'required_with:annee_debut', 'integer', 'min:1990', 'max:'.(int) now()->format('Y')],
+        ], [], [
+            'annee_debut' => "année de début",
+            'annee_fin' => "année de fin",
         ]);
 
+        $mode = $data['mode'] ?? (isset($data['annee_debut']) ? 'manuelle' : 'automatique');
         $aujourdhui = AnomalieAnalyseur::aujourdhui();
         $fenetre = null;
+        $anneeDebut = null;
+        $anneeFin = null;
 
-        // Choix manuel d'années : la plus récente est l'année de référence, l'écart avec la plus ancienne
-        // donne la fenêtre (années analysées en plus). Une année révolue est jugée telle qu'on la connaissait
-        // au 31 décembre : seules les échéances dépassées à cette date sont contrôlées.
-        if (! empty($data['annees'])) {
-            $annees = array_map('intval', $data['annees']);
-            $fenetre = max($annees) - min($annees);
-            if ($fenetre > 5) {
+        if ($mode === 'manuelle') {
+            if (! isset($data['annee_debut'], $data['annee_fin'])) {
                 throw ValidationException::withMessages([
-                    'annees' => 'Choisissez au plus six années consécutives (la plus récente et les cinq précédentes).',
+                    'annee_debut' => "Choisissez l'année, ou l'intervalle d'années, à analyser.",
                 ]);
             }
-            $date = max($annees) < (int) $aujourdhui->format('Y')
-                ? new DateTimeImmutable(max($annees).'-12-31')
-                : $aujourdhui;
+
+            $anneeDebut = (int) $data['annee_debut'];
+            $anneeFin = (int) $data['annee_fin'];
+
+            if ($anneeDebut > $anneeFin) {
+                throw ValidationException::withMessages([
+                    'annee_debut' => "L'année de début ne peut pas dépasser l'année de fin.",
+                ]);
+            }
+
+            $fenetre = $anneeFin - $anneeDebut;
+            if ($fenetre > 5) {
+                throw ValidationException::withMessages([
+                    'annee_debut' => 'Choisissez au plus six années consécutives (par exemple 2021 à 2026).',
+                ]);
+            }
+
+            // L'exercice ciblé n'est jugé qu'après sa clôture (dernière échéance + 48 h). Se placer au
+            // 31/12 de l'année visée reviendrait à juger l'exercice PRÉCÉDENT : on prend la date de clôture
+            // (sans dépasser aujourd'hui, pour ne pas juger des périodes non encore échues).
+            $cloture = CalendrierFiscal::exerciceClosDepuis($anneeFin);
+            $date = $cloture !== null && $cloture <= $aujourdhui ? $cloture : $aujourdhui;
         } else {
             $date = isset($data['date']) ? new DateTimeImmutable($data['date']) : $aujourdhui;
         }
@@ -979,8 +1017,10 @@ class DefaillanceController extends Controller
 
         $stats = app(AnomalieAnalyseur::class)->analyser($date, $centreId, $fenetre);
 
-        $anneeDebut = (int) $date->format('Y') - $fenetre;
         return response()->json($stats + [
+            'mode' => $mode,
+            'annee_debut' => $anneeDebut,
+            'annee_fin' => $anneeFin,
             'message' => sprintf(
                 "Analyse terminée : %d nouvelle(s) alerte(s) (%d défaillance(s), %d baisse(s) du chiffre d'affaires), %d mise(s) à jour, %d régularisée(s).",
                 $stats['crees'],
@@ -988,9 +1028,9 @@ class DefaillanceController extends Controller
                 $stats['baisse_ca']['crees'],
                 $stats['mis_a_jour'],
                 $stats['regularisees']
-            ).($fenetre !== null
-                ? sprintf(' Années analysées : %d à %d (réglages des règles ignorés pour ce passage).', $anneeDebut, (int) $date->format('Y'))
-                : '')
+            ).($mode === 'manuelle'
+                ? sprintf(' Analyse manuelle : années %d à %d (réglages de fenêtre ignorés pour ce passage).', $anneeDebut, $anneeFin)
+                : ' Analyse automatique : date du jour et fenêtre d\'exercices enregistrée pour chaque règle.')
             .($stats['desactivees'] !== [] ? ' Règle(s) désactivée(s) dans les réglages : '.implode(', ', $stats['desactivees']).'.' : ''),
         ]);
     }
@@ -1012,22 +1052,23 @@ class DefaillanceController extends Controller
         $query = Alerte::query();
         ReglesDetection::limiterAlertes($query); // règles désactivées ou impôts décochés : alertes masquées
 
-        if (in_array($me->role, [Role::Agent, Role::Admin], true)) {
+        if ($me->role === Role::Agent && $archives) {
+            // Archives : les dossiers que l'agent a traités restent consultables même après un changement
+            // de centre (suivi de ses anciens dossiers). Ils ne sont plus modifiables : voir assertAccess().
+            $query->whereIn(
+                'alertes.contribuable_id',
+                Alerte::query()->select('contribuable_id')->where('traite_par', $me->id)
+            );
+        } elseif (in_array($me->role, [Role::Agent, Role::Admin], true)) {
             abort_if($me->centre_id === null, 403, "Votre compte n'est rattaché à aucun centre.");
             $query->whereHas('contribuable', fn ($q) => $q->where('centre_id', $me->centre_id));
 
             if ($me->role === Role::Agent) {
-                $dossiers = Alerte::query()->select('contribuable_id');
-
-                if ($archives) {
-                    // Archives : dossiers dont au moins une anomalie a été traitée par l'agent.
-                    $dossiers->where('traite_par', $me->id);
-                } else {
-                    // Liste de travail : seuls les dossiers qui lui sont assignés, jamais les dossiers libres.
-                    $dossiers->where('pris_par', $me->id);
-                }
-
-                $query->whereIn('alertes.contribuable_id', $dossiers);
+                // Liste de travail : seuls les dossiers qui lui sont assignés, jamais les dossiers libres.
+                $query->whereIn(
+                    'alertes.contribuable_id',
+                    Alerte::query()->select('contribuable_id')->where('pris_par', $me->id)
+                );
             }
         } elseif ($request->filled('centre_id')) {
             $query->whereHas('contribuable', fn ($q) => $q->where('centre_id', (int) $request->input('centre_id')));
@@ -1036,17 +1077,28 @@ class DefaillanceController extends Controller
         return $query;
     }
 
-    private function assertAccess(User $me, Alerte $alerte): void
+    /** $lecture : un agent conserve la consultation des dossiers traités avant un changement de centre,
+     *  mais jamais leur modification (réouverture, prise, commentaire) : la mutation reste limitée au centre actuel. */
+    private function assertAccess(User $me, Alerte $alerte, bool $lecture = false): void
     {
         abort_if($me->role === null, 403, "Votre compte n'a pas de fonction attribuée.");
 
         if (in_array($me->role, [Role::Agent, Role::Admin], true)) {
             $alerte->loadMissing('contribuable');
-            abort_if(
-                $me->centre_id === null || $alerte->contribuable->centre_id !== $me->centre_id,
-                403,
-                "Cette alerte n'appartient pas à votre centre."
-            );
+
+            $dansMonCentre = $me->centre_id !== null
+                && (int) $alerte->contribuable->centre_id === (int) $me->centre_id;
+
+            if (! $dansMonCentre) {
+                $ancienDossier = $lecture
+                    && $me->role === Role::Agent
+                    && Alerte::query()
+                        ->where('contribuable_id', $alerte->contribuable_id)
+                        ->where('traite_par', $me->id)
+                        ->exists();
+
+                abort_unless($ancienDossier, 403, "Cette alerte n'appartient pas à votre centre.");
+            }
         }
 
         // Un agent n'accède qu'aux dossiers qui lui sont assignés ou qu'il a clôturés (consultation des archives).

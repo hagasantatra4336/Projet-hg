@@ -9,6 +9,7 @@ import {
   TYPES_IMPOT,
   type Centre,
   type DefaillanceSummary,
+  type DossierAlerte,
   type GroupeAlerte,
   type NiveauRisque,
   type Paginated,
@@ -28,6 +29,7 @@ import {
 import { IconChevron, IconDownload, IconRefresh, IconSearch, IconSliders, IconUpload } from "../components/icons";
 import SearchSelect from "../components/SearchSelect";
 import {
+  AnomaliesDossierModal,
   ContribuableModal,
   NiveauBadge,
   RegleBadge,
@@ -40,7 +42,7 @@ import {
 //  Petits utilitaires
 // ---------------------------------------------------------------------
 
-/** Rafraîchissement automatique de la liste (l'analyse tourne toutes les 5 min côté serveur). */
+/** Rafraîchissement périodique de la liste (les dossiers peuvent être pris/traités par un autre agent). */
 const REFRESH_MS = 60_000;
 
 function pageWindow(current: number, last: number): number[] {
@@ -65,27 +67,23 @@ interface ImportResult {
   erreurs: string[];
 }
 
-/** Compteurs d'un passage d'analyse pour une famille de règles. */
-interface RegleStats {
-  analyses: number;
-  crees: number;
-  mis_a_jour: number;
-  regularisees: number;
-}
-
-/** Réponse de POST /defaillances/analyser : message de synthèse + statistiques détaillées du passage. */
-interface AnalyseStats extends RegleStats {
-  date: string;
-  defaillance: RegleStats;
-  baisse_ca: RegleStats;
-  risque: RegleStats & { par_regle: Record<string, number>; inactives?: string[] };
-  personnalisees: Record<string, Partial<RegleStats> & { erreur?: string }>;
-  desactivees: string[];
-  message: string;
-}
+/** Analyse automatique : comme la planification (date du jour, fenêtre des règles). Manuelle : année ou intervalle ciblé. */
+type ModeAnalyse = "automatique" | "manuelle";
 
 /** Années proposées au lancement manuel : l'année en cours et les cinq précédentes (maximum de la fenêtre). */
 const ANNEES_ANALYSE: number[] = Array.from({ length: 6 }, (_, i) => new Date().getFullYear() - i);
+
+/** Cas concrets affichés dans la fenêtre d'analyse pour chaque critère de risque. */
+const EXEMPLES_CRITERES: { titre: string; exemple: string }[] = [
+  { titre: "R4 · Défaut de dépôt", exemple: "TVA non déposée de mars à décembre 2025 (10 mois) → score 4/5, risque moyen." },
+  { titre: "Baisse du CA", exemple: "CA TVA de 80 M en mars 2025 contre 120 M en mars 2024 → baisse de 33 %." },
+  { titre: "R1 · CA IR / CA TVA", exemple: "CA IR 500 M contre CA TVA 300 M → écart de 40 % → score 4/10, risque moyen." },
+  { titre: "R2 · Déficit chronique", exemple: "Résultat IR négatif en 2023, 2024 et 2025 → score 5/5, risque élevé." },
+  { titre: "R3 · Crédit de TVA", exemple: "Crédit de TVA non nul de janvier à juin 2025 → 6 mois → score 5/5." },
+  { titre: "R5 · Recoupement", exemple: "CA recoupé 400 M contre CA TVA 250 M → 60 % d'écart → score 5/5." },
+  { titre: "R6 · Importations", exemple: "TVA des DAU IM4 50 M contre TVA déductible importée 20 M → score 6/10." },
+  { titre: "R7 · Exportations", exemple: "Valeur CAF des DAU EX1 200 M contre CA export déclaré 120 M → score 4/10." },
+];
 
 /** Agent du centre susceptible de recevoir un dossier. */
 interface AgentOption {
@@ -120,72 +118,6 @@ function ageAffiche(iso: string | null): string {
   return jours === 0 ? "Aujourd'hui" : `${jours.toLocaleString("fr-FR")} j`;
 }
 
-/** Détail du dernier passage d'analyse : compteurs par famille de règles. */
-function DetailsAnalyse({ stats }: { stats: AnalyseStats }) {
-  const ligne = (label: string, s: RegleStats, total = false) => (
-    <tr key={label} className={total ? "font-semibold" : ""}>
-      <th scope="row" className="px-2 py-1.5 text-left font-medium text-slate-700">
-        {label}
-      </th>
-      <td className="px-2 py-1.5 text-right tabular-nums">{s.analyses}</td>
-      <td className="px-2 py-1.5 text-right tabular-nums">{s.crees}</td>
-      <td className="px-2 py-1.5 text-right tabular-nums">{s.mis_a_jour}</td>
-      <td className="px-2 py-1.5 text-right tabular-nums">{s.regularisees}</td>
-    </tr>
-  );
-
-  const libelles = REGLE_LABELS as Record<string, string>;
-  const parCritere = Object.entries(stats.risque.par_regle).map(([code, n]) => `${libelles[code] ?? code} : ${n}`);
-  const perso = Object.entries(stats.personnalisees);
-
-  return (
-    <div className="overflow-x-auto rounded-lg border border-line bg-white">
-      <table className="w-full text-sm">
-        <thead>
-          <tr className="border-b border-line bg-slate-50 text-[11px] uppercase tracking-wider text-slate-500">
-            <th className="px-2 py-2 text-left">Règle</th>
-            <th className="px-2 py-2 text-right">Analysées</th>
-            <th className="px-2 py-2 text-right">Créées</th>
-            <th className="px-2 py-2 text-right">Mises à jour</th>
-            <th className="px-2 py-2 text-right">Régularisées</th>
-          </tr>
-        </thead>
-        <tbody className="divide-y divide-line">
-          {ligne("Défaut de dépôt (R4)", stats.defaillance)}
-          {ligne("Baisse du chiffre d'affaires", stats.baisse_ca)}
-          {ligne("Critères de risque R1–R7", stats.risque)}
-          {(parCritere.length > 0 || (stats.risque.inactives?.length ?? 0) > 0) && (
-            <tr>
-              <td colSpan={5} className="px-2 py-1.5 text-xs text-slate-500">
-                {parCritere.length > 0 && <>Alertes (créées ou mises à jour) par critère — {parCritere.join(" · ")}</>}
-                {(stats.risque.inactives?.length ?? 0) > 0 &&
-                  ` Critères désactivés : ${(stats.risque.inactives ?? []).join(", ")}.`}
-              </td>
-            </tr>
-          )}
-          {perso.map(([code, s]) =>
-            s.erreur ? (
-              <tr key={code}>
-                <td colSpan={5} className="px-2 py-1.5 text-xs text-red-600">
-                  {code} : {s.erreur}
-                </td>
-              </tr>
-            ) : (
-              ligne(code, {
-                analyses: s.analyses ?? 0,
-                crees: s.crees ?? 0,
-                mis_a_jour: s.mis_a_jour ?? 0,
-                regularisees: s.regularisees ?? 0,
-              })
-            ),
-          )}
-          {ligne("Total du passage", stats, true)}
-        </tbody>
-      </table>
-      <p className="border-t border-line px-2 py-1.5 text-xs text-slate-500">Passage du {formatDate(stats.date)}</p>
-    </div>
-  );
-}
 
 // Contrôles de filtre compacts (même hauteur, largeur selon le contenu)
 const filterInput =
@@ -215,6 +147,11 @@ export default function DefaillancesPage() {
   const [reloadKey, setReloadKey] = useState<number>(0);
   const silentRef = useRef<boolean>(false); // true = rechargement automatique (sans voile de chargement)
   const [ficheId, setFicheId] = useState<number | null>(null);
+
+  // Détail des anomalies d'un dossier (consultation avant affectation notamment)
+  const [voirGroupe, setVoirGroupe] = useState<GroupeAlerte | null>(null);
+  const [voirId, setVoirId] = useState<number | null>(null);
+  const [voirErreur, setVoirErreur] = useState<string>("");
 
   const [filters, setFilters] = useState<Filters>({
     regle: "",
@@ -246,14 +183,14 @@ export default function DefaillancesPage() {
   const [assignErreur, setAssignErreur] = useState<string>("");
   const [assigning, setAssigning] = useState<boolean>(false);
 
-  // Lancer l'analyse
+  // Lancer l'analyse (manuelle par défaut : l'utilisateur choisit l'année ou l'intervalle)
   const [analyseOpen, setAnalyseOpen] = useState<boolean>(false);
-  const [anneesChoisies, setAnneesChoisies] = useState<number[]>([ANNEES_ANALYSE[0], ANNEES_ANALYSE[1]]);
+  const [modeAnalyse, setModeAnalyse] = useState<ModeAnalyse>("manuelle");
+  const [cible, setCible] = useState<"annee" | "intervalle">("intervalle");
+  const [anneeDebut, setAnneeDebut] = useState<string>(String(ANNEES_ANALYSE[1]));
+  const [anneeFin, setAnneeFin] = useState<string>(String(ANNEES_ANALYSE[0]));
   const [analyseRunning, setAnalyseRunning] = useState<boolean>(false);
   const [analyseError, setAnalyseError] = useState<string>("");
-  const [analyseMessage, setAnalyseMessage] = useState<string>("");
-  const [analyseStats, setAnalyseStats] = useState<AnalyseStats | null>(null);
-  const [analyseDetailOpen, setAnalyseDetailOpen] = useState<boolean>(false);
 
   // Import CSV
   const [importOpen, setImportOpen] = useState<boolean>(false);
@@ -337,7 +274,7 @@ export default function DefaillancesPage() {
 
   const reload = useCallback(() => setReloadKey((k) => k + 1), []);
 
-  // Rafraîchissement automatique toutes les minutes (nouvelles alertes de l'analyse planifiée)
+  // Rafraîchissement périodique de la liste (dossiers pris ou traités par un autre agent)
   useEffect(() => {
     const t = setInterval(() => {
       silentRef.current = true;
@@ -426,6 +363,22 @@ export default function DefaillancesPage() {
     }
   }
 
+  // ---- Détail des anomalies ----
+
+  /** Ouvre la fenêtre de détail avec le dossier complet, quels que soient les filtres de la liste. */
+  async function voirDetails(g: GroupeAlerte) {
+    setVoirErreur("");
+    setVoirId(g.representant_id);
+    try {
+      const res = await api.get<DossierAlerte>(`/defaillances/${g.representant_id}/dossier`);
+      setVoirGroupe(res.data.groupe);
+    } catch (err) {
+      setVoirErreur(getErrorMessage(err, "Impossible de charger le détail du dossier."));
+    } finally {
+      setVoirId(null);
+    }
+  }
+
   // ---- Affectation d'un dossier à un agent ----
 
   /** Ouvre la fenêtre d'assignation et charge les agents du centre du dossier. */
@@ -469,23 +422,41 @@ export default function DefaillancesPage() {
 
   // ---- Analyse ----
 
+  /** L'analyse automatique suit les réglages ; la manuelle exige une année (ou un intervalle) valide. */
+  const analyseValide =
+    modeAnalyse === "automatique" ||
+    (anneeDebut !== "" && anneeFin !== "" && Number(anneeDebut) <= Number(anneeFin));
+
+  function choisirDebut(v: string) {
+    setAnneeDebut(v);
+    if (cible === "intervalle" && v !== "" && anneeFin !== "" && Number(v) > Number(anneeFin)) setAnneeFin(v);
+  }
+
+  function choisirFin(v: string) {
+    setAnneeFin(v);
+    if (v !== "" && anneeDebut !== "" && Number(v) < Number(anneeDebut)) setAnneeDebut(v);
+  }
+
   async function handleAnalyse(e: FormEvent) {
     e.preventDefault();
-    if (anneesChoisies.length === 0) return;
+    if (!analyseValide) return;
     setAnalyseRunning(true);
     setAnalyseError("");
-    setAnalyseMessage("");
-    setAnalyseStats(null);
 
     try {
-      const res = await api.post<AnalyseStats>("/defaillances/analyser", {
-        annees: [...anneesChoisies].sort((a, b) => b - a),
-      });
-      setAnalyseMessage(res.data.message);
-      setAnalyseStats(res.data);
-      setAnalyseDetailOpen(true);
+      const body =
+        modeAnalyse === "automatique"
+          ? { mode: "automatique" }
+          : {
+              mode: "manuelle",
+              annee_debut: Number(anneeDebut),
+              annee_fin: cible === "annee" ? Number(anneeDebut) : Number(anneeFin),
+            };
+
+      await api.post("/defaillances/analyser", body);
       setFilters((f) => ({ ...f, statut: "a_traiter", regle: "", niveau: "", type_impot: "", annee_fiscale: "" }));
       setPage(1);
+      setAnalyseOpen(false); // les résultats s'affichent directement dans le tableau des anomalies
       reload();
       window.dispatchEvent(new Event("notifications:maj"));
     } catch (err) {
@@ -493,10 +464,6 @@ export default function DefaillancesPage() {
     } finally {
       setAnalyseRunning(false);
     }
-  }
-
-  function toggleAnnee(annee: number) {
-    setAnneesChoisies((v) => (v.includes(annee) ? v.filter((a) => a !== annee) : [...v, annee]));
   }
 
   // ---- Import CSV ----
@@ -866,6 +833,7 @@ export default function DefaillancesPage() {
         <ErrorBox message={error} />
         <ErrorBox message={priseErreur} />
         <ErrorBox message={exportError} />
+        <ErrorBox message={voirErreur} />
 
         <div className="overflow-x-auto">
           <table className="w-full min-w-[760px] text-left text-sm">
@@ -991,16 +959,27 @@ export default function DefaillancesPage() {
                           <span className="rounded border border-line bg-slate-50 px-2 py-1 text-[12px] font-medium text-slate-500" title={`Dossier pris par ${g.pris_par ?? "un autre utilisateur"}`}>
                             En traitement
                           </span>
-                          {canManage && (
+                          <div className="flex items-center gap-2.5">
                             <button
                               type="button"
-                              className="text-xs font-medium text-brand-azure hover:text-brand-blue hover:underline disabled:opacity-50"
-                              disabled={priseId === g.representant_id}
-                              onClick={() => setAReprendre(g)}
+                              className="text-xs font-medium text-brand-azure underline-offset-2 hover:text-brand-blue hover:underline disabled:opacity-50"
+                              disabled={voirId === g.representant_id}
+                              onClick={() => void voirDetails(g)}
+                              title="Voir le détail des anomalies de ce dossier"
                             >
-                              Reprendre
+                              {voirId === g.representant_id ? "..." : "Voir"}
                             </button>
-                          )}
+                            {canManage && (
+                              <button
+                                type="button"
+                                className="text-xs font-medium text-brand-azure hover:text-brand-blue hover:underline disabled:opacity-50"
+                                disabled={priseId === g.representant_id}
+                                onClick={() => setAReprendre(g)}
+                              >
+                                Reprendre
+                              </button>
+                            )}
+                          </div>
                         </div>
                       ) : (
                         <div className="flex flex-col items-end gap-0.5">
@@ -1018,16 +997,27 @@ export default function DefaillancesPage() {
                                   ? "Traiter"
                                   : "Voir le dossier"}
                           </button>
-                          {g.statut === "a_traiter" && canManage && (
+                          <div className="flex items-center gap-2.5">
                             <button
                               type="button"
-                              className="text-xs font-medium text-brand-azure underline underline-offset-2 hover:text-brand-blue disabled:opacity-50"
-                              disabled={priseId === g.representant_id}
-                              onClick={() => openAssigner(g)}
+                              className="text-xs font-medium text-brand-azure underline-offset-2 hover:text-brand-blue hover:underline disabled:opacity-50"
+                              disabled={voirId === g.representant_id}
+                              onClick={() => void voirDetails(g)}
+                              title="Voir le détail des anomalies de ce dossier"
                             >
-                              Assigner
+                              {voirId === g.representant_id ? "..." : "Voir"}
                             </button>
-                          )}
+                            {g.statut === "a_traiter" && canManage && (
+                              <button
+                                type="button"
+                                className="text-xs font-medium text-brand-azure underline underline-offset-2 hover:text-brand-blue disabled:opacity-50"
+                                disabled={priseId === g.representant_id}
+                                onClick={() => openAssigner(g)}
+                              >
+                                Assigner
+                              </button>
+                            )}
+                          </div>
                         </div>
                       )}
                     </td>
@@ -1103,67 +1093,160 @@ export default function DefaillancesPage() {
         <Modal title="Lancer l'analyse" onClose={() => setAnalyseOpen(false)}>
           <form onSubmit={handleAnalyse} className="space-y-4">
             <p className="text-sm text-slate-600">
-              Toutes les règles actives sont appliquées. <strong>Défaut de dépôt</strong> (R4) et <strong>baisse du chiffre
-              d'affaires</strong> partent des déclarations (date limite dépassée ; CA en recul de 30 % ou plus). Les{" "}
-              <strong>critères de risque R1, R2, R3, R5, R6 et R7</strong> recoupent l'IR, la TVA, le recoupement et la douane
-              (écart de CA, série de déficits, crédits de TVA, marchés publics, importations, exportations). Chaque contribuable
-              concerné forme un seul dossier, quel que soit le nombre d'anomalies. L'analyse tourne aussi automatiquement toutes
-              les 5 minutes.
+              Choisissez une analyse <strong>automatique</strong> (comme la planification toutes les 5 minutes) ou{" "}
+              <strong>manuelle</strong> pour cibler une année ou un intervalle d'années. Chaque contribuable concerné forme
+              un seul dossier, quel que soit le nombre d'anomalies.
               {role === "admin" ? " L'analyse porte sur votre centre." : " L'analyse porte sur tous les centres."}
             </p>
 
-            <ErrorBox message={analyseError} />
-            {analyseMessage && (
-              <p className="rounded-lg border border-brand-green/60 bg-leaf-50 px-3 py-2 text-sm text-brand-blue">
-                {analyseMessage}
-              </p>
-            )}
-
-            <Field
-              label="Années à analyser"
-              required
-              hint="La plus récente cochée est l'année de référence ; toutes les années entre la plus ancienne et la plus récente sont analysées (six au maximum)."
-            >
-              <div className="flex flex-wrap gap-x-4 gap-y-2">
-                {ANNEES_ANALYSE.map((annee) => (
-                  <label key={annee} className="flex items-center gap-2 text-sm text-slate-700">
-                    <input
-                      type="checkbox"
-                      className="h-4 w-4 accent-brand-blue"
-                      checked={anneesChoisies.includes(annee)}
-                      onChange={() => toggleAnnee(annee)}
-                    />
-                    {annee}
-                    {annee === ANNEES_ANALYSE[0] && <span className="text-xs text-slate-500">(en cours)</span>}
-                  </label>
-                ))}
-              </div>
-            </Field>
-            <p className="-mt-2 text-xs text-slate-500">
-              Une année révolue est jugée telle qu'on la connaissait au 31 décembre de cette année (seules les échéances déjà
-              dépassées à cette date sont contrôlées). Les critères R1–R7 jugent, eux, le dernier exercice fermé à cette date
-              (l'IR étant déclaré en mai, c'est l'année précédente).
-            </p>
-
-            {analyseStats && (
-              <div className="space-y-2">
-                <button
-                  type="button"
-                  className="text-sm font-medium text-brand-azure underline hover:text-brand-blue"
-                  onClick={() => setAnalyseDetailOpen((v) => !v)}
+            <fieldset>
+              <legend className="mb-2 text-sm font-medium text-slate-800">Mode d'analyse</legend>
+              <div role="radiogroup" aria-label="Mode d'analyse" className="grid gap-2 sm:grid-cols-2">
+                <label
+                  className={`flex cursor-pointer gap-2.5 rounded-xl border px-3 py-2.5 transition ${
+                    modeAnalyse === "automatique"
+                      ? "border-brand-azure bg-brand-azure-soft ring-1 ring-brand-azure/40"
+                      : "border-line bg-white hover:border-brand-azure/40 hover:bg-slate-50"
+                  }`}
                 >
-                  {analyseDetailOpen ? "Masquer les détails du passage" : "Voir les détails du passage"}
-                </button>
+                  <input
+                    type="radio"
+                    name="mode-analyse"
+                    checked={modeAnalyse === "automatique"}
+                    onChange={() => setModeAnalyse("automatique")}
+                    className="mt-0.5 h-4 w-4 accent-brand-blue"
+                  />
+                  <span className="min-w-0">
+                    <span className="block text-sm font-semibold text-slate-900">Automatique</span>
+                    <span className="block text-xs leading-snug text-slate-600">
+                      Date du jour et fenêtre d'exercices enregistrée pour chaque règle.
+                    </span>
+                  </span>
+                </label>
+                <label
+                  className={`flex cursor-pointer gap-2.5 rounded-xl border px-3 py-2.5 transition ${
+                    modeAnalyse === "manuelle"
+                      ? "border-brand-azure bg-brand-azure-soft ring-1 ring-brand-azure/40"
+                      : "border-line bg-white hover:border-brand-azure/40 hover:bg-slate-50"
+                  }`}
+                >
+                  <input
+                    type="radio"
+                    name="mode-analyse"
+                    checked={modeAnalyse === "manuelle"}
+                    onChange={() => setModeAnalyse("manuelle")}
+                    className="mt-0.5 h-4 w-4 accent-brand-blue"
+                  />
+                  <span className="min-w-0">
+                    <span className="block text-sm font-semibold text-slate-900">Manuelle</span>
+                    <span className="block text-xs leading-snug text-slate-600">
+                      Cible une année précise ou un intervalle (six années au plus).
+                    </span>
+                  </span>
+                </label>
+              </div>
+            </fieldset>
 
-                {analyseDetailOpen && <DetailsAnalyse stats={analyseStats} />}
+            {modeAnalyse === "manuelle" && (
+              <div className="rounded-xl border border-line bg-slate-50/70 p-3.5">
+                <div role="radiogroup" aria-label="Période ciblée" className="flex flex-wrap gap-x-5 gap-y-2">
+                  <label className="flex items-center gap-2 text-sm text-slate-700">
+                    <input
+                      type="radio"
+                      name="cible-analyse"
+                      className="h-4 w-4 accent-brand-blue"
+                      checked={cible === "annee"}
+                      onChange={() => {
+                        setCible("annee");
+                        setAnneeFin(anneeDebut);
+                      }}
+                    />
+                    Une année
+                  </label>
+                  <label className="flex items-center gap-2 text-sm text-slate-700">
+                    <input
+                      type="radio"
+                      name="cible-analyse"
+                      className="h-4 w-4 accent-brand-blue"
+                      checked={cible === "intervalle"}
+                      onChange={() => {
+                        setCible("intervalle");
+                        if (Number(anneeFin) < Number(anneeDebut)) setAnneeFin(anneeDebut);
+                      }}
+                    />
+                    Un intervalle d'années
+                  </label>
+                </div>
+
+                <div className="mt-3 flex flex-wrap items-end gap-3">
+                  <label className="block">
+                    <span className="mb-1 block text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+                      {cible === "annee" ? "Année" : "De"}
+                    </span>
+                    <select
+                      aria-label={cible === "annee" ? "Année à analyser" : "Première année de l'intervalle"}
+                      className={inputClass}
+                      value={anneeDebut}
+                      onChange={(e) => choisirDebut(e.target.value)}
+                    >
+                      {ANNEES_ANALYSE.map((annee) => (
+                        <option key={annee} value={annee}>
+                          {annee}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  {cible === "intervalle" && (
+                    <label className="block">
+                      <span className="mb-1 block text-[11px] font-semibold uppercase tracking-wider text-slate-500">À</span>
+                      <select
+                        aria-label="Dernière année de l'intervalle"
+                        className={inputClass}
+                        value={anneeFin}
+                        onChange={(e) => choisirFin(e.target.value)}
+                      >
+                        {ANNEES_ANALYSE.map((annee) => (
+                          <option key={annee} value={annee}>
+                            {annee}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  )}
+                </div>
+
+                <p className="mt-2 text-xs leading-snug text-slate-500">
+                  {cible === "annee"
+                    ? `Analyse de l'année ${anneeDebut}.`
+                    : `Analyse des années ${anneeDebut} à ${anneeFin} (${Number(anneeFin) - Number(anneeDebut) + 1} exercices).`}{" "}
+                  La dernière année est l'année de référence. Une année révolue est jugée telle qu'on la connaissait au
+                  31 décembre de cette année : seules les échéances déjà dépassées à cette date sont contrôlées.
+                </p>
+                {!analyseValide && (
+                  <p className="mt-1 text-xs font-medium text-red-600">L'année de début doit précéder l'année de fin.</p>
+                )}
               </div>
             )}
+
+            <div className="rounded-xl border border-line bg-slate-50/70 p-3.5">
+              <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">Exemples par critère de risque</p>
+              <dl className="mt-2 grid gap-x-6 gap-y-1.5 sm:grid-cols-2">
+                {EXEMPLES_CRITERES.map((x) => (
+                  <div key={x.titre} className="text-xs leading-snug text-slate-600">
+                    <dt className="font-semibold text-slate-800">{x.titre}</dt>
+                    <dd>{x.exemple}</dd>
+                  </div>
+                ))}
+              </dl>
+            </div>
+
+            <ErrorBox message={analyseError} />
 
             <FormActions>
               <button type="button" className={secondaryButtonClass} onClick={() => setAnalyseOpen(false)}>
                 Fermer
               </button>
-              <button type="submit" className={primaryButtonClass} disabled={analyseRunning || anneesChoisies.length === 0}>
+              <button type="submit" className={primaryButtonClass} disabled={analyseRunning || !analyseValide}>
                 {analyseRunning ? "Analyse en cours..." : "Lancer l'analyse"}
               </button>
             </FormActions>
@@ -1352,6 +1435,9 @@ export default function DefaillancesPage() {
           </form>
         </Modal>
       )}
+
+      {/* Détail des anomalies d'un dossier (consultation, avant affectation) */}
+      {voirGroupe && <AnomaliesDossierModal groupe={voirGroupe} onClose={() => setVoirGroupe(null)} />}
 
       {/* Fiche contribuable (en dernier : s'affiche au-dessus de la fenêtre « Traiter ») */}
       {ficheId !== null && <ContribuableModal id={ficheId} onClose={() => setFicheId(null)} />}

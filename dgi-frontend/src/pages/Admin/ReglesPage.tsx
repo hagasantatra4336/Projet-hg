@@ -168,6 +168,12 @@ function Formules({ formule }: { formule: FormuleRegle }) {
             <dd className="text-sm leading-relaxed text-slate-700">{formule.sources.join(" · ")}</dd>
           </div>
         )}
+        {formule.exemple && (
+          <div className="grid gap-x-4 gap-y-0.5 sm:grid-cols-[11rem_1fr]">
+            <dt className="text-xs font-medium text-slate-500">Exemple</dt>
+            <dd className="text-sm leading-relaxed text-slate-700">{formule.exemple}</dd>
+          </div>
+        )}
       </dl>
 
       <ul className="mt-4 space-y-1.5 border-t border-line pt-3">

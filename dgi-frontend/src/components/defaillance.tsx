@@ -11,6 +11,7 @@ import {
   type CelluleDeclaration,
   type ContribuableFiche,
   type Defaillance,
+  type GroupeAlerte,
   type LigneHistorique,
   type NiveauRisque,
   type Regle,
@@ -178,6 +179,107 @@ export function PeriodeAnomalie({ a }: { a: PeriodeAlerte }) {
           : `${a.periodes_manquees} mois non déposé${a.periodes_manquees > 1 ? "s" : ""}${score}`}
       </p>
     </>
+  );
+}
+
+// ---------------------------------------------------------------------
+//  Anomalies d'un dossier (fenêtre de détail : dossier libre avant affectation, dossiers traités)
+// ---------------------------------------------------------------------
+
+export function AnomaliesDossierModal({ groupe, onClose }: { groupe: GroupeAlerte; onClose: () => void }) {
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-brand-blue-dark/60 p-4 backdrop-blur-[2px]"
+      onMouseDown={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
+    >
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label="Anomalies du dossier"
+        className="max-h-[90vh] w-full max-w-3xl overflow-y-auto rounded-2xl border border-line bg-white p-6 shadow-xl"
+      >
+        <div className="mb-4 flex items-start justify-between gap-4">
+          <div>
+            <h2 className="text-lg font-semibold text-brand-blue">{groupe.contribuable.nom}</h2>
+            <p className="mt-0.5 text-sm text-slate-500">
+              NIF {groupe.contribuable.nif} · {groupe.contribuable.centre ?? "Aucun centre"}
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="text-2xl leading-none text-slate-400 hover:text-slate-600"
+            aria-label="Fermer"
+          >
+            ×
+          </button>
+        </div>
+
+        <div className="mb-3 flex flex-wrap items-center gap-2 text-sm">
+          <StatutBadge statut={groupe.statut} />
+          <span className="text-slate-500">
+            {groupe.nb_alertes} anomalie{groupe.nb_alertes > 1 ? "s" : ""}
+          </span>
+          {groupe.traite_le && (
+            <span className="text-slate-500">
+              · clôturé le {formatDate(groupe.traite_le)}
+              {groupe.traite_par ? ` par ${groupe.traite_par}` : ""}
+            </span>
+          )}
+        </div>
+
+        <ul className="space-y-2">
+          {groupe.alertes.map((a) => (
+            <li key={a.id} className="rounded-xl border border-line p-3 text-sm">
+              <div className="flex flex-wrap items-center gap-2">
+                <RegleBadge regle={a.regle} />
+                <NiveauBadge niveau={a.niveau} />
+                <StatutBadge statut={a.statut} />
+                <span className="font-medium text-slate-700">{a.type_impot}</span>
+                <Link
+                  to={`/defaillances/${groupe.representant_id}/traitement#alerte-${a.id}`}
+                  onClick={onClose}
+                  title="Voir le détail de cette alerte"
+                  className="ml-auto rounded-md border border-line px-2 py-0.5 text-xs font-medium text-brand-azure transition hover:border-brand-azure hover:text-brand-blue"
+                >
+                  Voir
+                </Link>
+              </div>
+              <p className="mt-1 text-xs text-slate-600">
+                <PeriodeAnomalie a={a} />
+              </p>
+              <p className="mt-2 text-xs leading-relaxed text-slate-700">{a.motif}</p>
+              {a.commentaire && <p className="mt-1 text-xs italic text-slate-500">Commentaire : {a.commentaire}</p>}
+              {a.traite_par && (
+                <p className="mt-1 text-xs text-slate-500">
+                  Traitée par {a.traite_par}
+                  {a.traite_le ? `, le ${formatDate(a.traite_le)}` : ""}
+                </p>
+              )}
+            </li>
+          ))}
+        </ul>
+
+        <div className="mt-5 flex flex-wrap justify-end gap-2">
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-lg border border-line px-3 py-1.5 text-sm font-medium text-slate-600 transition hover:bg-slate-50"
+          >
+            Fermer
+          </button>
+          <Link
+            to={`/defaillances/${groupe.representant_id}/traitement`}
+            onClick={onClose}
+            className="rounded-lg bg-brand-blue px-3 py-1.5 text-sm font-semibold text-white transition hover:brightness-110"
+          >
+            Ouvrir le dossier
+          </Link>
+        </div>
+      </div>
+    </div>
   );
 }
 
