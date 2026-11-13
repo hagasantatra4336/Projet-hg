@@ -27,7 +27,7 @@ class DetecteurPersonnalise
     /**
      * @return array<string, mixed>
      */
-    public function analyser(Regle $regle, DateTimeInterface $date, ?int $centreId = null, bool $simuler = false, ?int $fenetre = null): array
+    public function analyser(Regle $regle, DateTimeInterface $date, ?int $centreId = null, bool $simuler = false, ?int $fenetre = null, ?int $anneeMin = null, ?int $anneeMax = null): array
     {
         $aujourdhui = $date->format('Y-m-d');
 
@@ -37,7 +37,9 @@ class DetecteurPersonnalise
 
         $conditions = (array) $regle->conditions;
         $impots = array_values((array) $regle->impots);
-        $anneeMin = (int) $date->format('Y') - (int) ($fenetre ?? ($regle->parametres['fenetre_annees'] ?? 1));
+        // Analyse manuelle : la plage d'exercices est imposée (bornes incluses) au lieu du calcul par fenêtre.
+        $anneeMax ??= (int) $date->format('Y');
+        $anneeMin ??= $anneeMax - (int) ($fenetre ?? ($regle->parametres['fenetre_annees'] ?? 1));
 
         $colonnes = $this->colonnes($conditions); // code => colonne (vérifiée)
 
@@ -49,7 +51,7 @@ class DetecteurPersonnalise
         // Parcours en flux : chaque déclaration est évaluée puis oubliée. Avant, toutes les lignes
         // étaient empilées dans un tableau (saturation mémoire possible sur une grosse base) ;
         // seules les déclarations en défaut sont conservées pour créer/mettre à jour les alertes.
-        $this->parcourir($colonnes, $impots, $anneeMin, (int) $date->format('Y'), $centreId, function (array $l) use (&$trouvees, &$absentes, &$analyses, $conditions, $regle, $libelles): void {
+        $this->parcourir($colonnes, $impots, $anneeMin, $anneeMax, $centreId, function (array $l) use (&$trouvees, &$absentes, &$analyses, $conditions, $regle, $libelles): void {
             $analyses++;
 
             if (in_array(null, $l['valeurs'], true)) {
@@ -85,7 +87,7 @@ class DetecteurPersonnalise
 
         $stats = ['date' => $aujourdhui, 'analyses' => $analyses, 'crees' => 0, 'mis_a_jour' => 0, 'regularisees' => 0];
 
-        DB::transaction(function () use ($trouvees, $regle, $anneeMin, $impots, $centreId, $date, &$stats) {
+        DB::transaction(function () use ($trouvees, $regle, $anneeMin, $anneeMax, $impots, $centreId, $date, &$stats) {
             $actuelles = [];
 
             foreach ($trouvees as $t) {
@@ -127,7 +129,7 @@ class DetecteurPersonnalise
             $ouvertes = Alerte::query()
                 ->where('regle', $regle->code)
                 ->where('statut', Alerte::A_TRAITER)
-                ->whereBetween('annee_fiscale', [$anneeMin, (int) $date->format('Y')])
+                ->whereBetween('annee_fiscale', [$anneeMin, $anneeMax])
                 ->whereIn('type_impot', $impots)
                 ->when($centreId !== null, fn ($q) => $q->whereHas('contribuable', fn ($c) => $c->where('centre_id', $centreId)))
                 ->get(['id', 'contribuable_id', 'type_impot', 'annee_fiscale', 'mois']);

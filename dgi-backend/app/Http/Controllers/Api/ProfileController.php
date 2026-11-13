@@ -83,6 +83,15 @@ class ProfileController extends Controller
                     ]);
                 }
 
+                // Un service central masqué n'est pas proposé : impossible de s'y rattacher
+                // soi-même en contournant la liste (même règle que l'inscription). Le centre
+                // actuel, même masqué, reste valable puisque la valeur ne change pas.
+                if ($centreId !== null && ! Centre::proposes()->whereKey($centreId)->exists()) {
+                    throw ValidationException::withMessages([
+                        'centre_id' => "Ce centre n'est plus disponible : choisissez-en un autre.",
+                    ]);
+                }
+
                 $changes['centre_id'] = $centreId;
             }
         }
@@ -204,8 +213,8 @@ class ProfileController extends Controller
                 return response()->json(['message' => $message], 422);
             }
 
-            if ($changes['centre_id'] !== null && ! Centre::whereKey($changes['centre_id'])->exists()) {
-                $message = "Le centre choisi n'existe plus. Refaites une demande depuis votre profil.";
+            if ($changes['centre_id'] !== null && ! Centre::proposes()->whereKey($changes['centre_id'])->exists()) {
+                $message = "Le centre choisi n'est plus disponible. Refaites une demande depuis votre profil.";
                 $this->marquerDemande($requestId, 'failed', ['message' => $message]);
 
                 return response()->json(['message' => $message], 422);

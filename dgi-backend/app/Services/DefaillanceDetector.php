@@ -14,14 +14,16 @@ class DefaillanceDetector
     /**
      * @return array{date: string, analyses: int, crees: int, mis_a_jour: int, regularisees: int}
      */
-    public function analyser(DateTimeInterface $date, ?int $centreId = null, ?int $fenetre = null): array
+    public function analyser(DateTimeInterface $date, ?int $centreId = null, ?int $fenetre = null, ?int $anneeMin = null, ?int $anneeMax = null): array
     {
         $cfg = config('anomalies.defaillance');
         if ($fenetre !== null) {
-            $cfg['fenetre_exercices'] = $fenetre; 
+            $cfg['fenetre_exercices'] = $fenetre;
         }
         $aujourdhui = $date->format('Y-m-d');
-        $anneeMin = (int) $date->format('Y') - (int) $cfg['fenetre_exercices'];
+        // Analyse manuelle : la plage d'exercices est imposée (bornes incluses) au lieu du calcul par fenêtre.
+        $anneeMax ??= (int) $date->format('Y');
+        $anneeMin ??= $anneeMax - (int) $cfg['fenetre_exercices'];
 
         $contribuables = [];
         $q = DB::table('contribuables')->select('id', 'date_cessation', 'date_radiation');
@@ -62,7 +64,8 @@ class DefaillanceDetector
                 $premieres[(int) $r->contribuable_id][$r->type_impot] = (int) $r->premiere;
             }
         }
-        foreach (Declaration::query()->whereIn('type_impot', $cfg['impots'])->where('annee_fiscale', '>=', $anneeMin)
+        foreach (Declaration::query()->whereIn('type_impot', $cfg['impots'])
+            ->whereBetween('annee_fiscale', [$anneeMin, $anneeMax])
             ->select('contribuable_id', 'type_impot', 'annee_fiscale', 'mois')->cursor() as $d) {
             if (isset($contribuables[$d->contribuable_id])) {
                 $declares[(int) $d->contribuable_id][$d->type_impot][(int) $d->annee_fiscale][(int) $d->mois] = true;
@@ -71,7 +74,7 @@ class DefaillanceDetector
 
         // [AJOUT] Dates limites de paiement : prises dans le calendrier fiscal officiel DGI (CalendrierFiscal),
         // construites dans detecter() pour les seules périodes obligées (avant : lues dans les déclarations).
-        $trouvees = self::detecter($assujs, $declares, $premieres, $contribuables, $aujourdhui, $cfg);
+        $trouvees = self::detecter($assujs, $declares, $premieres, $contribuables, $aujourdhui, $cfg, $anneeMin, $anneeMax);
 
         // Couples (contribuable, impôt) examinés
         $paires = [];
@@ -87,7 +90,7 @@ class DefaillanceDetector
         $stats = ['date' => $aujourdhui, 'analyses' => count($paires), 'crees' => 0, 'mis_a_jour' => 0, 'regularisees' => 0];
 
         // Écriture : création / mise à jour des alertes, puis régularisation de celles qui ne tiennent plus
-        DB::transaction(function () use ($trouvees, $anneeMin, $centreId, $date, &$stats) {
+        DB::transaction(function () use ($trouvees, $anneeMin, $anneeMax, $centreId, $date, &$stats) {
             $actuelles = [];
 
             foreach ($trouvees as $t) {
@@ -131,7 +134,7 @@ class DefaillanceDetector
             $ouvertes = Alerte::query()
                 ->where('regle', Alerte::REGLE_DEFAILLANCE)
                 ->where('statut', Alerte::A_TRAITER)
-                ->whereBetween('annee_fiscale', [$anneeMin, (int) $date->format('Y')])
+                ->whereBetween('annee_fiscale', [$anneeMin, $anneeMax])
                 ->when($centreId !== null, fn ($q) => $q->whereHas(
                     'contribuable',
                     fn ($c) => $c->where('centre_id', $centreId)
@@ -166,10 +169,13 @@ class DefaillanceDetector
         array $premieres,
         array $contribuables,
         string $aujourdhui,
-        array $cfg
+        array $cfg,
+        ?int $anneeMin = null,
+        ?int $anneeMax = null
     ): array {
-        $anneeCourante = (int) substr($aujourdhui, 0, 4);
-        $annees = range($anneeCourante - (int) $cfg['fenetre_exercices'], $anneeCourante);
+        $anneeMax ??= (int) substr($aujourdhui, 0, 4);
+        $anneeMin ??= $anneeMax - (int) $cfg['fenetre_exercices'];
+        $annees = range($anneeMin, $anneeMax);
 
         // Assujettissements par couple (contribuable, impôt) puis par année
         $parPaire = [];

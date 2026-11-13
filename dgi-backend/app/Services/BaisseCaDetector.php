@@ -27,13 +27,15 @@ class BaisseCaDetector
     /**
      * @return array{date: string, analyses: int, crees: int, mis_a_jour: int, regularisees: int}
      */
-    public function analyser(DateTimeInterface $date, ?int $centreId = null, ?int $fenetre = null): array
+    public function analyser(DateTimeInterface $date, ?int $centreId = null, ?int $fenetre = null, ?int $anneeMin = null, ?int $anneeMax = null): array
     {
         $cfg = config('anomalies.baisse_ca');
         if ($fenetre !== null) {
             $cfg['fenetre_annees'] = $fenetre; // passage ponctuel : ne modifie pas le réglage enregistré
         }
-        $anneeMin = (int) $date->format('Y') - (int) $cfg['fenetre_annees'];
+        // Analyse manuelle : la plage d'exercices est imposée (bornes incluses) au lieu du calcul par fenêtre.
+        $anneeMax ??= (int) $date->format('Y');
+        $anneeMin ??= $anneeMax - (int) $cfg['fenetre_annees'];
 
         $query = Declaration::query()
             ->join('contribuables', 'contribuables.id', '=', 'declarations.contribuable_id')
@@ -46,7 +48,7 @@ class BaisseCaDetector
             })
             ->whereIn('declarations.type_impot', $cfg['impots'])
             ->whereNotNull('declarations.chiffre_affaires')
-            ->where('declarations.annee_fiscale', '>=', $anneeMin)
+            ->whereBetween('declarations.annee_fiscale', [$anneeMin, $anneeMax])
             ->select(
                 'declarations.contribuable_id',
                 'declarations.type_impot',
@@ -83,7 +85,7 @@ class BaisseCaDetector
         $stats = ['date' => $date->format('Y-m-d'), 'analyses' => count($lignes), 'crees' => 0, 'mis_a_jour' => 0, 'regularisees' => 0];
         $trouvees = self::detecter($lignes, $cfg);
 
-        DB::transaction(function () use ($trouvees, $anneeMin, $centreId, $date, &$stats) {
+        DB::transaction(function () use ($trouvees, $anneeMin, $anneeMax, $centreId, $date, &$stats) {
             $actuelles = [];
 
             foreach ($trouvees as $t) {
@@ -127,7 +129,7 @@ class BaisseCaDetector
             $ouvertes = Alerte::query()
                 ->where('regle', Alerte::REGLE_BAISSE_CA)
                 ->where('statut', Alerte::A_TRAITER)
-                ->whereBetween('annee_fiscale', [$anneeMin, (int) $date->format('Y')])
+                ->whereBetween('annee_fiscale', [$anneeMin, $anneeMax])
                 ->when($centreId !== null, fn ($q) => $q->whereHas(
                     'contribuable',
                     fn ($c) => $c->where('centre_id', $centreId)

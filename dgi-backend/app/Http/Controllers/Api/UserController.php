@@ -60,10 +60,12 @@ class UserController extends Controller
     {
         $me = $request->user();
 
-        $centres = Centre::orderBy('nom')->get(['id', 'nom', 'adresse']);
+        // Centres proposés : un service central masqué n'apparaît dans aucun champ de recherche
+        // (filtre de la liste des utilisateurs, formulaire de création/édition). Un chef de centre
+        // garde le sien, même masqué, pour ne jamais rester sans centre.
+        $centres = Centre::proposes()->orderBy('nom')->get(['id', 'nom', 'adresse']);
         if ($me->role === Role::Admin) {
-            $ownId = $this->ownCentreId($me);
-            $centres = $centres->where('id', $ownId)->values();
+            $centres = Centre::whereKey($this->ownCentreId($me))->get(['id', 'nom', 'adresse']);
         }
 
         $fonctions = Fonction::orderBy('nom')->get()

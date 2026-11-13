@@ -274,7 +274,8 @@ export default function DashboardPage() {
   // Compteurs centres / fonctions selon les droits
   useEffect(() => {
     if (canCentres) {
-      api.get<Centre[]>("/centres").then((res) => setCentresCount(res.data.length)).catch(() => undefined);
+      // Compteur total : la page de gestion compte aussi les services centraux masqués (?tous=1).
+      api.get<Centre[]>("/centres", { params: { tous: 1 } }).then((res) => setCentresCount(res.data.length)).catch(() => undefined);
     }
     if (canFonctions) {
       api.get<Fonction[]>("/fonctions").then((res) => setFonctionsCount(res.data.length)).catch(() => undefined);

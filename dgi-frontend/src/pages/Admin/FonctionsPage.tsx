@@ -182,7 +182,12 @@ export default function FonctionsPage() {
           <ErrorBox message={formError} />
           <form onSubmit={handleSubmit} className="space-y-5">
             <FormGrid>
-              <Field label="Nom de la fonction" required className="sm:col-span-2">
+              <Field
+                label="Nom de la fonction"
+                required
+                className="sm:col-span-2"
+                hint="Une fonction déjà présente est refusée, même avec une casse ou des accents différents."
+              >
                 <input
                   className={inputClass}
                   value={form.nom}

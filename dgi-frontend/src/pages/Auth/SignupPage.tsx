@@ -30,7 +30,7 @@ interface SignupCentre extends CentreOption {
 interface InfosForm {
   nom: string;
   email: string;
-  im: string;
+  im: string ;
   fonction_id: string;
   centre_id: string;
   telephone: string;

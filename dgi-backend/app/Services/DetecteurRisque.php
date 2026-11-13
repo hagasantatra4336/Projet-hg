@@ -20,7 +20,7 @@ class DetecteurRisque
     private const NOMS_MOIS = ['janvier', 'février', 'mars', 'avril', 'mai', 'juin', 'juillet', 'août', 'septembre', 'octobre', 'novembre', 'décembre'];
 
     /** @return array{analyses: int, crees: int, mis_a_jour: int, regularisees: int, par_regle: array<string, int>, inactives: array<int, string>} */
-    public function analyser(DateTimeInterface $date, ?int $centreId = null, ?int $fenetre = null): array
+    public function analyser(DateTimeInterface $date, ?int $centreId = null, ?int $fenetre = null, ?int $anneeMin = null, ?int $anneeMax = null): array
     {
         $stats = ['analyses' => 0, 'crees' => 0, 'mis_a_jour' => 0, 'regularisees' => 0, 'par_regle' => [], 'inactives' => []];
 
@@ -41,11 +41,12 @@ class DetecteurRisque
 
         // [AJOUT] Un exercice n'est jugé qu'une fois CLOS : dernière échéance de déclaration du calendrier
         // fiscal (IS, IR, TVA de décembre) + 48 h. Avant, les déclarations peuvent encore être modifiées.
-        $anneeMax = CalendrierFiscal::dernierExerciceClos($date);
+        // Analyse manuelle : la plage d'exercices est imposée (bornes incluses) au lieu du calcul par fenêtre.
+        $anneeMax ??= CalendrierFiscal::dernierExerciceClos($date);
         if ($anneeMax === null) {
             return $stats; // aucun exercice ne peut être clos (calendrier fiscal inutilisable)
         }
-        $anneeMin = $anneeMax - (int) max(array_map(fn ($c) => (int) ($c['fenetre_exercices'] ?? 1), $cfgs));
+        $anneeMin ??= $anneeMax - (int) max(array_map(fn ($c) => (int) ($c['fenetre_exercices'] ?? 1), $cfgs));
 
         // Années pour lesquelles des DAU ont été chargés : sans cela, « aucun DAU » serait pris pour « aucune importation »
         $anneesDau = DB::table('base_risque')->where('source', BaseRisque::DAU)->distinct()->pluck('annee_fiscale')->map(fn ($a) => (int) $a)->all();

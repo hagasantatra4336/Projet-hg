@@ -2,20 +2,32 @@
 
 namespace App\Http\Controllers\Api;
 
+use App\Enums\Role;
 use App\Http\Controllers\Controller;
 use App\Models\Centre;
+use App\Services\DoublonCentre;
+use App\Support\Noms;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 
 /** Gestion des centres (routes réservées à superadmin et central). */
 class CentreController extends Controller
 {
-    public function index(): JsonResponse
+    public function index(Request $request): JsonResponse
     {
-        return response()->json(
-            Centre::withCount('users')->orderBy('nom')->get()
-        );
+        $query = Centre::withCount('users');
+
+        // Par défaut : uniquement les centres proposés (scope « proposes ») — un service central
+        // masqué n'apparaît donc dans aucun filtre ni champ de recherche (archives, défaillances,
+        // tableau de bord). La page de gestion demande la liste complète avec ?tous=1 pour que le
+        // super admin retrouve le centre masqué puisse le réafficher.
+        if (! $request->boolean('tous')) {
+            $query->proposes();
+        }
+
+        return response()->json($query->orderBy('nom')->get());
     }
 
     public function store(Request $request): JsonResponse
@@ -23,7 +35,24 @@ class CentreController extends Controller
         $data = $request->validate([
             'nom' => ['required', 'string', 'max:255', 'unique:centres,nom'],
             'adresse' => ['nullable', 'string', 'max:255'],
+            'type_centre' => ['nullable', Rule::in(['-', Centre::TYPE_CENTRAL])],
+            'affiche' => ['nullable', 'boolean'],
+        ], [
+            'nom.required' => 'Le nom du centre est obligatoire.',
+            'nom.unique' => 'Un centre porte déjà ce nom.',
         ]);
+
+        // Refuse un centre qui désigne déjà une entité existante, même écrit autrement
+        // (« DGE » face à « Direction des Grandes Entreprises (DGE) »).
+        $this->refuserDoublon($data['nom']);
+
+        // Seul le super admin choisit le type et l'affichage : un centre créé par un autre rôle reste fiscal.
+        if (! $this->estSuperadmin($request)) {
+            unset($data['type_centre'], $data['affiche']);
+        }
+
+        $data['type_centre'] = $data['type_centre'] ?? '-';
+        $data['affiche'] = $data['type_centre'] === Centre::TYPE_CENTRAL ? ($data['affiche'] ?? true) : true;
 
         return response()->json(Centre::create($data), 201);
     }
@@ -33,11 +62,52 @@ class CentreController extends Controller
         $data = $request->validate([
             'nom' => ['required', 'string', 'max:255', Rule::unique('centres', 'nom')->ignore($centre->id)],
             'adresse' => ['nullable', 'string', 'max:255'],
+            'type_centre' => ['nullable', Rule::in(['-', Centre::TYPE_CENTRAL])],
+            'affiche' => ['nullable', 'boolean'],
+        ], [
+            'nom.required' => 'Le nom du centre est obligatoire.',
+            'nom.unique' => 'Un centre porte déjà ce nom.',
         ]);
+
+        // Le contrôle ne porte que si le nom change : un doublon déjà présent en base
+        // reste modifiable (adresse, type, affichage) sans être bloqué.
+        if (Noms::normaliser($data['nom']) !== Noms::normaliser($centre->nom)) {
+            $this->refuserDoublon($data['nom'], $centre->id);
+        }
+
+        // Seul le super admin peut changer le type et l'affichage ; les autres rôles modifient le nom et l'adresse.
+        if (! $this->estSuperadmin($request)) {
+            unset($data['type_centre'], $data['affiche']);
+        }
+
+        $type = $data['type_centre'] ?? $centre->type_centre;
+        $data['type_centre'] = $type;
+        // Un centre fiscal est toujours proposé : repasser un service central en centre fiscal le réaffiche.
+        $data['affiche'] = $type === Centre::TYPE_CENTRAL ? ($data['affiche'] ?? $centre->affiche) : true;
 
         $centre->update($data);
 
         return response()->json($centre);
+    }
+
+    private function estSuperadmin(Request $request): bool
+    {
+        return $request->user()?->role === Role::Superadmin;
+    }
+
+    /**
+     * Refuse un centre qui désigne déjà une entité existante, même écrit différemment.
+     * Le message indique le centre trouvé pour que l'utilisateur le sélectionne au lieu d'en créer un second.
+     */
+    private function refuserDoublon(string $nom, ?int $ignorerId = null): void
+    {
+        $existant = DoublonCentre::trouver($nom, null, $ignorerId);
+
+        if ($existant !== null) {
+            throw ValidationException::withMessages([
+                'nom' => "Un centre équivalent existe déjà : « {$existant->nom} ». Utilisez ce centre au lieu d'en créer un nouveau.",
+            ]);
+        }
     }
 
     /**

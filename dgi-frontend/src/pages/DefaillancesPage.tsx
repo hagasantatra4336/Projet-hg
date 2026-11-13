@@ -57,6 +57,9 @@ interface Filters {
   type_impot: string;
   statut: "" | StatutAlerte;
   annee_fiscale: string;
+  /** Intervalle d'exercices (résultats d'une analyse manuelle sur plusieurs années). */
+  annee_min: string;
+  annee_max: string;
   centre_id: string;
   /** Dossiers créés depuis moins de N jours ("" = sans limite). */
   age_min: string;
@@ -67,7 +70,7 @@ interface ImportResult {
   erreurs: string[];
 }
 
-/** Analyse automatique : comme la planification (date du jour, fenêtre des règles). Manuelle : année ou intervalle ciblé. */
+/** Automatique : date du jour et fenêtre d'exercices enregistrée pour chaque règle. Manuelle : année ou intervalle ciblé. */
 type ModeAnalyse = "automatique" | "manuelle";
 
 /** Années proposées au lancement manuel : l'année en cours et les cinq précédentes (maximum de la fenêtre). */
@@ -159,6 +162,8 @@ export default function DefaillancesPage() {
     type_impot: "",
     statut: "a_traiter",
     annee_fiscale: "",
+    annee_min: "",
+    annee_max: "",
     centre_id: "",
     age_min: "",
   });
@@ -186,7 +191,7 @@ export default function DefaillancesPage() {
   // Lancer l'analyse (manuelle par défaut : l'utilisateur choisit l'année ou l'intervalle)
   const [analyseOpen, setAnalyseOpen] = useState<boolean>(false);
   const [modeAnalyse, setModeAnalyse] = useState<ModeAnalyse>("manuelle");
-  const [cible, setCible] = useState<"annee" | "intervalle">("intervalle");
+  const [cible, setCible] = useState<"annee" | "intervalle">("annee");
   const [anneeDebut, setAnneeDebut] = useState<string>(String(ANNEES_ANALYSE[1]));
   const [anneeFin, setAnneeFin] = useState<string>(String(ANNEES_ANALYSE[0]));
   const [analyseRunning, setAnalyseRunning] = useState<boolean>(false);
@@ -241,6 +246,8 @@ export default function DefaillancesPage() {
           // Un agent ne voit que ses dossiers assignés : le filtre de statut de l'écran ne s'applique pas à lui.
           statut: estAgent ? undefined : filters.statut || undefined,
           annee_fiscale: filters.annee_fiscale || undefined,
+          annee_min: filters.annee_min || undefined,
+          annee_max: filters.annee_max || undefined,
           centre_id: filters.centre_id || undefined,
           age_min: filters.age_min || undefined,
         },
@@ -295,6 +302,7 @@ export default function DefaillancesPage() {
     (filters.type_impot !== "" ? 1 : 0) +
     (filters.statut !== "a_traiter" ? 1 : 0) +
     (filters.annee_fiscale !== "" ? 1 : 0) +
+    (filters.annee_min !== "" || filters.annee_max !== "" ? 1 : 0) +
     (filters.centre_id !== "" ? 1 : 0) +
     (filters.age_min !== "" ? 1 : 0);
 
@@ -307,7 +315,7 @@ export default function DefaillancesPage() {
 
   function resetFilters() {
     setSearchInput("");
-    setFilters({ regle: "", niveau: "", type_impot: "", statut: "a_traiter", annee_fiscale: "", centre_id: "", age_min: "" });
+    setFilters({ regle: "", niveau: "", type_impot: "", statut: "a_traiter", annee_fiscale: "", annee_min: "", annee_max: "", centre_id: "", age_min: "" });
     setPage(1);
   }
 
@@ -425,7 +433,9 @@ export default function DefaillancesPage() {
   /** L'analyse automatique suit les réglages ; la manuelle exige une année (ou un intervalle) valide. */
   const analyseValide =
     modeAnalyse === "automatique" ||
-    (anneeDebut !== "" && anneeFin !== "" && Number(anneeDebut) <= Number(anneeFin));
+    (cible === "annee"
+      ? anneeDebut !== ""
+      : anneeDebut !== "" && anneeFin !== "" && Number(anneeDebut) <= Number(anneeFin));
 
   function choisirDebut(v: string) {
     setAnneeDebut(v);
@@ -444,17 +454,40 @@ export default function DefaillancesPage() {
     setAnalyseError("");
 
     try {
-      const body =
-        modeAnalyse === "automatique"
-          ? { mode: "automatique" }
-          : {
-              mode: "manuelle",
-              annee_debut: Number(anneeDebut),
-              annee_fin: cible === "annee" ? Number(anneeDebut) : Number(anneeFin),
-            };
+      if (modeAnalyse === "automatique") {
+        await api.post("/defaillances/analyser", { mode: "automatique" });
+        // Date du jour et fenêtre de chaque règle : aucun filtre d'exercice.
+        setFilters((f) => ({
+          ...f,
+          statut: "a_traiter",
+          regle: "",
+          niveau: "",
+          type_impot: "",
+          annee_fiscale: "",
+          annee_min: "",
+          annee_max: "",
+          centre_id: "",
+          age_min: "",
+        }));
+      } else {
+        const debut = Number(anneeDebut);
+        const fin = cible === "annee" ? debut : Number(anneeFin);
 
-      await api.post("/defaillances/analyser", body);
-      setFilters((f) => ({ ...f, statut: "a_traiter", regle: "", niveau: "", type_impot: "", annee_fiscale: "" }));
+        await api.post("/defaillances/analyser", { mode: "manuelle", annee_debut: debut, annee_fin: fin });
+        // Le tableau ne montre que les exercices analysés : une année précise, ou l'intervalle choisi.
+        setFilters((f) => ({
+          ...f,
+          statut: "a_traiter",
+          regle: "",
+          niveau: "",
+          type_impot: "",
+          annee_fiscale: cible === "annee" ? String(debut) : "",
+          annee_min: cible === "annee" ? "" : String(debut),
+          annee_max: cible === "annee" ? "" : String(fin),
+          centre_id: "",
+          age_min: "",
+        }));
+      }
       setPage(1);
       setAnalyseOpen(false); // les résultats s'affichent directement dans le tableau des anomalies
       reload();
@@ -535,6 +568,8 @@ export default function DefaillancesPage() {
           // Un agent ne voit que ses dossiers assignés : le filtre de statut de l'écran ne s'applique pas à lui.
           statut: estAgent ? undefined : filters.statut || undefined,
           annee_fiscale: filters.annee_fiscale || undefined,
+          annee_min: filters.annee_min || undefined,
+          annee_max: filters.annee_max || undefined,
           centre_id: filters.centre_id || undefined,
           age_min: filters.age_min || undefined,
         },
@@ -656,23 +691,39 @@ export default function DefaillancesPage() {
       <section className="mt-4 rounded-xl bg-white p-4 border border-line sm:p-5">
         {/* Filtres : panneau repliable, déplié automatiquement quand un filtre est actif */}
         <div className="mb-2 flex items-center justify-between gap-2">
-          <button
-            type="button"
-            onClick={() => setFiltresOuverts((o) => !o)}
-            aria-expanded={filtresOuverts}
-            className="inline-flex items-center gap-1.5 rounded-lg border border-line bg-white px-2.5 py-1.5 text-[11px] font-semibold uppercase tracking-wider text-slate-600 shadow-sm transition hover:border-brand-azure/40 hover:text-brand-azure"
-          >
-            <IconSliders className="h-3.5 w-3.5" />
-            Filtres
-            {nbFiltresActifs > 0 && (
-              <span className="rounded-full bg-brand-blue px-1.5 py-0.5 text-[10px] font-bold leading-none text-white">
-                {nbFiltresActifs}
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setFiltresOuverts((o) => !o)}
+              aria-expanded={filtresOuverts}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-line bg-white px-2.5 py-1.5 text-[11px] font-semibold uppercase tracking-wider text-slate-600 shadow-sm transition hover:border-brand-azure/40 hover:text-brand-azure"
+            >
+              <IconSliders className="h-3.5 w-3.5" />
+              Filtres
+              {nbFiltresActifs > 0 && (
+                <span className="rounded-full bg-brand-blue px-1.5 py-0.5 text-[10px] font-bold leading-none text-white">
+                  {nbFiltresActifs}
+                </span>
+              )}
+              <IconChevron
+                className={`h-3.5 w-3.5 transition-transform duration-200 ${filtresOuverts ? "rotate-90" : ""}`}
+              />
+            </button>
+            {(filters.annee_min !== "" || filters.annee_max !== "") && (
+              <span className="inline-flex items-center gap-1.5 rounded-lg border border-brand-azure/30 bg-brand-azure-soft px-2 py-1 text-[11px] font-medium text-brand-blue">
+                Exercices {filters.annee_min || "…"} à {filters.annee_max || "…"}
+                <button
+                  type="button"
+                  aria-label="Retirer le filtre d'exercices"
+                  title="Retirer le filtre d'exercices"
+                  onClick={() => setFilters((f) => ({ ...f, annee_min: "", annee_max: "" }))}
+                  className="rounded px-0.5 leading-none hover:bg-white/70"
+                >
+                  ×
+                </button>
               </span>
             )}
-            <IconChevron
-              className={`h-3.5 w-3.5 transition-transform duration-200 ${filtresOuverts ? "rotate-90" : ""}`}
-            />
-          </button>
+          </div>
           {filtresActifs && (
             <button
               type="button"
@@ -790,6 +841,11 @@ export default function DefaillancesPage() {
                   {annee}
                 </option>
               ))}
+              {/* Année analysée sans aucune anomalie : le filtre reste lisible dans la liste. */}
+              {filters.annee_fiscale !== "" &&
+                !(summary?.exercices ?? []).some((annee) => String(annee) === filters.annee_fiscale) && (
+                  <option value={filters.annee_fiscale}>{filters.annee_fiscale}</option>
+                )}
             </select>
           </label>
 
@@ -1093,15 +1149,39 @@ export default function DefaillancesPage() {
         <Modal title="Lancer l'analyse" onClose={() => setAnalyseOpen(false)}>
           <form onSubmit={handleAnalyse} className="space-y-4">
             <p className="text-sm text-slate-600">
-              Choisissez une analyse <strong>automatique</strong> (comme la planification toutes les 5 minutes) ou{" "}
-              <strong>manuelle</strong> pour cibler une année ou un intervalle d'années. Chaque contribuable concerné forme
-              un seul dossier, quel que soit le nombre d'anomalies.
-              {role === "admin" ? " L'analyse porte sur votre centre." : " L'analyse porte sur tous les centres."}
+              Choisissez une analyse <strong>manuelle</strong> pour cibler une année ou un intervalle d'années, ou une
+              analyse <strong>automatique</strong> (date du jour et fenêtre d'exercices enregistrée pour chaque règle).
+              Chaque contribuable concerné forme un seul dossier, quel que soit le nombre d'anomalies ; en manuel, le
+              tableau n'affiche que les exercices analysés.
+              {role ==="admin"? " L'analyse porte sur votre centre." : " L'analyse porte sur tous les centres."}
             </p>
 
             <fieldset>
               <legend className="mb-2 text-sm font-medium text-slate-800">Mode d'analyse</legend>
               <div role="radiogroup" aria-label="Mode d'analyse" className="grid gap-2 sm:grid-cols-2">
+
+              <label
+                  className={`flex cursor-pointer gap-2.5 rounded-xl border px-3 py-2.5 transition ${
+                    modeAnalyse === "manuelle"
+                      ? "border-brand-azure bg-brand-azure-soft ring-1 ring-brand-azure/40"
+                      : "border-line bg-white hover:border-brand-azure/40 hover:bg-slate-50"
+                  }`}
+                >
+                  <input
+                    type="radio"
+                    name="mode-analyse"
+                    checked={modeAnalyse === "manuelle"}
+                    onChange={() => setModeAnalyse("manuelle")}
+                    className="mt-0.5 h-4 w-4 accent-brand-blue"
+                  />
+                  <span className="min-w-0">
+                    <span className="block text-sm font-semibold text-slate-900">Manuelle</span>
+                    <span className="block text-xs leading-snug text-slate-600">
+                      Cible une année précise ou un intervalle (six années au plus).
+                    </span>
+                  </span>
+                </label>
+
                 <label
                   className={`flex cursor-pointer gap-2.5 rounded-xl border px-3 py-2.5 transition ${
                     modeAnalyse === "automatique"
@@ -1123,32 +1203,12 @@ export default function DefaillancesPage() {
                     </span>
                   </span>
                 </label>
-                <label
-                  className={`flex cursor-pointer gap-2.5 rounded-xl border px-3 py-2.5 transition ${
-                    modeAnalyse === "manuelle"
-                      ? "border-brand-azure bg-brand-azure-soft ring-1 ring-brand-azure/40"
-                      : "border-line bg-white hover:border-brand-azure/40 hover:bg-slate-50"
-                  }`}
-                >
-                  <input
-                    type="radio"
-                    name="mode-analyse"
-                    checked={modeAnalyse === "manuelle"}
-                    onChange={() => setModeAnalyse("manuelle")}
-                    className="mt-0.5 h-4 w-4 accent-brand-blue"
-                  />
-                  <span className="min-w-0">
-                    <span className="block text-sm font-semibold text-slate-900">Manuelle</span>
-                    <span className="block text-xs leading-snug text-slate-600">
-                      Cible une année précise ou un intervalle (six années au plus).
-                    </span>
-                  </span>
-                </label>
+                
               </div>
             </fieldset>
 
             {modeAnalyse === "manuelle" && (
-              <div className="rounded-xl border border-line bg-slate-50/70 p-3.5">
+            <div className="rounded-xl border border-line bg-slate-50/70 p-3.5">
                 <div role="radiogroup" aria-label="Période ciblée" className="flex flex-wrap gap-x-5 gap-y-2">
                   <label className="flex items-center gap-2 text-sm text-slate-700">
                     <input
@@ -1219,8 +1279,9 @@ export default function DefaillancesPage() {
                   {cible === "annee"
                     ? `Analyse de l'année ${anneeDebut}.`
                     : `Analyse des années ${anneeDebut} à ${anneeFin} (${Number(anneeFin) - Number(anneeDebut) + 1} exercices).`}{" "}
-                  La dernière année est l'année de référence. Une année révolue est jugée telle qu'on la connaissait au
-                  31 décembre de cette année : seules les échéances déjà dépassées à cette date sont contrôlées.
+                  La dernière année est l'année de référence. Un exercice révolu est jugé après sa clôture
+                  (dernière échéance de dépôt + 48 h) ; un exercice en cours n'est jugé que sur les échéances
+                  déjà dépassées.
                 </p>
                 {!analyseValide && (
                   <p className="mt-1 text-xs font-medium text-red-600">L'année de début doit précéder l'année de fin.</p>

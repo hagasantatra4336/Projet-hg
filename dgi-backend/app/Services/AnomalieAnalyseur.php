@@ -36,17 +36,19 @@ class AnomalieAnalyseur
     /**
      * @param int|null $fenetre Nombre d'exercices analysés en plus de l'année de référence, pour CE passage
      *                          uniquement (null = réglage enregistré de chaque règle, 1 par défaut).
+     * @param int|null $anneeMin Première année analysée (analyse manuelle, borne incluse) ; null = fenêtre.
+     * @param int|null $anneeMax Dernière année analysée (analyse manuelle, borne incluse) ; null = fenêtre.
      * @return array<string, mixed>
      */
-    public function analyser(?DateTimeInterface $date = null, ?int $centreId = null, ?int $fenetre = null): array
+    public function analyser(?DateTimeInterface $date = null, ?int $centreId = null, ?int $fenetre = null, ?int $anneeMin = null, ?int $anneeMax = null): array
     {
         $date ??= self::aujourdhui();
 
-        $d = $this->defaillances->analyser($date, $centreId, $fenetre);
-        $c = $this->baissesCa->analyser($date, $centreId, $fenetre);
+        $d = $this->defaillances->analyser($date, $centreId, $fenetre, $anneeMin, $anneeMax);
+        $c = $this->baissesCa->analyser($date, $centreId, $fenetre, $anneeMin, $anneeMax);
 
         // Critères de risque R1, R2, R3, R5, R6, R7 (base d'analyse risque). Une base vide n'a aucun effet.
-        $risque = $this->risque->analyser($date, $centreId, $fenetre);
+        $risque = $this->risque->analyser($date, $centreId, $fenetre, $anneeMin, $anneeMax);
 
         // Règles personnalisées ACTIVES (brouillons et règles désactivées sont ignorés). Une règle en erreur
         // (colonne supprimée, indicateur désactivé...) ne bloque ni les autres règles ni l'analyse.
@@ -57,7 +59,7 @@ class AnomalieAnalyseur
                 continue;
             }
             try {
-                $resultat = $this->personnalisees->analyser($regle, $date, $centreId, fenetre: $fenetre);
+                $resultat = $this->personnalisees->analyser($regle, $date, $centreId, fenetre: $fenetre, anneeMin: $anneeMin, anneeMax: $anneeMax);
             } catch (Throwable $e) {
                 report($e);
                 $detailPerso[$regle->code] = ['erreur' => $e->getMessage()];

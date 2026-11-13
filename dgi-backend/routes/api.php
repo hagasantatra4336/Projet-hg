@@ -68,20 +68,15 @@ Route::get('/profile/change-status/{requestId}', [ProfileController::class, 'cha
 Route::middleware('auth:sanctum')->group(function () {
     Route::post('/logout', [AuthController::class, 'logout']);
     Route::get('/me', [AuthController::class, 'me']);
-
-    // Compteurs de la navigation (dossiers à traiter, dossiers en cours, demandes à approuver)
     Route::get('/notifications', NotificationController::class);
-
-    // Espace utilisateur : demande de modification de ses infos / mot de passe (→ e-mail de confirmation)
     Route::post('/profile/request-change', [ProfileController::class, 'requestChange'])->middleware('throttle:5,1,profile-change');
-    // Annuler la demande en attente (bouton « Annuler » de la page d'attente)
     Route::delete('/profile/request-change', [ProfileController::class, 'cancelChange']);
-
     // Défaillances de déclaration : consultation et traitement des alertes par tous les rôles
     // (agent et admin ne voient que leur centre : voir DefaillanceController)
     Route::get('/defaillances', [DefaillanceController::class, 'index']);
     Route::get('/defaillances/export', [DefaillanceController::class, 'export'])->middleware('throttle:20,1,export');
     Route::get('/defaillances/summary', [DefaillanceController::class, 'summary']);
+
     // Agents proposés dans les filtres des archives (chefs de centre, central, superadmin)
     Route::get('/defaillances/agents', [DefaillanceController::class, 'agents']);
     Route::patch('/defaillances/{alerte}', [DefaillanceController::class, 'update']);

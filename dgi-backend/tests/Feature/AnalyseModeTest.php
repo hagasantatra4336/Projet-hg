@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Enums\Role;
 use App\Models\Alerte;
+use App\Models\Assujettissement;
 use App\Models\BaseRisque;
 use App\Models\Centre;
 use App\Models\Contribuable;
@@ -108,6 +109,67 @@ class AnalyseModeTest extends TestCase
         $alerte = Alerte::where('contribuable_id', $contribuable->id)->where('regle', 'r1')->first();
         $this->assertNotNull($alerte, "L'analyse de 2024 doit créer l'alerte R1 de 2024.");
         $this->assertSame(2024, (int) $alerte->annee_fiscale);
+    }
+
+    public function test_une_analyse_manuelle_ne_cree_aucune_alerte_hors_de_l_exercice_cible(): void
+    {
+        $contribuable = Contribuable::create(['nif' => '9000000002', 'nom' => 'Cible 2024 uniquement', 'etat' => 1]);
+
+        // TVA mensuelle assujettie en 2023 et 2024, aucune déclaration : les deux exercices sont en défaut,
+        // mais seule l'année demandée doit être jugée.
+        foreach ([2023, 2024] as $annee) {
+            Assujettissement::create([
+                'contribuable_id' => $contribuable->id,
+                'type_impot' => 'TVA',
+                'annee_fiscale' => $annee,
+                'periodicite' => 1,
+                'actif' => true,
+                'exonere' => false,
+            ]);
+        }
+
+        $this->postJson('/api/defaillances/analyser', [
+            'mode' => 'manuelle',
+            'annee_debut' => 2024,
+            'annee_fin' => 2024,
+        ])->assertOk();
+
+        $annees = Alerte::where('contribuable_id', $contribuable->id)
+            ->pluck('annee_fiscale')->map(fn ($a) => (int) $a)->unique()->values()->all();
+
+        $this->assertSame([2024], $annees, 'Seules les alertes de l’exercice 2024 doivent être créées.');
+        $this->assertSame(0, Alerte::where('contribuable_id', $contribuable->id)->where('annee_fiscale', 2023)->count());
+        $this->assertTrue(Alerte::where('contribuable_id', $contribuable->id)
+            ->where('regle', Alerte::REGLE_DEFAILLANCE)->where('annee_fiscale', 2024)->exists());
+    }
+
+    public function test_la_liste_filtree_sur_un_intervalle_ne_montre_que_ses_exercices(): void
+    {
+        $contribuable = Contribuable::create(['nif' => '9000000003', 'nom' => 'Intervalle 2023-2024', 'etat' => 1]);
+
+        foreach ([2022, 2023, 2024] as $annee) {
+            Assujettissement::create([
+                'contribuable_id' => $contribuable->id,
+                'type_impot' => 'TVA',
+                'annee_fiscale' => $annee,
+                'periodicite' => 1,
+                'actif' => true,
+                'exonere' => false,
+            ]);
+        }
+
+        $this->postJson('/api/defaillances/analyser', [
+            'mode' => 'manuelle',
+            'annee_debut' => 2023,
+            'annee_fin' => 2024,
+        ])->assertOk();
+
+        $res = $this->getJson('/api/defaillances?grouper=1&annee_min=2023&annee_max=2024&search=9000000003')
+            ->assertOk();
+
+        $this->assertSame(1, $res->json('total'));
+        $annees = collect($res->json('data.0.alertes'))->pluck('annee_fiscale')->map(fn ($a) => (int) $a)->unique()->sort()->values()->all();
+        $this->assertSame([2023, 2024], $annees);
     }
 
     public function test_un_intervalle_inverse_ou_trop_long_est_refuse(): void

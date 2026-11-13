@@ -157,9 +157,12 @@ export default function ProfilePage() {
   // de centre, ce changement relève d'un responsable (même règle vérifiée côté serveur).
   const peutChangerCentre = user.role === "central" || user.role === "superadmin";
 
-  // Le centre actuel reste sélectionnable même s'il manquait dans la liste chargée.
+  // Le centre actuel reste affiché pour un agent ou un chef de centre (champ non modifiable),
+  // mais un service central masqué n'est pas reproposé à un profil qui peut en changer.
   const centreOptions =
-    user.centre && !centres.some((c) => c.id === user.centre!.id) ? [...centres, user.centre] : centres;
+    !peutChangerCentre && user.centre && !centres.some((c) => c.id === user.centre!.id)
+      ? [...centres, user.centre]
+      : centres;
 
   // Étape 1 : on vérifie le formulaire puis on demande le mot de passe actuel.
   function handleSubmit(e: FormEvent<HTMLFormElement>) {

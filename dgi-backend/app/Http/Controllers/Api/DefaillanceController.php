@@ -109,6 +109,9 @@ class DefaillanceController extends Controller
             // Archives : 1 = seulement les dossiers clôturés (toutes anomalies traitées/régularisées)
             'archive' => ['nullable', 'boolean'],
             'annee_fiscale' => ['nullable', 'integer', 'between:1990,2100'],
+            // Analyse manuelle : intervalle d'exercices ciblé (bornes incluses)
+            'annee_min' => ['nullable', 'integer', 'between:1990,2100'],
+            'annee_max' => ['nullable', 'integer', 'between:1990,2100'],
             'centre_id' => ['nullable', 'integer'],
             'search' => ['nullable', 'string', 'max:100'],
             // Archives : dossier traité par cet agent (filtre des chefs de centre, central et superadmin)
@@ -176,6 +179,14 @@ class DefaillanceController extends Controller
             if (! empty($data[$champ])) {
                 $query->where('alertes.'.$champ, $data[$champ]);
             }
+        }
+
+        // Intervalle d'exercices (résultats d'une analyse manuelle sur plusieurs années).
+        if (! empty($data['annee_min']) || ! empty($data['annee_max'])) {
+            $query->whereBetween('alertes.annee_fiscale', [
+                ! empty($data['annee_min']) ? (int) $data['annee_min'] : 1990,
+                ! empty($data['annee_max']) ? (int) $data['annee_max'] : 2100,
+            ]);
         }
 
         // « À traiter » = dossiers LIBRES ; « En traitement » = dossiers pris par un agent
@@ -1015,7 +1026,8 @@ class DefaillanceController extends Controller
             $centreId = $me->centre_id;
         }
 
-        $stats = app(AnomalieAnalyseur::class)->analyser($date, $centreId, $fenetre);
+        // En mode manuel, les détecteurs sont bornés aux exercices demandés : aucune alerte des autres années.
+        $stats = app(AnomalieAnalyseur::class)->analyser($date, $centreId, $fenetre, $anneeDebut, $anneeFin);
 
         return response()->json($stats + [
             'mode' => $mode,

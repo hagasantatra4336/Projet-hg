@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import api, { getErrorMessage } from "../../services/api";
 import { useAuth } from "../../context/AuthContext";
-import type { Centre } from "../../types";
+import type { Centre, TypeCentre } from "../../types";
 import {
   ConfirmDialog,
   DeleteButton,
@@ -19,9 +19,11 @@ import {
 interface CentreForm {
   nom: string;
   adresse: string;
+  type_centre: TypeCentre;
+  affiche: boolean;
 }
 
-const EMPTY_FORM: CentreForm = { nom: "", adresse: "" };
+const EMPTY_FORM: CentreForm = { nom: "", adresse: "", type_centre: "-", affiche: true };
 
 export default function CentresPage() {
   const { user } = useAuth();
@@ -44,7 +46,9 @@ export default function CentresPage() {
 
   const load = useCallback(async () => {
     try {
-      const res = await api.get<Centre[]>("/centres");
+      // Liste complète (?tous=1) : la page de gestion doit afficher aussi les services
+      // centraux masqués pour permettre de les réafficher.
+      const res = await api.get<Centre[]>("/centres", { params: { tous: 1 } });
       setCentres(res.data);
       setError("");
     } catch (err) {
@@ -65,7 +69,7 @@ export default function CentresPage() {
   }
 
   function openEdit(c: Centre) {
-    setForm({ nom: c.nom, adresse: c.adresse ?? "" });
+    setForm({ nom: c.nom, adresse: c.adresse ?? "", type_centre: c.type_centre, affiche: c.affiche });
     setFormError("");
     setEditing(c);
   }
@@ -74,11 +78,15 @@ export default function CentresPage() {
     e.preventDefault();
     setFormError("");
     setSaving(true);
+    // Le type et l'affichage ne sont modifiables que par le super admin : les autres rôles n'envoient que nom et adresse.
+    const payload = peutGererAffichage
+      ? form
+      : { nom: form.nom, adresse: form.adresse };
     try {
       if (editing === "new") {
-        await api.post("/centres", form);
+        await api.post("/centres", payload);
       } else if (editing) {
-        await api.put(`/centres/${editing.id}`, form);
+        await api.put(`/centres/${editing.id}`, payload);
       }
       setEditing(null);
       await load();
@@ -132,7 +140,8 @@ export default function CentresPage() {
 
       {!peutGererAffichage && (
         <p className="mb-3 text-xs text-slate-500">
-          Seul le super admin peut modifier l'affichage des services centraux dans l'inscription.
+          Le super admin définit le type d'un centre (service central ou centre fiscal) et peut masquer un
+          service central dans l'inscription.
         </p>
       )}
 
@@ -219,7 +228,12 @@ export default function CentresPage() {
           <ErrorBox message={formError} />
           <form onSubmit={handleSubmit} className="space-y-5">
             <FormGrid>
-              <Field label="Nom du centre" required className="sm:col-span-2">
+              <Field
+                label="Nom du centre"
+                required
+                className="sm:col-span-2"
+                hint="Nom de nouveau centre"
+              >
                 <input
                   className={inputClass}
                   value={form.nom}
@@ -236,6 +250,41 @@ export default function CentresPage() {
                   placeholder="Ex. : Rue Rainitovo, Antananarivo 101"
                 />
               </Field>
+              {peutGererAffichage && (
+                <div className="sm:col-span-2 space-y-2 rounded-xl border border-line bg-slate-50/70 p-3.5">
+                  <label className="flex cursor-pointer items-start gap-2.5">
+                    <input
+                      type="checkbox"
+                      className="mt-0.5 h-4 w-4 accent-brand-blue"
+                      checked={form.type_centre === "central"}
+                      onChange={(e) =>
+                        setForm({
+                          ...form,
+                          type_centre: e.target.checked ? "central" : "-",
+                          affiche: e.target.checked ? form.affiche : true,
+                        })
+                      }
+                    />
+                    <span>
+                      <span className="block text-sm font-medium text-slate-800">Service central</span>
+                      <span className="block text-xs text-slate-500">
+                        Cocher si c'est un centre de type central
+                      </span>
+                    </span>
+                  </label>
+                  {form.type_centre === "central" && (
+                    <label className="flex cursor-pointer items-center gap-2.5 pl-6">
+                      <input
+                        type="checkbox"
+                        className="h-4 w-4 accent-brand-blue"
+                        checked={form.affiche}
+                        onChange={(e) => setForm({ ...form, affiche: e.target.checked })}
+                      />
+                      <span className="text-sm text-slate-700">Proposé dans l'inscription</span>
+                    </label>
+                  )}
+                </div>
+              )}
             </FormGrid>
             <FormActions>
               <button type="button" className={secondaryButtonClass} onClick={() => setEditing(null)}>
