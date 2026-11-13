@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
 import api, { getErrorMessage } from "../../services/api";
 import { useAuth } from "../../context/AuthContext";
 import type { Centre, TypeCentre } from "../../types";
@@ -25,6 +25,9 @@ interface CentreForm {
 
 const EMPTY_FORM: CentreForm = { nom: "", adresse: "", type_centre: "-", affiche: true };
 
+const normalize = (value: string): string =>
+  value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+
 export default function CentresPage() {
   const { user } = useAuth();
   const peutGererAffichage = user?.role === "superadmin";
@@ -32,6 +35,7 @@ export default function CentresPage() {
   const [centres, setCentres] = useState<Centre[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string>("");
+  const [search, setSearch] = useState<string>("");
 
   const [editing, setEditing] = useState<Centre | "new" | null>(null);
   const [form, setForm] = useState<CentreForm>(EMPTY_FORM);
@@ -43,6 +47,12 @@ export default function CentresPage() {
 
   const [toToggle, setToToggle] = useState<Centre | null>(null);
   const [toggling, setToggling] = useState<boolean>(false);
+
+  const filteredCentres = useMemo(() => {
+    const term = normalize(search.trim());
+    if (!term) return centres;
+    return centres.filter((centre) => normalize(`${centre.nom} ${centre.adresse ?? ""}`).includes(term));
+  }, [centres, search]);
 
   const load = useCallback(async () => {
     try {
@@ -129,8 +139,19 @@ export default function CentresPage() {
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-4">
-        <p className="text-sm text-slate-600">{centres.length} centre(s)</p>
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+        <input
+          className={`${inputClass} max-w-sm`}
+          type="search"
+          aria-label="Rechercher un centre"
+          placeholder="Rechercher par nom ou adresse..."
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+        />
+        <p className="text-sm text-slate-600">
+          {filteredCentres.length} centre(s)
+          {search.trim() && ` sur ${centres.length}`}
+        </p>
         <button type="button" className={primaryButtonClass} onClick={openNew}>
           + Ajouter un centre
         </button>
@@ -165,14 +186,16 @@ export default function CentresPage() {
                 </td>
               </tr>
             )}
-            {!loading && centres.length === 0 && (
+            {!loading && filteredCentres.length === 0 && (
               <tr>
                 <td colSpan={6} className="px-3 py-4 text-center text-slate-500">
-                  Aucun centre. Ajoutez le premier.
+                  {search.trim()
+                    ? "Aucun centre ne correspond à votre recherche."
+                    : "Aucun centre. Ajoutez le premier."}
                 </td>
               </tr>
             )}
-            {centres.map((c) => (
+            {filteredCentres.map((c) => (
               <tr key={c.id} className="transition hover:bg-slate-50/70">
                 <td className="px-3 py-2 font-medium text-brand-blue">{c.nom}</td>
                 <td className="px-3 py-2 whitespace-nowrap">

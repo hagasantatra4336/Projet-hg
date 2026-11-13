@@ -10,6 +10,7 @@ use App\Models\Fonction;
 use App\Models\User;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\Rules\Password;
 use Illuminate\Validation\ValidationException;
@@ -27,7 +28,7 @@ class UserController extends Controller
     public function index(Request $request): JsonResponse
     {
         $me = $request->user();
-        $query = User::with(['centre', 'fonction'])->orderBy('nom');
+        $query = User::with(['centre', 'fonction', 'desactivePar'])->orderBy('nom');
 
         if ($me->role === Role::Admin) {
             // Le chef de centre ne voit que les agents de son centre (il ne gère que ce niveau).
@@ -139,6 +140,56 @@ class UserController extends Controller
         $user->delete();
 
         return response()->json(['message' => 'Utilisateur supprimé.']);
+    }
+
+    /** Désactive un compte : le motif est affiché à la prochaine tentative de connexion. */
+    public function desactiver(Request $request, User $user): JsonResponse
+    {
+        $me = $request->user();
+
+        abort_if($user->id === $me->id, 422, 'Vous ne pouvez pas désactiver votre propre compte.');
+
+        $request->merge([
+            'motif' => trim((string) $request->input('motif')),
+        ]);
+
+        $data = $request->validate([
+            'motif' => ['required', 'string', 'min:3', 'max:500'],
+        ]);
+
+        $user->update([
+            'desactive_le' => now(),
+            'motif_desactivation' => $data['motif'],
+            'desactive_par_id' => $me->id,
+        ]);
+
+        $this->couperAcces($user);
+        $user->load(['centre', 'fonction']);
+
+        return response()->json((new UserResource($user))->resolve());
+    }
+
+    /** Réactive un compte désactivé : le motif est effacé et la connexion redevient possible. */
+    public function reactiver(Request $request, User $user): JsonResponse
+    {
+        abort_if($user->id === $request->user()->id, 422, 'Vous ne pouvez pas modifier l\'état de votre propre compte.');
+
+        $user->update([
+            'desactive_le' => null,
+            'motif_desactivation' => null,
+            'desactive_par_id' => null,
+        ]);
+
+        $user->load(['centre', 'fonction']);
+
+        return response()->json((new UserResource($user))->resolve());
+    }
+
+    /** Ferme les sessions et invalide un code de connexion déjà envoyé. */
+    private function couperAcces(User $user): void
+    {
+        $user->tokens()->delete();
+        Cache::forget(AuthController::cleConnexion($user->email));
     }
 
     // ------------------------------------------------------------------

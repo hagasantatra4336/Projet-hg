@@ -13,6 +13,7 @@ import {
   FormSection,
   Modal,
   RoleBadge,
+  dangerButtonClass,
   inputClass,
   primaryButtonClass,
   secondaryButtonClass,
@@ -78,6 +79,11 @@ export default function UsersPage() {
   const [toDelete, setToDelete] = useState<AppUser | null>(null);
   const [deleting, setDeleting] = useState<boolean>(false);
 
+  const [statutCible, setStatutCible] = useState<AppUser | null>(null);
+  const [motif, setMotif] = useState<string>("");
+  const [statutError, setStatutError] = useState<string>("");
+  const [statutLoading, setStatutLoading] = useState<boolean>(false);
+
   // Listes du formulaire (centres / fonctions que je peux attribuer)
   useEffect(() => {
     api
@@ -126,6 +132,7 @@ export default function UsersPage() {
   if (!me) return null;
 
   const isAdmin = me.role === "admin";
+  const isSuperadmin = me.role === "superadmin";
   const selectedFonction = options.fonctions.find((f) => String(f.id) === form.fonction_id);
   const needsCentre = selectedFonction?.role === "agent" || selectedFonction?.role === "admin";
 
@@ -179,6 +186,31 @@ export default function UsersPage() {
       setFormError(getErrorMessage(err, "Enregistrement impossible."));
     } finally {
       setSaving(false);
+    }
+  }
+
+  function openStatut(u: AppUser) {
+    setMotif("");
+    setStatutError("");
+    setStatutCible(u);
+  }
+
+  async function handleStatut() {
+    if (!statutCible) return;
+    setStatutError("");
+    setStatutLoading(true);
+    try {
+      if (statutCible.desactive) {
+        await api.post(`/users/${statutCible.id}/reactiver`);
+      } else {
+        await api.post(`/users/${statutCible.id}/desactiver`, { motif: motif.trim() });
+      }
+      setStatutCible(null);
+      setReloadKey((k) => k + 1);
+    } catch (err) {
+      setStatutError(getErrorMessage(err, "Modification du compte impossible."));
+    } finally {
+      setStatutLoading(false);
     }
   }
 
@@ -243,7 +275,7 @@ export default function UsersPage() {
               <th className="px-3 py-2">Téléphone</th>
               <th className="px-3 py-2">Centre</th>
               <th className="px-3 py-2">Fonction</th>
-              <th className="sticky right-0 z-10 w-[92px] border-l border-line bg-slate-50 px-3 py-2" />
+              <th className="sticky right-0 z-10 w-[132px] border-l border-line bg-slate-50 px-3 py-2" />
             </tr>
           </thead>
           <tbody className="divide-y divide-line">
@@ -265,8 +297,23 @@ export default function UsersPage() {
               users.map((u) => (
                 <tr key={u.id} className="transition hover:bg-slate-50/70">
                   <td className="px-3 py-2">
-                    <div className="font-medium text-brand-blue">{u.nom}</div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="font-medium text-brand-blue">{u.nom}</span>
+                      {u.desactive && (
+                        <span
+                          className="rounded-full bg-red-50 px-2 py-0.5 text-[11px] font-semibold text-red-700"
+                          title={u.motif_desactivation ?? undefined}
+                        >
+                          Désactivé
+                        </span>
+                      )}
+                    </div>
                     <div className="text-xs text-slate-500">{u.email}</div>
+                    {u.desactive && u.motif_desactivation && (
+                      <div className="mt-0.5 max-w-xs truncate text-xs text-red-700" title={u.motif_desactivation}>
+                        Motif : {u.motif_desactivation}
+                      </div>
+                    )}
                   </td>
                   <td className="px-3 py-2 text-slate-600">{u.im ?? "—"}</td>
                   <td className="px-3 py-2 text-slate-600">{u.telephone ?? "—"}</td>
@@ -279,6 +326,31 @@ export default function UsersPage() {
                     {canManage(me, u) && (
                       <>
                         <EditButton onClick={() => openEdit(u)} />
+                        {isSuperadmin && u.id !== me.id && (
+                          <button
+                            type="button"
+                            onClick={() => openStatut(u)}
+                            title={u.desactive ? "Réactiver le compte" : "Désactiver le compte"}
+                            aria-label={u.desactive ? "Réactiver le compte" : "Désactiver le compte"}
+                            className={`inline-flex h-8 w-8 items-center justify-center rounded-lg transition focus:outline-none focus:ring-2 ${
+                              u.desactive
+                                ? "text-brand-blue hover:bg-brand-azure-soft focus:ring-brand-azure"
+                                : "text-amber-700 hover:bg-amber-50 focus:ring-amber-300"
+                            }`}
+                          >
+                            {u.desactive ? (
+                              <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={1.8} aria-hidden="true">
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.5l2 2 4-4" />
+                                <circle cx="12" cy="12" r="9" />
+                              </svg>
+                            ) : (
+                              <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={1.8} aria-hidden="true">
+                                <circle cx="12" cy="12" r="9" />
+                                <path strokeLinecap="round" d="M6.5 6.5l11 11" />
+                              </svg>
+                            )}
+                          </button>
+                        )}
                         {u.id !== me.id && (
                           <DeleteButton onClick={() => setToDelete(u)} />
                         )}
@@ -447,6 +519,53 @@ export default function UsersPage() {
               </button>
             </FormActions>
           </form>
+        </Modal>
+      )}
+
+      {statutCible && (
+        <Modal
+          title={statutCible.desactive ? "Réactiver le compte" : "Désactiver le compte"}
+          onClose={statutLoading ? () => undefined : () => setStatutCible(null)}
+        >
+          <ErrorBox message={statutError} />
+          {statutCible.desactive ? (
+            <p className="text-sm leading-relaxed text-slate-700">
+              Réactiver le compte de « {statutCible.nom} » ? La connexion redeviendra possible et le motif sera effacé.
+            </p>
+          ) : (
+            <div className="space-y-3">
+              <p className="text-sm leading-relaxed text-slate-700">
+                Le compte de « {statutCible.nom} » ne pourra plus se connecter. Le motif sera affiché à chaque tentative de connexion.
+              </p>
+              <Field label="Motif" required hint="3 à 500 caractères. Visible par la personne qui tente de se connecter.">
+                <textarea
+                  className={`${inputClass} min-h-[6rem] resize-y`}
+                  value={motif}
+                  onChange={(e) => setMotif(e.target.value)}
+                  maxLength={500}
+                  required
+                  autoFocus
+                />
+              </Field>
+            </div>
+          )}
+          <div className="mt-6 flex flex-wrap justify-end gap-3">
+            <button type="button" className={secondaryButtonClass} onClick={() => setStatutCible(null)} disabled={statutLoading}>
+              Annuler
+            </button>
+            <button
+              type="button"
+              className={statutCible.desactive ? primaryButtonClass : dangerButtonClass}
+              onClick={handleStatut}
+              disabled={statutLoading || (!statutCible.desactive && motif.trim().length < 3)}
+            >
+              {statutLoading
+                ? "Enregistrement..."
+                : statutCible.desactive
+                  ? "Réactiver"
+                  : "Désactiver"}
+            </button>
+          </div>
         </Modal>
       )}
 

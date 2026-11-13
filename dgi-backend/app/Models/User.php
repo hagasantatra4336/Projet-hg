@@ -24,6 +24,9 @@ class User extends Authenticatable
         'fonction_id',
         'password',
         'email_verified_at',
+        'desactive_le',
+        'motif_desactivation',
+        'desactive_par_id',
     ];
 
     protected $hidden = [
@@ -35,7 +38,33 @@ class User extends Authenticatable
     {
         return [
             'email_verified_at' => 'datetime',
+            'desactive_le' => 'datetime',
             'password' => 'hashed',
+        ];
+    }
+
+    public function estDesactive(): bool
+    {
+        return $this->desactive_le !== null;
+    }
+
+    /** Message renvoyé à la connexion (et à toute requête encore authentifiée). */
+    public function messageDesactivation(): string
+    {
+        $motif = trim((string) $this->motif_desactivation);
+
+        return $motif !== ''
+            ? "Ce compte est désactivé. Motif : {$motif}"
+            : 'Ce compte est désactivé.';
+    }
+
+    /** @return array{message: string, compte_desactive: true, motif: string|null} */
+    public function payloadDesactivation(): array
+    {
+        return [
+            'message' => $this->messageDesactivation(),
+            'compte_desactive' => true,
+            'motif' => $this->motif_desactivation,
         ];
     }
 
@@ -47,6 +76,11 @@ class User extends Authenticatable
     public function fonction(): BelongsTo
     {
         return $this->belongsTo(Fonction::class);
+    }
+
+    public function desactivePar(): BelongsTo
+    {
+        return $this->belongsTo(self::class, 'desactive_par_id');
     }
 
     /** Rôle effectif = rôle de la fonction (null si aucune fonction). */

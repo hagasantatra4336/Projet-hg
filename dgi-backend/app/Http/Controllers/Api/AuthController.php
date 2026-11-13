@@ -529,6 +529,10 @@ class AuthController extends Controller
 
         RateLimiter::clear($cleEchecs);
 
+        if ($refus = $this->refuserSiDesactive($user)) {
+            return $refus;
+        }
+
         return $this->sendLoginOtp($user, 'Un code de connexion a été envoyé par e-mail.');
     }
 
@@ -549,7 +553,7 @@ class AuthController extends Controller
             ], 429);
         }
 
-        $key = $this->loginKey($data['email']);
+        $key = self::cleConnexion($data['email']);
         $state = Cache::get($key);
 
         if (! is_array($state) || now()->timestamp > $state['expires_at']) {
@@ -581,6 +585,10 @@ class AuthController extends Controller
             return response()->json(['message' => 'Code invalide ou expiré.'], 422);
         }
 
+        if ($refus = $this->refuserSiDesactive($user)) {
+            return $refus;
+        }
+
         // Le personnel E-Kajy fait foi : un agent muté est rattaché à son nouveau centre dès la connexion.
         $this->affectations->synchroniser($user);
         $user->refresh();
@@ -596,7 +604,7 @@ class AuthController extends Controller
     {
         $data = $request->validate(['email' => ['required', 'email']]);
 
-        $state = Cache::get($this->loginKey($data['email']));
+        $state = Cache::get(self::cleConnexion($data['email']));
         $user = is_array($state) && now()->timestamp <= $state['expires_at']
             ? User::find($state['user_id'])
             : null;
@@ -605,6 +613,10 @@ class AuthController extends Controller
             return response()->json([
                 'message' => 'Session expirée. Veuillez vous reconnecter.',
             ], 422);
+        }
+
+        if ($refus = $this->refuserSiDesactive($user)) {
+            return $refus;
         }
 
         return $this->sendLoginOtp($user, 'Un nouveau code a été envoyé.');
@@ -736,7 +748,7 @@ class AuthController extends Controller
         $code = $this->otp->generer();
         $expiresAt = now()->addMinutes(OtpService::TTL_CONNEXION_MINUTES);
 
-        Cache::put($this->loginKey($user->email), [
+        Cache::put(self::cleConnexion($user->email), [
             'user_id' => $user->id,
             'otp' => $this->otp->hacher($user->email, $code),
             'attempts' => 0,
@@ -826,7 +838,17 @@ class AuthController extends Controller
         return (bool) config('app.debug') && app()->environment('local');
     }
 
-    private function loginKey(string $email): string
+    /** Compte désactivé par un super admin : le motif est affiché, aucun code n'est envoyé. */
+    private function refuserSiDesactive(User $user): ?JsonResponse
+    {
+        if (! $user->estDesactive()) {
+            return null;
+        }
+
+        return response()->json($user->payloadDesactivation(), 403);
+    }
+
+    public static function cleConnexion(string $email): string
     {
         return 'login:' . sha1(Str::lower($email));
     }

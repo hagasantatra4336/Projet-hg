@@ -3,6 +3,8 @@ import axios, { type AxiosError, type InternalAxiosRequestConfig } from "axios";
 export interface ApiErrorResponse {
   message?: string;
   errors?: Record<string, string[]>;
+  compte_desactive?: boolean;
+  motif?: string | null;
 }
 
 // L'API est jointe sur la même adresse que la page : en développement Vite transmet /api à Laravel
@@ -34,9 +36,12 @@ api.interceptors.response.use(
       // Une déconnexion volontaire ne doit pas afficher « session fermée ».
       const volontaire = (error.config?.url ?? "").endsWith("/logout");
       if (!volontaire && localStorage.getItem("token")) {
+        const data = error.response?.data;
         sessionStorage.setItem(
           "connexion:fermee",
-          "Votre session a été fermée : elle a expiré, ou le compte s'est connecté sur un autre appareil.",
+          data?.compte_desactive && data.message
+            ? data.message
+            : "Votre session a été fermée : elle a expiré, ou le compte s'est connecté sur un autre appareil.",
         );
       }
       localStorage.removeItem("token");

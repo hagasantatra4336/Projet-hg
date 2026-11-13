@@ -30,6 +30,12 @@ class UserResource extends JsonResource
                 'role' => $this->fonction->role->value,
             ] : null,
             'role' => $this->role?->value,
+            'desactive' => $this->estDesactive(),
+            'motif_desactivation' => $this->estDesactive() ? $this->motif_desactivation : null,
+            'desactive_le' => $this->estDesactive() ? $this->desactive_le?->toIso8601String() : null,
+            'desactive_par_nom' => ! $this->estDesactive() || ! $this->relationLoaded('desactivePar')
+                ? null
+                : $this->desactivePar?->nom,
         ];
     }
 }

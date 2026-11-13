@@ -1,6 +1,7 @@
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { Link, Navigate, useNavigate } from "react-router-dom";
-import api, { getErrorMessage } from "../../services/api";
+import axios from "axios";
+import api, { getErrorMessage, type ApiErrorResponse } from "../../services/api";
 import { useAuth } from "../../context/AuthContext";
 import { PasswordInput } from "../../components/ui";
 import AuthLayout from "../../components/AuthLayout";
@@ -35,7 +36,30 @@ const primaryButtonClass =
 
 const linkButtonClass = "w-full text-sm font-medium text-brand-azure hover:text-brand-blue hover:underline disabled:opacity-50";
 
-const errorClass = "mb-5 rounded-lg border border-red-200 border-l-4 border-l-red-500 bg-red-50 px-4 py-3 text-sm text-red-700";
+const errorClass = "mb-5 whitespace-pre-line rounded-lg border border-red-200 border-l-4 border-l-red-500 bg-red-50 px-4 py-3 text-sm text-red-700";
+
+function messageConnexion(err: unknown, fallback: string): string {
+  if (axios.isAxiosError<ApiErrorResponse>(err) && err.response?.data?.compte_desactive) {
+    const motif = (err.response.data.motif ?? "").trim();
+    return motif
+      ? `Ce compte est désactivé.\nMotif : ${motif}`
+      : "Ce compte est désactivé.";
+  }
+  return getErrorMessage(err, fallback);
+}
+
+// Mémorisé le temps du double rendu de StrictMode, sinon le second passage lit une session déjà vidée.
+let flashSession: { error: string; info: string } | null = null;
+
+function messageSessionFermee(): { error: string; info: string } {
+  if (flashSession) return flashSession;
+  const fermee = sessionStorage.getItem("connexion:fermee") ?? "";
+  sessionStorage.removeItem("connexion:fermee");
+  flashSession = fermee.startsWith("Ce compte est désactivé")
+    ? { error: fermee.replace("Ce compte est désactivé. Motif : ", "Ce compte est désactivé.\nMotif : "), info: "" }
+    : { error: "", info: fermee };
+  return flashSession;
+}
 const infoClass = "mb-5 rounded-lg border border-brand-green/30 border-l-4 border-l-brand-green bg-brand-green-soft px-4 py-3 text-sm text-brand-blue";
 
 export default function LoginPage() {
@@ -44,13 +68,14 @@ export default function LoginPage() {
   const [step, setStep] = useState<number>(STEP_CREDENTIALS);
   const [form, setForm] = useState<LoginForm>({ email: "", password: "" });
   const [otp, setOtp] = useState<string>("");
-  const [error, setError] = useState<string>("");
-  const [info, setInfo] = useState<string>(() => {
-    const fermee = sessionStorage.getItem("connexion:fermee") ?? "";
-    sessionStorage.removeItem("connexion:fermee");
-    return fermee;
-  });
+  const session = messageSessionFermee();
+  const [error, setError] = useState<string>(session.error);
+  const [info, setInfo] = useState<string>(session.info);
   const [loading, setLoading] = useState<boolean>(false);
+
+  useEffect(() => {
+    flashSession = null;
+  }, []);
 
   // Étape 1 : e-mail + mot de passe → l'API envoie un code par e-mail
   async function handleCredentials(e: FormEvent<HTMLFormElement>) {
@@ -66,7 +91,7 @@ export default function LoginPage() {
       setOtp("");
       setStep(STEP_OTP);
     } catch (err) {
-      setError(getErrorMessage(err, "Identifiants incorrects."));
+      setError(messageConnexion(err, "Identifiants incorrects."));
     } finally {
       setLoading(false);
     }
@@ -86,7 +111,7 @@ export default function LoginPage() {
       login(res.data.token, res.data.user);
       navigate("/dashboard");
     } catch (err) {
-      setError(getErrorMessage(err, "Code invalide ou expiré."));
+      setError(messageConnexion(err, "Code invalide ou expiré."));
     } finally {
       setLoading(false);
     }
@@ -104,7 +129,7 @@ export default function LoginPage() {
           : "Un nouveau code a été envoyé."
       );
     } catch (err) {
-      setError(getErrorMessage(err, "Impossible de renvoyer le code."));
+      setError(messageConnexion(err, "Impossible de renvoyer le code."));
     } finally {
       setLoading(false);
     }

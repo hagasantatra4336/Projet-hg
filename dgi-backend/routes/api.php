@@ -15,6 +15,7 @@ use App\Http\Controllers\Api\RegleController;
 use App\Http\Controllers\Api\ReglePersonnaliseeController;
 use App\Http\Controllers\Api\UserController;
 use App\Http\Middleware\EnsureRole;
+use App\Http\Middleware\RejeterCompteDesactive;
 use Illuminate\Support\Facades\Route;
 
 // ---------------------------------------------------------------------
@@ -65,7 +66,7 @@ Route::get('/profile/change-status/{requestId}', [ProfileController::class, 'cha
 // ---------------------------------------------------------------------
 //  Routes protégées (jeton Sanctum)
 // ---------------------------------------------------------------------
-Route::middleware('auth:sanctum')->group(function () {
+Route::middleware(['auth:sanctum', RejeterCompteDesactive::class])->group(function () {
     Route::post('/logout', [AuthController::class, 'logout']);
     Route::get('/me', [AuthController::class, 'me']);
     Route::get('/notifications', NotificationController::class);
@@ -134,6 +135,12 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::middleware(EnsureRole::class.':superadmin,central,admin')->group(function () {
         Route::get('/users/options', [UserController::class, 'options']);
         Route::apiResource('users', UserController::class)->except('show');
+    });
+
+    // Désactivation d'un compte (avec motif affiché à la connexion) : superadmin uniquement.
+    Route::middleware(EnsureRole::class.':superadmin')->group(function () {
+        Route::post('/users/{user}/desactiver', [UserController::class, 'desactiver']);
+        Route::post('/users/{user}/reactiver', [UserController::class, 'reactiver']);
     });
 
     // Demandes d'inscription des agents : le chef de centre (admin) approuve ou refuse.

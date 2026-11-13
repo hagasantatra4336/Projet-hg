@@ -395,7 +395,7 @@ export default function DashboardPage() {
                 </span>
                 <div>
                   <h2 className="text-base font-semibold text-brand-blue">Tous les utilisateurs</h2>
-                  <p className="text-sm text-slate-500">Comptes actifs de votre périmètre</p>
+                  <p className="text-sm text-slate-500">Comptes de votre périmètre</p>
                 </div>
               </div>
               <div className="flex items-center gap-3">
@@ -457,6 +457,14 @@ export default function DashboardPage() {
                         <div className="flex items-center gap-3">
                           <Avatar name={u.nom} />
                           <span className="font-medium text-brand-blue">{u.nom}</span>
+                          {u.desactive && (
+                            <span
+                              className="rounded-full bg-red-50 px-2 py-0.5 text-[11px] font-semibold text-red-700"
+                              title={u.motif_desactivation ?? undefined}
+                            >
+                              Désactivé
+                            </span>
+                          )}
                         </div>
                       </td>
                       <td className="px-3 py-2 text-slate-700">{u.centre?.nom ?? "—"}</td>

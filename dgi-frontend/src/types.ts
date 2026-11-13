@@ -47,6 +47,10 @@ export interface AppUser {
   centre: { id: number; nom: string } | null;
   fonction: { id: number; nom: string; role: Role } | null;
   role: Role | null;
+  /** Compte coupé par un super admin : la connexion affiche le motif. */
+  desactive: boolean;
+  desactive_le?: string | null;
+  motif_desactivation?: string | null;
 }
 
 export interface Paginated<T> {
