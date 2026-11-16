@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { isAxiosError } from "axios";
 import api, { getErrorMessage } from "../../services/api";
@@ -22,6 +22,8 @@ const STEP_PASSWORD = 4;
 
 const POLL_MS = 4000;
 const RESEND_COOLDOWN_SECONDS = 60;
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const IM_PATTERN = /^[0-9]{6}$/;
 
 interface SignupCentre extends CentreOption {
   a_chef?: boolean;
@@ -108,6 +110,12 @@ interface EmailCheckResponse {
   valide: boolean;
   disponible: boolean;
   domaine_valide: boolean;
+  message: string;
+}
+
+interface ImCheckResponse {
+  valide: boolean;
+  disponible: boolean;
   message: string;
 }
 
@@ -208,6 +216,11 @@ export default function SignupPage() {
   const [aAnnuler, setAAnnuler] = useState<boolean>(false);
   const [emailCheck, setEmailCheck] = useState<EmailCheckResponse | null>(null);
   const [checkingEmail, setCheckingEmail] = useState<boolean>(false);
+  const emailCheckRequest = useRef(0);
+  const [imTouched, setImTouched] = useState<boolean>(false);
+  const [imCheck, setImCheck] = useState<ImCheckResponse | null>(null);
+  const [checkingIm, setCheckingIm] = useState<boolean>(false);
+  const imCheckRequest = useRef(0);
 
   // Listes déroulantes : centres + fonctions ouvertes à l'inscription
   useEffect(() => {
@@ -269,15 +282,17 @@ export default function SignupPage() {
     return () => window.clearInterval(timer);
   }, [step]);
 
-  /** Vérifie l'e-mail sans rien envoyer : format, compte/demande existants et domaine joignable. */
-  async function handleCheckEmail() {
+  // Vérifie l'adresse automatiquement à la sortie du champ, sans appel réseau à chaque frappe.
+  async function handleCheckEmail(emailValue: string) {
+    const requestId = ++emailCheckRequest.current;
+    const email = emailValue.trim();
+
     setError("");
     setInfo("");
     setEmailCheck(null);
 
-    const email = form.email.trim();
-
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    if (!EMAIL_PATTERN.test(email)) {
+      setCheckingEmail(false);
       setEmailCheck({
         statut: "invalide",
         valide: false,
@@ -291,11 +306,48 @@ export default function SignupPage() {
     setCheckingEmail(true);
     try {
       const res = await api.post<EmailCheckResponse>("/register/check-email", { email });
-      setEmailCheck(res.data);
+      if (requestId === emailCheckRequest.current) setEmailCheck(res.data);
     } catch (err) {
-      setError(getErrorMessage(err, "Impossible de vérifier cet e-mail pour le moment."));
+      if (requestId === emailCheckRequest.current) {
+        setError(getErrorMessage(err, "Impossible de vérifier cet e-mail pour le moment."));
+      }
     } finally {
-      setCheckingEmail(false);
+      if (requestId === emailCheckRequest.current) setCheckingEmail(false);
+    }
+  }
+
+  async function handleCheckIm(imValue: string) {
+    const requestId = ++imCheckRequest.current;
+    const im = imValue.trim();
+
+    setImTouched(true);
+    setImCheck(null);
+
+    if (!IM_PATTERN.test(im)) {
+      setCheckingIm(false);
+      setImCheck({
+        valide: false,
+        disponible: false,
+        message: "L'IM doit contenir exactement 6 chiffres, sans lettre.",
+      });
+      return;
+    }
+
+    setCheckingIm(true);
+    try {
+      const res = await api.post<ImCheckResponse>("/register/check-im", { im });
+      if (requestId === imCheckRequest.current) setImCheck(res.data);
+    } catch (err) {
+      if (requestId === imCheckRequest.current) {
+        setError(getErrorMessage(err, "Impossible de vérifier cet IM pour le moment."));
+        setImCheck({
+          valide: true,
+          disponible: false,
+          message: "La disponibilité de l'IM n'a pas pu être vérifiée. Réessayez.",
+        });
+      }
+    } finally {
+      if (requestId === imCheckRequest.current) setCheckingIm(false);
     }
   }
 
@@ -303,6 +355,16 @@ export default function SignupPage() {
     e.preventDefault();
     setError("");
     setInfo("");
+
+    if (checkingIm || !IM_PATTERN.test(form.im) || !imCheck?.disponible) {
+      setError("Vérifiez que l'IM contient 6 chiffres et qu'il est disponible.");
+      return;
+    }
+    if (checkingEmail || !emailCheck?.disponible) {
+      setError("Attendez la vérification d'une adresse e-mail valide et disponible.");
+      return;
+    }
+
     setLoading(true);
     try {
       const res = await api.post<RegisterResponse>("/register", {
@@ -451,6 +513,10 @@ export default function SignupPage() {
     setError("");
     setInfo("");
     setEmailCheck(null);
+    setImCheck(null);
+    setImTouched(false);
+    setCheckingIm(false);
+    imCheckRequest.current += 1;
     setStep(STEP_INFOS);
   }
 
@@ -463,6 +529,7 @@ export default function SignupPage() {
   const centreChoisi = options.centres.find((c) => String(c.id) === form.centre_id);
   const fonctionChoisie = options.fonctions.find((f) => String(f.id) === form.fonction_id);
   const refusee = ["refusee", "annulee", "expiree", "introuvable"].includes(statut);
+  const imFormatValide = IM_PATTERN.test(form.im);
 
   // L'approbateur dépend de la fonction choisie (agent → chef du centre, chef/central → administration centrale).
   const infoApprobation = (() => {
@@ -506,37 +573,75 @@ export default function SignupPage() {
               <input
                 className={`${inputClass} min-w-0 flex-1`}
                 type="email"
+                autoComplete="email"
                 placeholder="E-mail"
                 value={form.email}
+                onBlur={(e) => void handleCheckEmail(e.currentTarget.value)}
                 onChange={(e) => {
+                  emailCheckRequest.current += 1;
+                  setCheckingEmail(false);
                   setForm({ ...form, email: e.target.value });
                   setEmailCheck(null);
+                  setError("");
                 }}
                 required
               />
-              <button
-                type="button"
-                onClick={() => void handleCheckEmail()}
-                disabled={checkingEmail || form.email.trim() === ""}
-                className="shrink-0 rounded-lg border border-brand-azure/40 bg-white px-4 text-sm font-semibold text-brand-azure shadow-sm transition hover:bg-brand-azure-soft focus:outline-none focus:ring-4 focus:ring-brand-azure/10 disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                {checkingEmail ? "Vérification..." : "Vérifier"}
-              </button>
             </div>
-            {emailCheck && (
-              <p className={`mt-1.5 text-xs ${emailCheckTone(emailCheck.statut)}`}>{emailCheck.message}</p>
+            {(checkingEmail || emailCheck) && (
+              <p
+                role="status"
+                aria-live="polite"
+                className={`mt-1.5 text-xs ${
+                  checkingEmail ? "text-slate-500" : emailCheck ? emailCheckTone(emailCheck.statut) : "text-slate-500"
+                }`}
+              >
+                {checkingEmail ? "Vérification automatique de l'adresse e-mail..." : emailCheck?.message}
+              </p>
             )}
           </div>
-          <input
-            className={inputClass}
-            placeholder="IM (matricule)"
-            aria-label="IM (matricule)"
-            value={form.im}
-            onChange={(e) => setForm({ ...form, im: e.target.value })}
-            minLength={6}
-            maxLength={6}
-            required
-          />
+          <div>
+            <input
+              className={inputClass}
+              type="text"
+              inputMode="numeric"
+              pattern="[0-9]{6}"
+              placeholder="IM (6 chiffres)"
+              aria-label="IM (6 chiffres)"
+              aria-invalid={imCheck !== null && !imCheck.disponible}
+              aria-describedby={imTouched ? "signup-im-status" : undefined}
+              value={form.im}
+              onChange={(e) => {
+                imCheckRequest.current += 1;
+                setCheckingIm(false);
+                setImCheck(null);
+                setImTouched(false);
+                setForm({ ...form, im: e.target.value });
+                setError("");
+              }}
+              onBlur={(e) => void handleCheckIm(e.currentTarget.value)}
+              maxLength={6}
+              required
+            />
+            {imTouched && (
+              <p
+                id="signup-im-status"
+                role="status"
+                aria-live="polite"
+                className={`mt-1.5 text-xs ${
+                  checkingIm ? "text-slate-500" : imCheck?.disponible ? "text-emerald-700" : "text-red-600"
+                }`}
+              >
+                {checkingIm
+                  ? "Vérification de l'IM..."
+                  : imCheck?.message ??
+                    (imFormatValide
+                      ? "Sortez du champ pour vérifier la disponibilité de l'IM."
+                      : form.im.length === 0
+                        ? "L'IM est obligatoire et doit contenir exactement 6 chiffres."
+                        : "L'IM doit contenir exactement 6 chiffres, sans lettre.")}
+              </p>
+            )}
+          </div>
           <input
             className={inputClass}
             type="tel"
@@ -587,7 +692,11 @@ export default function SignupPage() {
             {infoApprobation}
           </p>
 
-          <button disabled={loading} type="submit" className={`${primaryButtonClass} sm:col-span-2`}>
+          <button
+            disabled={loading || checkingEmail || checkingIm || !emailCheck?.disponible || !imCheck?.disponible}
+            type="submit"
+            className={`${primaryButtonClass} sm:col-span-2`}
+          >
             {loading ? "Envoi de la demande..." : "Demander la création du compte"}
           </button>
         </form>

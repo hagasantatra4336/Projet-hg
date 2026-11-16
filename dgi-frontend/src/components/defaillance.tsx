@@ -186,7 +186,17 @@ export function PeriodeAnomalie({ a }: { a: PeriodeAlerte }) {
 //  Anomalies d'un dossier (fenêtre de détail : dossier libre avant affectation, dossiers traités)
 // ---------------------------------------------------------------------
 
-export function AnomaliesDossierModal({ groupe, onClose }: { groupe: GroupeAlerte; onClose: () => void }) {
+export function AnomaliesDossierModal({
+  groupe,
+  onClose,
+  canAssign = false,
+  onAssign,
+}: {
+  groupe: GroupeAlerte;
+  onClose: () => void;
+  canAssign?: boolean;
+  onAssign?: () => void;
+}) {
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-brand-blue-dark/60 p-4 backdrop-blur-[2px]"
@@ -270,6 +280,15 @@ export function AnomaliesDossierModal({ groupe, onClose }: { groupe: GroupeAlert
           >
             Fermer
           </button>
+          {canAssign && groupe.statut === "a_traiter" && onAssign && (
+            <button
+              type="button"
+              onClick={onAssign}
+              className="rounded-lg border border-brand-azure px-3 py-1.5 text-sm font-semibold text-brand-azure transition hover:bg-brand-azure-soft"
+            >
+              Assigner
+            </button>
+          )}
           <Link
             to={`/defaillances/${groupe.representant_id}/traitement`}
             onClick={onClose}

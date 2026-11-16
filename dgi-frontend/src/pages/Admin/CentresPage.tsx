@@ -36,6 +36,7 @@ export default function CentresPage() {
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string>("");
   const [search, setSearch] = useState<string>("");
+  const [typeFilter, setTypeFilter] = useState<"tous" | "central" | "fiscal">("tous");
 
   const [editing, setEditing] = useState<Centre | "new" | null>(null);
   const [form, setForm] = useState<CentreForm>(EMPTY_FORM);
@@ -50,9 +51,14 @@ export default function CentresPage() {
 
   const filteredCentres = useMemo(() => {
     const term = normalize(search.trim());
-    if (!term) return centres;
-    return centres.filter((centre) => normalize(`${centre.nom} ${centre.adresse ?? ""}`).includes(term));
-  }, [centres, search]);
+    return centres.filter((centre) => {
+      const correspondType =
+        typeFilter === "tous" ||
+        (typeFilter === "central" ? centre.type_centre === "central" : centre.type_centre !== "central");
+      const correspondRecherche = !term || normalize(`${centre.nom} ${centre.adresse ?? ""}`).includes(term);
+      return correspondType && correspondRecherche;
+    });
+  }, [centres, search, typeFilter]);
 
   const load = useCallback(async () => {
     try {
@@ -148,9 +154,22 @@ export default function CentresPage() {
           value={search}
           onChange={(e) => setSearch(e.target.value)}
         />
+        <select
+          className={`${inputClass} max-w-xs`}
+          aria-label="Filtrer par type de centre"
+          value={typeFilter}
+          onChange={(e) => {
+            const value = e.target.value;
+            if (value === "tous" || value === "central" || value === "fiscal") setTypeFilter(value);
+          }}
+        >
+          <option value="tous">Tous les types</option>
+          <option value="central">Services centraux</option>
+          <option value="fiscal">Centres fiscaux</option>
+        </select>
         <p className="text-sm text-slate-600">
           {filteredCentres.length} centre(s)
-          {search.trim() && ` sur ${centres.length}`}
+          {(search.trim() || typeFilter !== "tous") && ` sur ${centres.length}`}
         </p>
         <button type="button" className={primaryButtonClass} onClick={openNew}>
           + Ajouter un centre
@@ -189,8 +208,8 @@ export default function CentresPage() {
             {!loading && filteredCentres.length === 0 && (
               <tr>
                 <td colSpan={6} className="px-3 py-4 text-center text-slate-500">
-                  {search.trim()
-                    ? "Aucun centre ne correspond à votre recherche."
+                  {search.trim() || typeFilter !== "tous"
+                    ? "Aucun centre ne correspond aux filtres sélectionnés."
                     : "Aucun centre. Ajoutez le premier."}
                 </td>
               </tr>

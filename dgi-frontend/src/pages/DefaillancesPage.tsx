@@ -1498,7 +1498,19 @@ export default function DefaillancesPage() {
       )}
 
       {/* Détail des anomalies d'un dossier (consultation, avant affectation) */}
-      {voirGroupe && <AnomaliesDossierModal groupe={voirGroupe} onClose={() => setVoirGroupe(null)} />}
+      {voirGroupe && (
+        <AnomaliesDossierModal
+          groupe={voirGroupe}
+          canAssign={canManage}
+          onClose={() => setVoirGroupe(null)}
+          onAssign={() => {
+            const groupe = voirGroupe;
+            if (!groupe) return;
+            setVoirGroupe(null);
+            openAssigner(groupe);
+          }}
+        />
+      )}
 
       {/* Fiche contribuable (en dernier : s'affiche au-dessus de la fenêtre « Traiter ») */}
       {ficheId !== null && <ContribuableModal id={ficheId} onClose={() => setFicheId(null)} />}

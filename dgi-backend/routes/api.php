@@ -35,6 +35,9 @@ Route::post('/register', [AuthController::class, 'register'])->middleware('throt
 // N'envoie aucun e-mail : le code OTP reste envoyé après approbation de la demande.
 Route::post('/register/check-email', [AuthController::class, 'checkEmail'])->middleware('throttle:20,1,signup-check-email');
 
+// Vérification de l'IM à six chiffres, sans révéler si le compte ou la demande existe.
+Route::post('/register/check-im', [AuthController::class, 'checkIm'])->middleware('throttle:10,1,signup-check-im');
+
 // Suivi public de la demande : la page d'attente interroge cette route jusqu'à l'approbation
 // (l'identifiant aléatoire de 48 caractères fait office de secret)
 Route::get('/register/status/{requestId}', [AuthController::class, 'signupStatus'])

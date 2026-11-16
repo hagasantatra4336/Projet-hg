@@ -36,6 +36,13 @@ class UserFieldsValidationTest extends TestCase
         ])
             ->assertUnprocessable()
             ->assertJsonValidationErrors(['im', 'telephone']);
+
+        $this->postJson('/api/register', $inscription + [
+            'im' => 'AB1234',
+            'telephone' => '0341234567',
+        ])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors(['im']);
     }
 
     public function test_un_superadmin_peut_creer_un_compte_avec_un_im_de_six_caracteres_et_dix_chiffres(): void
@@ -64,6 +71,33 @@ class UserFieldsValidationTest extends TestCase
             ->assertCreated()
             ->assertJsonPath('im', 'AB1234')
             ->assertJsonPath('telephone', '0341234567');
+    }
+
+    public function test_verification_im_indique_si_le_matricule_est_deja_utilise(): void
+    {
+        $fonction = Fonction::create(['nom' => 'Agent test', 'role' => Role::Agent]);
+        User::create([
+            'nom' => 'Agent existant',
+            'email' => 'agent-im-existant@example.test',
+            'im' => '123456',
+            'password' => 'motdepasse123',
+            'fonction_id' => $fonction->id,
+            'email_verified_at' => now(),
+        ]);
+
+        $this->postJson('/api/register/check-im', ['im' => '654321'])
+            ->assertOk()
+            ->assertJsonPath('valide', true)
+            ->assertJsonPath('disponible', true);
+
+        $this->postJson('/api/register/check-im', ['im' => '123456'])
+            ->assertOk()
+            ->assertJsonPath('valide', true)
+            ->assertJsonPath('disponible', false);
+
+        $this->postJson('/api/register/check-im', ['im' => '12A456'])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors(['im']);
     }
 
     public function test_modification_du_profil_refuse_un_telephone_de_mauvaise_longueur(): void

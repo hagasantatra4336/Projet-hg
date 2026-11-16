@@ -61,7 +61,7 @@ class AuthController extends Controller
         $data = $request->validate([
             'nom' => ['required', 'string', 'max:255'],
             'email' => ['required', 'email', 'max:255'],
-            'im' => ['required', 'string', 'size:6', 'unique:users,im'],
+            'im' => ['required', 'string', 'regex:/^[0-9]{6}$/', 'unique:users,im'],
             'telephone' => ['required', 'string', 'digits:10'],
             'adresse' => ['nullable', 'string', 'max:255'],
             'centre_id' => [
@@ -226,6 +226,29 @@ class AuthController extends Controller
             true,
             'Adresse valide et disponible. Le code de vérification sera envoyé après approbation de votre demande.'
         );
+    }
+
+    /** Vérifie qu'un IM de six chiffres n'est ni utilisé par un compte ni réservé par une demande active. */
+    public function checkIm(Request $request): JsonResponse
+    {
+        $data = $request->validate([
+            'im' => ['required', 'string', 'regex:/^[0-9]{6}$/'],
+        ]);
+
+        $imUtilise = User::where('im', $data['im'])->exists();
+        $imDemande = DemandeInscription::query()
+            ->where('im', $data['im'])
+            ->whereIn('statut', [DemandeInscription::EN_ATTENTE, DemandeInscription::APPROUVEE])
+            ->exists();
+        $disponible = ! $imUtilise && ! $imDemande;
+
+        return response()->json([
+            'valide' => true,
+            'disponible' => $disponible,
+            'message' => $disponible
+                ? 'IM disponible.'
+                : "Cet IM est déjà utilisé ou associé à une demande en cours.",
+        ]);
     }
 
     /** Suivi public de la demande : le request_id de 48 caractères est le secret, il n'est jamais renvoyé par /register. */
