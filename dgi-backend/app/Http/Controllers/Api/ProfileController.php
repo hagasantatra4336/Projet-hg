@@ -42,7 +42,7 @@ class ProfileController extends Controller
 
         $data = $request->validate([
             'nom' => ['required', 'string', 'max:255'],
-            'telephone' => ['nullable', 'string', 'max:30'],
+            'telephone' => ['required', 'string', 'digits:10'],
             'adresse' => ['nullable', 'string', 'max:255'],
             'centre_id' => ['nullable', 'integer', 'exists:centres,id'],
             'current_password' => ['nullable', 'string'],

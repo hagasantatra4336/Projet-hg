@@ -8,7 +8,7 @@ use Illuminate\Console\Command;
 use Throwable;
 
 /**
- * Récupère contribuables, assujettissements et déclarations depuis la base PostgreSQL source puis (option)
+ * Récupère contribuables, assujettissements et déclarations depuis les bases sources puis (option)
  * lance l'analyse des anomalies :
  *   php artisan dgi:importer-source --tester
  *   php artisan dgi:importer-source
@@ -24,7 +24,7 @@ class ImporterDepuisSource extends Command
         {--centre= : ID d'un centre de l'application (défaut : tous)}
         {--analyser : Lance ensuite la détection des anomalies : défaillances et baisses du chiffre d'affaires (à la date du jour)}";
 
-    protected $description = "Importe contribuables, assujettissements et déclarations depuis la base PostgreSQL source (lecture seule)";
+    protected $description = "Importe contribuables, assujettissements et déclarations depuis les bases sources (lecture seule)";
 
     public function handle(SourceDeclarationImporter $importer, AnomalieAnalyseur $analyseur): int
     {
@@ -50,7 +50,7 @@ class ImporterDepuisSource extends Command
             return self::FAILURE;
         } catch (Throwable $e) {
             $this->error("Impossible de lire la base source : {$e->getMessage()}");
-            $this->line('Vérifiez SOURCE_DB_* et DGI_SOURCE_* dans le .env (puis php artisan config:clear) et que les tables existent.');
+            $this->line('Vérifiez les connexions SOURCE_*_DB_* et les paramètres DGI_SOURCE_* dans le .env, puis php artisan config:clear.');
 
             return self::FAILURE;
         }

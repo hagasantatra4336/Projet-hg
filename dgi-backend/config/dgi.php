@@ -1,23 +1,27 @@
 <?php
 
 return [
-    // URL du front React : sert à construire les liens envoyés par e-mail (confirmation de modification du profil).
     // À définir dans .env :  FRONTEND_URL=http://localhost:5173   puis : php artisan config:clear
     'frontend_url' => env('FRONTEND_URL', 'http://localhost:5173'),
 
-    // Base PostgreSQL SOURCE (voir config/database.php, connexion « source »). Elle n'est jamais modifiée (SELECT uniquement).
-    // Les noms de colonnes ci-dessous sont ceux des exemples fournis (déclarations IR et TVA, assujettissement,
-    // centres gestionnaires, info contribuable). La casse n'a pas d'importance (FISCAL_NO ou fiscal_no).
-    // Si votre base réelle a d'autres noms, changez-les ici, puis : php artisan config:clear
     'source' => [
+        // Connexion commune (repli) : voir config/database.php, connexion « source » (SOURCE_DB_*).
         'connection' => env('DGI_SOURCE_CONNECTION', 'source'),
+        // Une base différente par groupe : mettre le nom d'une connexion de config/database.php
+        // (source_declarations, source_contribuables, ...) et ses paramètres SOURCE_<GROUPE>_DB_*
+        // dans le .env. Une valeur vide (ou absente) => connexion commune ci-dessus.
+        'connections' => [
+            'declarations' => env('DGI_SOURCE_CONNECTION_DECLARATIONS'),
+            'assujettissements' => env('DGI_SOURCE_CONNECTION_ASSUJETTISSEMENTS'),
+            'contribuables' => env('DGI_SOURCE_CONNECTION_CONTRIBUABLES'),
+            'centres' => env('DGI_SOURCE_CONNECTION_CENTRES'),
+            'agents' => env('DGI_SOURCE_CONNECTION_AGENTS'),
+            // Tables de la base d'analyse risque (config/risque.php)
+            'recoupement' => env('DGI_SOURCE_CONNECTION_RECOUPEMENT'),
+            'dau' => env('DGI_SOURCE_CONNECTION_DAU'),
+        ],
 
-        // Déclarations : UNE TABLE PAR IMPÔT, au format « une ligne par ligne du formulaire » (IRD_LINE_NO).
-        //   ligne_ca : numéro de la ligne qui contient le chiffre d'affaires (IR : ligne 15 ; TVA : ligne 170)
-        //   mois     : colonne du mois (vide ou 0 pour une déclaration annuelle)
-        //   version  : colonne de version (déclarations rectificatives) : seule la dernière version est retenue ; null si absente
-        // Pour ajouter l'IS ou l'IRSA, copiez un bloc ci-dessous avec le nom de leur table et la ligne de leur CA.
-        'declarations' => [
+          'declarations' => [
             'IR' => [
                 'table' => env('DGI_SOURCE_TABLE_IR', 'declaration_ir'),
                 'ligne_ca' => (int) env('DGI_SOURCE_LIGNE_CA_IR', 15),
@@ -38,8 +42,7 @@ return [
             ],
         ],
 
-        // Obligations déclaratives : un impôt, une année, une périodicité (1 mensuel, 5 annuel...), actif / exonéré
-        'assujettissements' => [
+       'assujettissements' => [
             'table' => env('DGI_SOURCE_TABLE_ASSUJETTISSEMENT', 'assujettissement'),
             'colonnes' => [
                 'nif' => 'NIF', 'annee' => 'ANNEE', 'debut' => 'DEBUT', 'fin' => 'FIN', 'periodicite' => 'PERIODICITE',
@@ -47,9 +50,7 @@ return [
             ],
         ],
 
-        // Contribuables : nom, centre gestionnaire, état et dates de fin d'activité.
-        // centre_code (facultatif) : colonne contenant l'identifiant du centre (« 21-1-702 »), plus fiable que le nom.
-        'contribuables' => [
+         'contribuables' => [
             'table' => env('DGI_SOURCE_TABLE_CONTRIBUABLES', 'info_contribuable'),
             'colonnes' => [
                 'nif' => 'NIF', 'nom' => 'RAISON_SOCIALE', 'centre' => 'CENTRE_GEST',
@@ -64,10 +65,7 @@ return [
             'colonnes' => ['code' => 'CENTRE ID', 'libelle' => 'LIBELLE CENTRE', 'abreviation' => 'CENTRE ABREV'],
         ],
 
-        // Personnel (E-Kajy) : rattachement officiel de chaque agent à un centre. Contrôlé à chaque connexion :
-        // si le centre indiqué ici diffère de celui du compte, le compte est rattaché automatiquement au nouveau
-        // centre. Le rapprochement se fait par e-mail, à défaut par matricule (IM du compte).
-        // Commande d'amorçage : php artisan dgi:agents-source
+       
         'agents' => [
             'table' => env('DGI_SOURCE_TABLE_AGENTS', 'agents'),
             'colonnes' => [

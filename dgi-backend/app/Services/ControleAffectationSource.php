@@ -4,10 +4,11 @@ namespace App\Services;
 
 use App\Models\Centre;
 use App\Models\User;
+use App\Support\SourceConnexion;
 use Illuminate\Database\ConnectionInterface;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Facades\Schema;
+use DomainException;
+use InvalidArgumentException;
 use Throwable;
 
 /**
@@ -20,24 +21,91 @@ use Throwable;
  */
 class ControleAffectationSource
 {
+    /**
+     * Recherche un agent par son IM dans la source officielle.
+     *
+     * @return array{im: string, nom: string|null, email: string|null, centre_code: string|null, centre: string|null, centre_id: int|null, grade: string|null, actif: bool}|null
+     */
+    public function rechercherParIm(string $im): ?array
+    {
+        $cfg = (array) config('dgi.source.agents', []);
+        $table = trim((string) ($cfg['table'] ?? ''));
+        $im = trim($im);
+
+        if ($im === '') {
+            throw new InvalidArgumentException('Le matricule IM est obligatoire.');
+        }
+        if ($table === '') {
+            throw new InvalidArgumentException('La table du personnel n’est pas configurée.');
+        }
+        if (! SourceConnexion::tableExiste('agents', $table)) {
+            throw new InvalidArgumentException("La table du personnel « {$table} » est introuvable.");
+        }
+
+        $colonnes = $this->colonnesReelles('agents', $table, (array) ($cfg['colonnes'] ?? []));
+        if ($colonnes['matricule'] === null) {
+            throw new InvalidArgumentException('La colonne du matricule IM n’est pas configurée ou est introuvable.');
+        }
+
+        $select = [];
+        foreach ($colonnes as $champ => $nom) {
+            if ($nom !== null) {
+                $select[] = $nom . ' as ' . $champ;
+            }
+        }
+
+        $cx = SourceConnexion::db('agents');
+        $colonneIm = $cx->getQueryGrammar()->wrap($colonnes['matricule']);
+        $lignes = $cx->table(SourceConnexion::table('agents', $table))
+            ->select($select)
+            ->whereRaw('LOWER(TRIM('.$colonneIm.')) = ?', [mb_strtolower($im)])
+            ->limit(2)
+            ->get();
+
+        if ($lignes->isEmpty()) {
+            return null;
+        }
+        if ($lignes->count() > 1) {
+            throw new DomainException('Plusieurs agents portent ce matricule IM dans la source officielle.');
+        }
+
+        $ligne = [];
+        foreach ((array) $lignes->first() as $cle => $valeur) {
+            $ligne[mb_strtolower((string) $cle)] = $valeur;
+        }
+
+        $centreCode = $this->texte($ligne, 'centre_code');
+        $centre = $this->texte($ligne, 'centre_libelle');
+
+        return [
+            'im' => $this->texte($ligne, 'matricule') ?? $im,
+            'nom' => $this->texte($ligne, 'nom'),
+            'email' => $this->texte($ligne, 'email'),
+            'centre_code' => $centreCode,
+            'centre' => $centre,
+            'centre_id' => CentreResolver::depuisBase()->resoudre($centre, $centreCode),
+            'grade' => $this->texte($ligne, 'grade'),
+            'actif' => $this->actif($ligne),
+        ];
+    }
+
     /** Retourne le nouveau centre quand le compte vient d'être rattaché à un autre centre, sinon null. */
     public function synchroniser(User $user): ?Centre
     {
         $cfg = (array) config('dgi.source.agents', []);
         $table = trim((string) ($cfg['table'] ?? ''));
-        $connexion = (string) config('dgi.source.connection');
 
         if ($table === '' || trim((string) $user->email) === '') {
             return null;
         }
 
         try {
-            if (! Schema::connection($connexion)->hasTable($table)) {
+            if (! SourceConnexion::tableExiste('agents', $table)) {
                 return null; // base source sans table du personnel : le centre actuel est conservé
             }
 
-            $colonnes = $this->colonnesReelles($connexion, $table, (array) ($cfg['colonnes'] ?? []));
-            $ligne = $this->ligneAgent(DB::connection($connexion), $table, $colonnes, $user);
+            $colonnes = $this->colonnesReelles('agents', $table, (array) ($cfg['colonnes'] ?? []));
+            $ligne = $this->ligneAgent(SourceConnexion::db('agents'), SourceConnexion::table('agents', $table), $colonnes, $user);
 
             if ($ligne === null || ! $this->actif($ligne)) {
                 return null;
@@ -77,10 +145,10 @@ class ControleAffectationSource
      * @param  array<string, string|null>  $voulues
      * @return array<string, string|null>  champ => vrai nom (null si absent)
      */
-    private function colonnesReelles(string $connexion, string $table, array $voulues): array
+    private function colonnesReelles(string $groupe, string $table, array $voulues): array
     {
         $reelles = [];
-        foreach (Schema::connection($connexion)->getColumnListing($table) as $nom) {
+        foreach (SourceConnexion::colonnes($groupe, $table) as $nom) {
             $reelles[mb_strtolower((string) $nom)] = (string) $nom;
         }
 

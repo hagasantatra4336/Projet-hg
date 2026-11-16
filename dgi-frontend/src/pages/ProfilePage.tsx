@@ -292,12 +292,18 @@ export default function ProfilePage() {
                   required
                 />
               </Field>
-              <Field label="Téléphone" optional>
+              <Field label="Téléphone" required hint="10 chiffres exactement.">
                 <input
                   className={inputClass}
+                  type="tel"
+                  inputMode="numeric"
+                  pattern="[0-9]{10}"
                   value={form.telephone}
                   onChange={(e) => setForm({ ...form, telephone: e.target.value })}
                   autoComplete="tel"
+                  minLength={10}
+                  maxLength={10}
+                  required
                 />
               </Field>
               <Field label="Adresse" optional>

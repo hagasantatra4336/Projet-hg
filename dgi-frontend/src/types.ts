@@ -232,6 +232,67 @@ export interface ActionDossier {
   le: string | null;
 }
 
+// ---- Tableau de bord ----
+
+/** Répartition mensuelle des anomalies, par exercice. */
+export interface DashboardAnomaliesMois {
+  /** Exercices disponibles, du plus récent au plus ancien (trois au plus). */
+  annees: number[];
+  series: { annee: number; mois: number; total: number }[];
+}
+
+/** Utilisateur ayant clôturé des dossiers, classé par clôture la plus récente. */
+export interface DashboardClotureur {
+  id: number;
+  nom: string;
+  centre: string | null;
+  role: Role | null;
+  dossiers: number;
+  anomalies: number;
+  derniere_cloture: string | null;
+}
+
+/** Dernier dossier clôturé (journal des dossiers). */
+export interface DashboardDossierRecent {
+  id: number;
+  contribuable: { id: number | null; nom: string | null; nif: string | null; centre: string | null };
+  auteur: string;
+  detail: string | null;
+  statut_apres: StatutAlerte;
+  le: string | null;
+}
+
+/** Une opération personnelle du journal des dossiers. */
+export interface DashboardAction {
+  id: number;
+  action: ActionDossierType;
+  detail: string | null;
+  contribuable: { nom: string | null; nif: string | null };
+  statut_avant: StatutAlerte;
+  statut_apres: StatutAlerte;
+  le: string | null;
+}
+
+export interface DashboardTotaux {
+  centres: number | null;
+  utilisateurs: number | null;
+  fonctions: number | null;
+  anomalies_a_traiter: number;
+  anomalies_en_traitement: number;
+  anomalies_traitees: number;
+  anomalies_total: number;
+  dossiers_a_traiter: number;
+}
+
+export interface DashboardData {
+  totaux: DashboardTotaux;
+  anomalies_par_mois: DashboardAnomaliesMois;
+  clotureurs: DashboardClotureur[];
+  derniers_dossiers: DashboardDossierRecent[];
+  historique: DashboardAction[];
+  derniere_analyse: { at: string; date: string } | null;
+}
+
 export const ETAT_LABELS: Record<number, string> = { 1: "Actif", 2: "Bloqué", 3: "Cessation", 4: "Radié" };
 
 export interface CelluleDeclaration {

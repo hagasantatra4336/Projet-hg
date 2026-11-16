@@ -4,16 +4,18 @@ namespace App\Http\Controllers\Api;
 
 use App\Enums\Role;
 use App\Http\Controllers\Controller;
+use App\Services\ControleAffectationSource;
 use App\Services\AnomalieAnalyseur;
 use App\Services\SourceDeclarationImporter;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
+use DomainException;
 use InvalidArgumentException;
 use Throwable;
 
 /**
- * Récupération des déclarations depuis la base PostgreSQL source (superadmin, central, admin).
+ * Récupération des données depuis les bases sources (superadmin, central, admin).
  * L'admin est limité à son propre centre. La base source n'est jamais modifiée.
  */
 class SourceImportController extends Controller
@@ -26,6 +28,51 @@ class SourceImportController extends Controller
         } catch (Throwable $e) {
             return $this->echecSource($e);
         }
+    }
+
+    /** Importe le référentiel officiel des centres dans la base de l'application. */
+    public function importerCentres(SourceDeclarationImporter $importer): JsonResponse
+    {
+        try {
+            $stats = $importer->importerCentres();
+        } catch (InvalidArgumentException $e) {
+            return response()->json(['message' => $e->getMessage()], 422);
+        } catch (Throwable $e) {
+            return $this->echecSource($e);
+        }
+
+        return response()->json($stats + [
+            'message' => sprintf(
+                '%d centre(s) lus : %d créé(s), %d mis à jour.',
+                $stats['lues'],
+                $stats['crees'],
+                $stats['mis_a_jour'],
+            ),
+        ]);
+    }
+
+    /** Recherche une fiche du personnel par IM sans exposer les autres colonnes de la source. */
+    public function agentParIm(Request $request, string $im, ControleAffectationSource $source): JsonResponse
+    {
+        try {
+            $agent = $source->rechercherParIm($im);
+        } catch (InvalidArgumentException $e) {
+            return response()->json(['message' => $e->getMessage()], 422);
+        } catch (DomainException $e) {
+            return response()->json(['message' => $e->getMessage()], 409);
+        } catch (Throwable $e) {
+            return $this->echecSource($e);
+        }
+
+        if ($agent === null) {
+            return response()->json(['message' => 'Aucun agent ne correspond à ce matricule IM.'], 404);
+        }
+
+        if ($request->user()->role === Role::Admin && $agent['centre_id'] !== $request->user()->centre_id) {
+            return response()->json(['message' => 'Aucun agent ne correspond à ce matricule IM.'], 404);
+        }
+
+        return response()->json($agent);
     }
 
     /** Importe les déclarations de la base source puis, si demandé, lance l'analyse. */
@@ -81,10 +128,10 @@ class SourceImportController extends Controller
     /** Détail technique dans les logs seulement : le message de l'exception peut contenir hôte et identifiants. */
     private function echecSource(Throwable $e): JsonResponse
     {
-        Log::error('Base source PostgreSQL : ' . $e->getMessage());
+        Log::error('Lecture des bases sources impossible : ' . $e->getMessage());
 
         return response()->json([
-            'message' => "Impossible de lire la base source. Vérifiez la configuration SOURCE_DB_* (détails dans les logs du serveur).",
+            'message' => "Impossible de lire les bases sources. Vérifiez les paramètres SOURCE_*_DB_* (détails dans les logs du serveur).",
         ], 502);
     }
 }

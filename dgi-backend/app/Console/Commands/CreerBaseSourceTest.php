@@ -3,6 +3,7 @@
 namespace App\Console\Commands;
 
 use App\Models\Centre;
+use App\Support\SourceConnexion;
 use Database\Seeders\DeclarationDemoSeeder;
 use DateTimeImmutable;
 use Illuminate\Console\Command;
@@ -39,8 +40,22 @@ class CreerBaseSourceTest extends Command
 
     public function handle(): int
     {
-        $connexion = (string) config('dgi.source.connection');
+        $connexion = SourceConnexion::nom('declarations');
         $cfg = config("database.connections.{$connexion}");
+
+        // Cette commande crée TOUTES les tables de test dans une seule base : elle ne convient pas
+        // quand les groupes (déclarations, contribuables, ...) pointent vers des bases différentes.
+        $groupes = [];
+        foreach (['declarations', 'assujettissements', 'contribuables', 'centres', 'agents'] as $groupe) {
+            $groupes[] = SourceConnexion::nom($groupe);
+        }
+        if (count(array_unique($groupes)) > 1) {
+            $this->error('Les groupes source utilisent plusieurs connexions (' . implode(', ', array_unique($groupes)) . ').');
+            $this->line('dgi:source-test-db crée toutes les tables de test dans UNE base : retirez les variables');
+            $this->line('DGI_SOURCE_CONNECTION_<GROUPE> du .env pour l\'utiliser, ou créez les tables de test à la main.');
+
+            return self::FAILURE;
+        }
 
         if (! is_array($cfg) || ($cfg['driver'] ?? null) !== 'pgsql') {
             $this->error("La connexion « {$connexion} » doit être de type pgsql (voir config/database.php).");
@@ -136,7 +151,10 @@ class CreerBaseSourceTest extends Command
         $existe = $admin->selectOne('select 1 as ok from pg_database where datname = ?', [$base]) !== null;
 
         if ($existe && $reset) {
-            DB::purge((string) config('dgi.source.connection')); // ferme nos propres connexions à cette base
+            // ferme nos propres connexions à cette base (toutes les connexions source pointent ici, cf. contrôle du début)
+            foreach (['declarations', 'assujettissements', 'contribuables', 'centres', 'agents'] as $groupe) {
+                DB::purge(SourceConnexion::nom($groupe));
+            }
             $admin->statement('select pg_terminate_backend(pid) from pg_stat_activity where datname = ? and pid <> pg_backend_pid()', [$base]);
             $admin->statement("drop database \"{$base}\"");
             $this->line("Base « {$base} » supprimée.");

@@ -66,12 +66,12 @@ export default function DemandesInscriptionPage() {
   const [motif, setMotif] = useState<string>("");
   const [busy, setBusy] = useState<boolean>(false);
 
-  // Changement de filtre : retour à la première page
+  // retour à la première page
   useEffect(() => {
     setPage(1);
   }, [statut]);
 
-  // Chargement + rafraîchissement toutes les 30 s (un nouvel agent peut arriver à tout moment)
+  // Chargement + rafraîchissement 
   useEffect(() => {
     let cancelled = false;
 

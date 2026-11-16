@@ -61,3 +61,57 @@ Si la source stocke une vraie date, créez une **vue** PostgreSQL qui expose `to
 ## 5. Tests automatiques
 
 `php artisan test --filter=SourceImportTest` — n'exige pas PostgreSQL (la source y est une SQLite en mémoire).
+
+## 6. Oracle, et une base différente par groupe de tables
+
+Les tables peuvent venir de **plusieurs bases**. On raisonne par « groupe » : `declarations` (IR + TVA),
+`assujettissements`, `contribuables`, `centres`, `agents`, `recoupement`, `dau`.
+
+| Où | Ce qu'on règle |
+|---|---|
+| `.env` → `DGI_SOURCE_CONNECTION_<GROUPE>` | nom de la connexion à utiliser (`source_declarations`, …) |
+| `.env` → `SOURCE_<GROUPE>_DB_*` | hôte, port, service/SID, utilisateur, mot de passe, charset : seules les variables à changer |
+| `config/database.php` | connexions `source_<groupe>` (déjà déclarées) |
+| `config/dgi.php` | noms de **tables et colonnes** (`source.declarations.IR.table`, …) |
+| `config/risque.php` | tables `recoupement` et `dau` |
+
+Exemple minimal pour deux bases Oracle :
+
+```dotenv
+SOURCE_DB_DRIVER=oracle
+SOURCE_DB_HOST=10.0.0.10
+SOURCE_DB_PORT=1521
+SOURCE_DB_SERVICE_NAME=ORCLPDB1
+SOURCE_DB_DATABASE=ORCLPDB1
+SOURCE_DB_USERNAME=DGI_APP
+SOURCE_DB_PASSWORD=...
+SOURCE_DB_CHARSET=AL32UTF8
+
+DGI_SOURCE_CONNECTION_DECLARATIONS=source_declarations
+SOURCE_DECLARATIONS_DB_HOST=10.0.0.11
+SOURCE_DECLARATIONS_DB_SERVICE_NAME=DECLPDB1
+SOURCE_DECLARATIONS_DB_DATABASE=DECLPDB1
+SOURCE_DECLARATIONS_DB_USERNAME=DGI_DECL
+SOURCE_DECLARATIONS_DB_PASSWORD=...
+```
+
+Points à connaître :
+
+- **Extension `oci8` obligatoire** (`yajra/laravel-oci8` l'exige) + Oracle Instant Client. Sans elle :
+  `Undefined constant "Yajra\Pdo\OCI_DEFAULT"` et `composer install` en échec.
+  Procédure Windows/Herd détaillée et chemins des fichiers : `docs/installation-oracle-oci8-windows.md`.
+- **Propriétaire des tables** : les métadonnées sont lues sur `owner = utilisateur de connexion`.
+  Si les tables sont dans un autre schéma (ou derrière un synonyme), ajoutez
+  `SOURCE_<GROUPE>_DB_SCHEMA=EKAJY` : les requêtes utilisent alors `EKAJY.TABLE` et les colonnes sont
+  cherchées chez ce propriétaire. C'est le cas typique d'un compte en lecture seule.
+- `service_name` vide ⇒ la valeur de `DATABASE` est prise comme **SID**. Pour un service, renseignez
+  `SOURCE_*_DB_SERVICE_NAME`.
+- **Granularité** : IR et TVA sont dans le même groupe, donc dans la même base.
+- `dgi:source-test-db`, `dgi:source-test-data`, `dgi:source-importer-csv`, `dgi:source-anomalies-demo`
+  écrivent dans la base de chaque groupe ; la première refuse de tourner si les groupes sont séparés
+  (elle crée toutes les tables de test dans une seule base).
+- Vérification : `php artisan dgi:importer-source --tester` affiche, pour chaque table, la connexion et
+  la base réellement utilisées.
+- **Serveur Oracle local** (comptes, tables source, données de démo, `.env`, dépannage) :
+  `docs/serveur-oracle-local-windows.md`.
+

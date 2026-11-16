@@ -5,9 +5,8 @@ namespace App\Services;
 use App\Models\BaseRisque;
 use App\Models\Contribuable;
 use App\Support\Nif;
-use Illuminate\Database\ConnectionInterface;
+use App\Support\SourceConnexion;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Schema;
 use InvalidArgumentException;
 
 /**
@@ -22,8 +21,6 @@ class ImportBaseRisque
 {
     private const LOT = 500;
 
-    private ConnectionInterface $cx;
-
     /** @return array<string, mixed> */
     public function importer(?string $depuis = null, ?string $jusqua = null): array
     {
@@ -33,7 +30,6 @@ class ImportBaseRisque
             }
         }
 
-        $this->cx = DB::connection((string) config('dgi.source.connection'));
         $ids = Contribuable::query()->pluck('id', 'nif')->all();
 
         $stats = ['ecrites' => 0, 'nif_inconnus' => 0, 'nif_exemples' => [], 'tables_absentes' => []];
@@ -54,14 +50,16 @@ class ImportBaseRisque
     {
         $def = (array) config("dgi.source.declarations.{$impot}");
         $table = (string) ($def['table'] ?? '');
-        if (! $this->tableExiste($table)) {
+        if (! SourceConnexion::tableExiste('declarations', $table)) {
             $stats['tables_absentes'][] = $table;
 
             return;
         }
 
-        $col = $this->colonnes($table, (array) $def['colonnes'], ['nif', 'annee', 'ligne', 'montant']);
-        $w = fn (string $c) => $this->cx->getQueryGrammar()->wrap($c);
+        $cx = SourceConnexion::db('declarations');
+        $tableSql = SourceConnexion::table('declarations', $table);
+        $col = $this->colonnes('declarations', $table, (array) $def['colonnes'], ['nif', 'annee', 'ligne', 'montant']);
+        $w = fn (string $c) => $cx->getQueryGrammar()->wrap($c);
 
         $lignesVoulues = (array) config("risque.lignes.{$impot}");
         $toutes = array_values(array_unique(array_merge(...array_values($lignesVoulues))));
@@ -80,7 +78,7 @@ class ImportBaseRisque
             $w($col['ligne']),
         ]);
 
-        $query = $this->cx->table($table)
+        $query = $cx->table($tableSql)
             ->selectRaw(
                 $w($col['nif']) . ' as nif, ' . $w($col['annee']) . ' as annee, ' . $mois . ' as mois, ' . $version . ' as version, '
                 . $w($col['ligne']) . ' as ligne, sum(' . $montant . ') as montant'
@@ -167,14 +165,16 @@ class ImportBaseRisque
     {
         $cfg = (array) config('risque.recoupement');
         $table = (string) $cfg['table'];
-        if (! $this->tableExiste($table)) {
+        if (! SourceConnexion::tableExiste('recoupement', $table)) {
             $stats['tables_absentes'][] = $table;
 
             return;
         }
 
-        $col = $this->colonnes($table, (array) $cfg['colonnes'], ['nif', 'annee']);
-        $w = fn (string $c) => $this->cx->getQueryGrammar()->wrap($c);
+        $cx = SourceConnexion::db('recoupement');
+        $tableSql = SourceConnexion::table('recoupement', $table);
+        $col = $this->colonnes('recoupement', $table, (array) $cfg['colonnes'], ['nif', 'annee']);
+        $w = fn (string $c) => $cx->getQueryGrammar()->wrap($c);
 
         $select = [$w($col['nif']) . ' as nif', $w($col['annee']) . ' as annee'];
         $indicateurs = [];
@@ -185,7 +185,7 @@ class ImportBaseRisque
             }
         }
 
-        $query = $this->cx->table($table)->selectRaw(implode(', ', $select))
+        $query = $cx->table($tableSql)->selectRaw(implode(', ', $select))
             ->groupByRaw($w($col['nif']) . ', ' . $w($col['annee']));
         if ($depuis !== null) {
             $query->where($col['annee'], '>=', $depuis);
@@ -222,17 +222,19 @@ class ImportBaseRisque
     {
         $cfg = (array) config('risque.dau');
         $table = (string) $cfg['table'];
-        if (! $this->tableExiste($table)) {
+        if (! SourceConnexion::tableExiste('dau', $table)) {
             $stats['tables_absentes'][] = $table;
 
             return;
         }
 
-        $col = $this->colonnes($table, (array) $cfg['colonnes'], ['nif', 'annee', 'modele', 'tva', 'valeur_caf']);
-        $w = fn (string $c) => $this->cx->getQueryGrammar()->wrap($c);
+        $cx = SourceConnexion::db('dau');
+        $tableSql = SourceConnexion::table('dau', $table);
+        $col = $this->colonnes('dau', $table, (array) $cfg['colonnes'], ['nif', 'annee', 'modele', 'tva', 'valeur_caf']);
+        $w = fn (string $c) => $cx->getQueryGrammar()->wrap($c);
         $modele = 'upper(trim(' . $w($col['modele']) . '))';
 
-        $query = $this->cx->table($table)
+        $query = $cx->table($tableSql)
             ->selectRaw(
                 $w($col['nif']) . ' as nif, ' . $w($col['annee']) . ' as annee, '
                 . "sum(case when {$modele} = ? then " . $w($col['tva']) . ' end) as dau_tva_im4, '
@@ -318,11 +320,6 @@ class ImportBaseRisque
         }
     }
 
-    private function tableExiste(string $table): bool
-    {
-        return $table !== '' && Schema::connection((string) config('dgi.source.connection'))->hasTable($table);
-    }
-
     /**
      * Retrouve les vrais noms de colonnes (sans tenir compte de la casse).
      *
@@ -330,10 +327,10 @@ class ImportBaseRisque
      * @param array<int, string> $obligatoires
      * @return array<string, string|null>
      */
-    private function colonnes(string $table, array $voulues, array $obligatoires): array
+    private function colonnes(string $groupe, string $table, array $voulues, array $obligatoires): array
     {
         $reelles = [];
-        foreach (Schema::connection((string) config('dgi.source.connection'))->getColumnListing($table) as $nom) {
+        foreach (SourceConnexion::colonnes($groupe, $table) as $nom) {
             $reelles[mb_strtolower((string) $nom)] = (string) $nom;
         }
 

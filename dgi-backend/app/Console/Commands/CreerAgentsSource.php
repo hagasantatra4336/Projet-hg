@@ -3,9 +3,9 @@
 namespace App\Console\Commands;
 
 use App\Models\User;
+use App\Support\SourceConnexion;
 use Illuminate\Console\Command;
 use Illuminate\Database\Schema\Blueprint;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use Throwable;
 
@@ -25,7 +25,7 @@ class CreerAgentsSource extends Command
 
     public function handle(): int
     {
-        $connexion = (string) config('dgi.source.connection');
+        $connexion = SourceConnexion::nom('agents');
         $cfg = (array) config('dgi.source.agents', []);
         $table = trim((string) ($cfg['table'] ?? ''));
         $colonnes = (array) ($cfg['colonnes'] ?? []);
@@ -39,7 +39,7 @@ class CreerAgentsSource extends Command
         try {
             $schema = Schema::connection($connexion);
 
-            if (! $schema->hasTable($table)) {
+            if (! SourceConnexion::tableExiste('agents', $table)) {
                 $schema->create($table, function (Blueprint $t) use ($colonnes): void {
                     $t->string((string) $colonnes['email'])->unique();
 
@@ -57,7 +57,7 @@ class CreerAgentsSource extends Command
                 $this->line("Table « {$table} » créée dans la base source.");
             }
 
-            $reelles = $this->colonnesReelles($connexion, $table, $colonnes);
+            $reelles = $this->colonnesReelles('agents', $table, $colonnes);
 
             if (empty($reelles['email'])) {
                 $this->error("La colonne e-mail est introuvable dans la table « {$table} ».");
@@ -65,8 +65,8 @@ class CreerAgentsSource extends Command
                 return self::FAILURE;
             }
 
-            $cx = DB::connection($connexion);
-            $existants = $cx->table($table)->pluck($reelles['email'])
+            $cx = SourceConnexion::db('agents');
+            $existants = $cx->table(SourceConnexion::table('agents', $table))->pluck($reelles['email'])
                 ->map(fn ($email) => mb_strtolower(trim((string) $email)))
                 ->filter()
                 ->flip();
@@ -83,7 +83,7 @@ class CreerAgentsSource extends Command
                 $valeurs = [$reelles['email'] => $email];
                 $valeurs += $this->valeurs($u, $reelles);
 
-                $cx->table($table)->insert($valeurs);
+                $cx->table(SourceConnexion::table('agents', $table))->insert($valeurs);
                 $existants->put($email, true);
                 $ajoutes++;
             });
@@ -124,10 +124,10 @@ class CreerAgentsSource extends Command
      * @param  array<string, string|null>  $voulues
      * @return array<string, string|null>
      */
-    private function colonnesReelles(string $connexion, string $table, array $voulues): array
+    private function colonnesReelles(string $groupe, string $table, array $voulues): array
     {
         $reelles = [];
-        foreach (Schema::connection($connexion)->getColumnListing($table) as $nom) {
+        foreach (SourceConnexion::colonnes($groupe, $table) as $nom) {
             $reelles[mb_strtolower((string) $nom)] = (string) $nom;
         }
 

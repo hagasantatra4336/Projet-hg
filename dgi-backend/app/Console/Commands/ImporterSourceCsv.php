@@ -3,11 +3,9 @@
 namespace App\Console\Commands;
 
 use App\Support\Nif;
+use App\Support\SourceConnexion;
 use DateTime;
 use Illuminate\Console\Command;
-use Illuminate\Database\ConnectionInterface;
-use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 use Throwable;
 
@@ -53,9 +51,14 @@ class ImporterSourceCsv extends Command
         'dau' => ['nif', 'annee', 'modele', 'tva', 'valeur_caf'],
     ];
 
-    private ConnectionInterface $cx;
-
-    private string $connexion = '';
+    /** Groupe de la base source de chaque fichier (une base différente par groupe, voir config/dgi.php). */
+    private const GROUPES = [
+        'contribuables' => 'contribuables',
+        'IR' => 'declarations',
+        'TVA' => 'declarations',
+        'recoupement' => 'recoupement',
+        'dau' => 'dau',
+    ];
 
     private int $rejetees = 0;
 
@@ -69,15 +72,17 @@ class ImporterSourceCsv extends Command
 
     public function handle(): int
     {
-        $this->connexion = (string) config('dgi.source.connection');
-        $this->cx = DB::connection($this->connexion);
-        $base = (string) $this->cx->getDatabaseName();
+        $bases = [];
+        foreach (array_unique(array_values(self::GROUPES)) as $groupe) {
+            $base = (string) SourceConnexion::db($groupe)->getDatabaseName();
+            $bases[$groupe] = $base;
 
-        if (! $this->option('force') && ! preg_match('/test|source|demo/i', $base)) {
-            $this->error("Refus : la base source « {$base} » ne contient ni « test », ni « source », ni « demo » dans son nom.");
-            $this->line('Pour écrire malgré tout, ajoutez --force.');
+            if (! $this->option('force') && ! preg_match('/test|source|demo/i', $base)) {
+                $this->error("Refus : la base source « {$base} » (groupe {$groupe}) ne contient ni « test », ni « source », ni « demo » dans son nom.");
+                $this->line('Pour écrire malgré tout, ajoutez --force.');
 
-            return self::FAILURE;
+                return self::FAILURE;
+            }
         }
 
         $dossier = rtrim((string) ($this->option('dossier') ?: getcwd()), '/\\');
@@ -126,28 +131,31 @@ class ImporterSourceCsv extends Command
         }
 
         try {
-            $this->cx->transaction(function () use ($lots) {
-                $tables = $this->tables();
+            // Une transaction par base : les groupes peuvent vivre dans des bases différentes.
+            $tables = $this->tables();
+            foreach ($lots as $cle => $lignes) {
+                $cx = SourceConnexion::db(self::GROUPES[$cle]);
+                $table = SourceConnexion::table(self::GROUPES[$cle], $tables[$cle]);
 
-                foreach ($lots as $cle => $lignes) {
+                $cx->transaction(function () use ($cx, $table, $cle, $lignes): void {
                     $colNif = $this->colonnes[$cle]['nif'];
                     $nifs = array_values(array_unique(array_map(fn ($l) => (string) $l[$colNif], $lignes)));
 
                     foreach (array_chunk($nifs, 500) as $paquet) {
-                        $this->cx->table($tables[$cle])->whereIn($colNif, $paquet)->delete();
+                        $cx->table($table)->whereIn($colNif, $paquet)->delete();
                     }
                     foreach (array_chunk($lignes, 400) as $paquet) {
-                        $this->cx->table($tables[$cle])->insert($paquet);
+                        $cx->table($table)->insert($paquet);
                     }
-                }
-            });
+                });
+            }
         } catch (Throwable $e) {
             $this->error("Échec de l'écriture dans la base source : {$e->getMessage()}");
 
             return self::FAILURE;
         }
 
-        $this->info('Base source « '.$base.' » alimentée :');
+        $this->info('Base source « '.implode(' », « ', array_unique($bases)).' » alimentée :');
         foreach ($lots as $cle => $lignes) {
             $this->line('  '.self::FICHIERS[$cle].' : '.count($lignes).' ligne(s)');
         }
@@ -190,12 +198,14 @@ class ImporterSourceCsv extends Command
         $resultat = [];
 
         foreach ($defs as $cle => $voulues) {
-            if (! Schema::connection($this->connexion)->hasTable($tables[$cle])) {
-                throw new \InvalidArgumentException("Table « {$tables[$cle]} » introuvable dans la base source.");
+            $groupe = self::GROUPES[$cle];
+
+            if (! SourceConnexion::tableExiste($groupe, $tables[$cle])) {
+                throw new \InvalidArgumentException("Table « {$tables[$cle]} » introuvable dans la base source (groupe {$groupe}).");
             }
 
             $reelles = [];
-            foreach (Schema::connection($this->connexion)->getColumnListing($tables[$cle]) as $nom) {
+            foreach (SourceConnexion::colonnes($groupe, $tables[$cle]) as $nom) {
                 $reelles[mb_strtolower((string) $nom)] = (string) $nom;
             }
 

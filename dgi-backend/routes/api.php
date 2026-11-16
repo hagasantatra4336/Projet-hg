@@ -4,6 +4,7 @@ use App\Http\Controllers\Api\AnalyseAutoController;
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\CentreController;
 use App\Http\Controllers\Api\ContribuableController;
+use App\Http\Controllers\Api\DashboardController;
 use App\Http\Controllers\Api\DeclarationImportController;
 use App\Http\Controllers\Api\DefaillanceController;
 use App\Http\Controllers\Api\DemandeInscriptionController;
@@ -13,6 +14,7 @@ use App\Http\Controllers\Api\NotificationController;
 use App\Http\Controllers\Api\ProfileController;
 use App\Http\Controllers\Api\RegleController;
 use App\Http\Controllers\Api\ReglePersonnaliseeController;
+use App\Http\Controllers\Api\SourceImportController;
 use App\Http\Controllers\Api\UserController;
 use App\Http\Middleware\EnsureRole;
 use App\Http\Middleware\RejeterCompteDesactive;
@@ -70,6 +72,8 @@ Route::middleware(['auth:sanctum', RejeterCompteDesactive::class])->group(functi
     Route::post('/logout', [AuthController::class, 'logout']);
     Route::get('/me', [AuthController::class, 'me']);
     Route::get('/notifications', NotificationController::class);
+    // Tableau de bord : chiffres clés, anomalies par mois, clôtures récentes et historique personnel.
+    Route::get('/dashboard', DashboardController::class);
     Route::post('/profile/request-change', [ProfileController::class, 'requestChange'])->middleware('throttle:5,1,profile-change');
     Route::delete('/profile/request-change', [ProfileController::class, 'cancelChange']);
     // Défaillances de déclaration : consultation et traitement des alertes par tous les rôles
@@ -128,6 +132,21 @@ Route::middleware(['auth:sanctum', RejeterCompteDesactive::class])->group(functi
         Route::post('/regles-personnalisees/{regle}/activer', [ReglePersonnaliseeController::class, 'activer']);
         Route::post('/regles-personnalisees/{regle}/desactiver', [ReglePersonnaliseeController::class, 'desactiver']);
         Route::get('/regles/historique', [RegleController::class, 'historique']);
+    });
+
+    // Intégration Oracle : toutes les connexions sources sont en lecture seule.
+    Route::prefix('source')->group(function () {
+        Route::get('/test', [SourceImportController::class, 'tester'])
+            ->middleware(EnsureRole::class.':superadmin,central');
+        Route::get('/agents/{im}', [SourceImportController::class, 'agentParIm'])
+            ->where('im', '[A-Za-z0-9._-]+')
+            ->middleware(EnsureRole::class.':superadmin,central,admin')
+            ->middleware('throttle:30,1,source-agent-search');
+        Route::post('/centres/import', [SourceImportController::class, 'importerCentres'])
+            ->middleware(EnsureRole::class.':superadmin,central');
+        Route::post('/import', [SourceImportController::class, 'store'])
+            ->middleware(EnsureRole::class.':superadmin,central,admin')
+            ->middleware('throttle:2,1,source-import');
     });
 
     // Section Administration — gestion des utilisateurs : superadmin, central, admin

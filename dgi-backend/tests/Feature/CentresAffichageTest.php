@@ -125,12 +125,14 @@ class CentresAffichageTest extends TestCase
         // Contournement par l'API : le centre masqué est refusé comme à l'inscription.
         $this->postJson('/api/profile/request-change', [
             'nom' => $user->nom,
+            'telephone' => '0341234567',
             'current_password' => 'motdepasse123',
             'centre_id' => $masque->id,
         ])->assertStatus(422)->assertJsonValidationErrors('centre_id');
 
         $this->postJson('/api/profile/request-change', [
             'nom' => $user->nom,
+            'telephone' => '0341234567',
             'current_password' => 'motdepasse123',
             'centre_id' => $visible->id,
         ])->assertOk();

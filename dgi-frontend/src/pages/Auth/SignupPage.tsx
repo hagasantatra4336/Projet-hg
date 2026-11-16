@@ -530,14 +530,25 @@ export default function SignupPage() {
           <input
             className={inputClass}
             placeholder="IM (matricule)"
+            aria-label="IM (matricule)"
             value={form.im}
             onChange={(e) => setForm({ ...form, im: e.target.value })}
+            minLength={6}
+            maxLength={6}
+            required
           />
           <input
             className={inputClass}
+            type="tel"
+            inputMode="numeric"
+            pattern="[0-9]{10}"
             placeholder="Téléphone"
+            aria-label="Téléphone"
             value={form.telephone}
             onChange={(e) => setForm({ ...form, telephone: e.target.value })}
+            minLength={10}
+            maxLength={10}
+            required
           />
           <div className="sm:col-span-2">
             <CentreSelect

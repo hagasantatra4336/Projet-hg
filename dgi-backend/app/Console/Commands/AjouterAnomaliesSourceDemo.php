@@ -4,11 +4,9 @@ namespace App\Console\Commands;
 
 use App\Models\Centre;
 use App\Services\CalendrierFiscal;
+use App\Support\SourceConnexion;
 use DateTimeImmutable;
 use Illuminate\Console\Command;
-use Illuminate\Database\ConnectionInterface;
-use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Schema;
 use Throwable;
 
 /**
@@ -51,20 +49,30 @@ class AjouterAnomaliesSourceDemo extends Command
         'R7' => '9000000701',
     ];
 
-    private string $connexion = '';
+    /** Groupe de la base source de chaque table (une base différente par groupe, voir config/dgi.php). */
+    private const GROUPES = [
+        'contribuables' => 'contribuables',
+        'IR' => 'declarations',
+        'TVA' => 'declarations',
+        'recoupement' => 'recoupement',
+        'dau' => 'dau',
+    ];
 
     public function handle(): int
     {
-        $this->connexion = (string) config('dgi.source.connection');
-        $cx = DB::connection($this->connexion);
-        $base = (string) $cx->getDatabaseName();
+        $bases = [];
+        foreach (array_unique(self::GROUPES) as $groupe) {
+            $base = (string) SourceConnexion::db($groupe)->getDatabaseName();
+            $bases[$groupe] = $base;
 
-        if (! $this->option('force') && ! preg_match('/test|source|demo/i', $base)) {
-            $this->error("Refus : la base source « {$base} » ne contient ni « test », ni « source », ni « demo » dans son nom.");
-            $this->line('Pour écrire malgré tout dans une base de test, ajoutez --force.');
+            if (! $this->option('force') && ! preg_match('/test|source|demo/i', $base)) {
+                $this->error("Refus : la base source « {$base} » (groupe {$groupe}) ne contient ni « test », ni « source », ni « demo » dans son nom.");
+                $this->line('Pour écrire malgré tout dans une base de test, ajoutez --force.');
 
-            return self::FAILURE;
+                return self::FAILURE;
+            }
         }
+        $base = implode(' », « ', array_unique($bases));
 
         $annee = (int) ($this->option('annee') ?: (CalendrierFiscal::dernierExerciceClos(now()) ?? (int) now()->format('Y') - 1));
         if ($annee < 1990 || $annee > (int) now()->format('Y')) {
@@ -79,16 +87,15 @@ class AjouterAnomaliesSourceDemo extends Command
         }
 
         $tables = $this->tables();
-        foreach (['contribuables' => $tables['contribuables'], 'IR' => $tables['IR'], 'TVA' => $tables['TVA'],
-            'recoupement' => $tables['recoupement'], 'dau' => $tables['dau']] as $nom => $table) {
-            if ($table === '' || ! Schema::connection($this->connexion)->hasTable($table)) {
-                $this->error("Table « {$nom} » introuvable dans la base source (« {$table} ») : vérifiez config/dgi.php et config/risque.php.");
+        foreach (self::GROUPES as $nom => $groupe) {
+            if ($tables[$nom] === '' || ! SourceConnexion::tableExiste($groupe, $tables[$nom])) {
+                $this->error("Table « {$nom} » introuvable dans la base source (« {$tables[$nom]} », groupe {$groupe}) : vérifiez config/dgi.php et config/risque.php.");
 
                 return self::FAILURE;
             }
         }
 
-        $centre = $this->centreSource($cx);
+        $centre = $this->centreSource();
         if ($centre === null) {
             $this->error("Aucun centre de l'application ne correspond à un CENTRE_GEST de la base source.");
             $this->line("Créez/importez d'abord les centres : php artisan dgi:importer-centres");
@@ -96,34 +103,28 @@ class AjouterAnomaliesSourceDemo extends Command
             return self::FAILURE;
         }
 
-        $cols = $this->colonnes($cx);
+        $cols = $this->colonnes();
         $jeu = $this->jeu($annee, $dernierMois, $centre);
 
         try {
-            $cx->transaction(function () use ($cx, $tables, $cols, $jeu) {
-                $nifs = array_values(self::NIFS);
-
-                foreach (['contribuables' => $cols['contribuables']['nif'], 'IR' => $cols['IR']['nif'],
-                    'TVA' => $cols['TVA']['nif'], 'recoupement' => $cols['recoupement']['nif'], 'dau' => $cols['dau']['nif']] as $cle => $colNif) {
-                    $cx->table($tables[$cle])->whereIn($colNif, $nifs)->delete();
+            // Une transaction par base : chaque groupe peut vivre dans une base différente.
+            foreach (['contribuables' => 'contribuables', 'IR' => 'ir', 'TVA' => 'tva', 'recoupement' => 'recoupement', 'dau' => 'dau'] as $cle => $cleJeu) {
+                if ($jeu[$cleJeu] === []) {
+                    continue;
                 }
 
-                foreach (array_chunk($jeu['contribuables'], 200) as $lot) {
-                    $cx->table($tables['contribuables'])->insert($lot);
-                }
-                foreach (array_chunk($jeu['ir'], 400) as $lot) {
-                    $cx->table($tables['IR'])->insert($lot);
-                }
-                foreach (array_chunk($jeu['tva'], 400) as $lot) {
-                    $cx->table($tables['TVA'])->insert($lot);
-                }
-                if ($jeu['recoupement'] !== []) {
-                    $cx->table($tables['recoupement'])->insert($jeu['recoupement']);
-                }
-                if ($jeu['dau'] !== []) {
-                    $cx->table($tables['dau'])->insert($jeu['dau']);
-                }
-            });
+                $cx = SourceConnexion::db(self::GROUPES[$cle]);
+                $table = SourceConnexion::table(self::GROUPES[$cle], $tables[$cle]);
+
+                $cx->transaction(function () use ($cx, $table, $cols, $cle, $jeu, $cleJeu): void {
+                    foreach (array_chunk(array_values(self::NIFS), 400) as $paquet) {
+                        $cx->table($table)->whereIn($cols[$cle]['nif'], $paquet)->delete();
+                    }
+                    foreach (array_chunk($jeu[$cleJeu], 400) as $lot) {
+                        $cx->table($table)->insert($lot);
+                    }
+                });
+            }
         } catch (Throwable $e) {
             $this->error("Échec de l'écriture dans la base source : {$e->getMessage()}");
 
@@ -160,10 +161,11 @@ class AjouterAnomaliesSourceDemo extends Command
      * Retrouve, dans la table source des contribuables, un CENTRE_GEST qui correspond à un centre de l'application
      * (même nom ou même code), pour que l'import rattache les exemples à un centre visible.
      */
-    private function centreSource(ConnectionInterface $cx): ?string
+    private function centreSource(): ?string
     {
         $table = (string) config('dgi.source.contribuables.table');
-        $col = $this->colonnes($cx)['contribuables']['centre'];
+        $col = $this->colonnes()['contribuables']['centre'];
+        $cx = SourceConnexion::db('contribuables');
         $centres = Centre::query()->get(['nom', 'code']);
 
         if ($centres->isEmpty()) {
@@ -171,7 +173,7 @@ class AjouterAnomaliesSourceDemo extends Command
         }
 
         if ($col !== null) {
-            $valeurs = $cx->table($table)->whereNotNull($col)->distinct()->pluck($col)->all();
+            $valeurs = $cx->table(SourceConnexion::table('contribuables', $table))->whereNotNull($col)->distinct()->pluck($col)->all();
             foreach ($valeurs as $valeur) {
                 $v = mb_strtolower(trim((string) $valeur));
                 foreach ($centres as $c) {
@@ -189,7 +191,7 @@ class AjouterAnomaliesSourceDemo extends Command
     }
 
     /** @return array<string, array<string, string|null>> */
-    private function colonnes(ConnectionInterface $cx): array
+    private function colonnes(): array
     {
         $defs = [
             'contribuables' => (array) config('dgi.source.contribuables.colonnes'),
@@ -212,7 +214,7 @@ class AjouterAnomaliesSourceDemo extends Command
 
         foreach ($defs as $cle => $voulues) {
             $reelles = [];
-            foreach (Schema::connection($this->connexion)->getColumnListing($tables[$cle]) as $nom) {
+            foreach (SourceConnexion::colonnes(self::GROUPES[$cle], $tables[$cle]) as $nom) {
                 $reelles[mb_strtolower((string) $nom)] = (string) $nom;
             }
 
@@ -240,7 +242,7 @@ class AjouterAnomaliesSourceDemo extends Command
      */
     private function jeu(int $annee, int $dernierMois, string $centre): array
     {
-        $cols = $this->colonnes(DB::connection($this->connexion));
+        $cols = $this->colonnes();
         $mois = range(1, $dernierMois);
         $nbMois = count($mois);
         $parMois = fn (float $total): float => round($total / $nbMois, 2);

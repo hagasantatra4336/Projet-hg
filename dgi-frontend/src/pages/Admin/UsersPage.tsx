@@ -417,19 +417,28 @@ export default function UsersPage() {
                     required
                   />
                 </Field>
-                <Field label="IM (matricule)" optional>
+                <Field label="IM (matricule)" required hint="6 caractères exactement.">
                   <input
                     className={inputClass}
                     value={form.im}
                     onChange={(e) => setForm({ ...form, im: e.target.value })}
+                    minLength={6}
+                    maxLength={6}
+                    required
                   />
                 </Field>
-                <Field label="Téléphone" optional>
+                <Field label="Téléphone" required hint="10 chiffres exactement.">
                   <input
                     className={inputClass}
+                    type="tel"
+                    inputMode="numeric"
+                    pattern="[0-9]{10}"
                     value={form.telephone}
                     onChange={(e) => setForm({ ...form, telephone: e.target.value })}
                     autoComplete="tel"
+                    minLength={10}
+                    maxLength={10}
+                    required
                   />
                 </Field>
                 <Field label="Adresse" optional className="sm:col-span-2">

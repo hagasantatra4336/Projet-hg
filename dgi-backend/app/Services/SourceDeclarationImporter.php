@@ -7,28 +7,12 @@ use App\Models\Centre;
 use App\Models\Contribuable;
 use App\Models\Declaration;
 use App\Support\Nif;
+use App\Support\SourceConnexion;
 use DateTime;
 use Illuminate\Database\ConnectionInterface;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Schema;
 use InvalidArgumentException;
 
-/**
- * Récupère les données depuis la base PostgreSQL SOURCE (connexion « source », voir config/dgi.php) et les recopie
- * dans les tables de l'application, prêtes pour l'analyse (AnomalieAnalyseur).
- *
- *   1. contribuables   : NIF, nom, centre gestionnaire, état (actif, bloqué, cessation, radié) et dates ;
- *   2. assujettissements : obligations déclaratives (impôt, année, périodicité, actif, exonéré) ;
- *   3. déclarations   : une table source PAR IMPÔT, en « une ligne par ligne du formulaire ». Pour chaque déclaration
- *                       (NIF, année fiscale, mois) on lit le chiffre d'affaires (ligne 15 de l'IR, ligne 170 de la TVA),
- *                       la date limite (DATE_ECHEANCE) et la date de dépôt (DATE_RECEPTION), dernière version seulement.
- *
- * Règles : NIF sur 10 chiffres ; type d'impôt connu ; année fiscale à 4 chiffres ; montants >= 0 ; une déclaration déjà
- * présente (même contribuable + impôt + année + mois) est mise à jour. Un centre introuvable ou ambigu n'empêche pas
- * l'import : le contribuable est créé sans centre (avertissement).
- *
- * La base source n'est JAMAIS modifiée : uniquement des SELECT.
- */
 class SourceDeclarationImporter
 {
     public const ANNEE_REGEX = '/^\d{4}$/';
@@ -36,9 +20,14 @@ class SourceDeclarationImporter
     private const MAX_ERRORS = 15;
     private const LOT = 500;
 
-    public function connexion(): ConnectionInterface
+    public function connexion(string $source = 'declarations'): ConnectionInterface
     {
-        return DB::connection((string) config('dgi.source.connection'));
+        return SourceConnexion::db($source);
+    }
+
+    private function nomConnexion(string $source): string
+    {
+        return SourceConnexion::nom($source);
     }
 
     /**
@@ -48,31 +37,47 @@ class SourceDeclarationImporter
      */
     public function tester(): array
     {
-        $cx = $this->connexion();
-        $noms = [];
-
+        $definitions = [];
         foreach ((array) config('dgi.source.declarations') as $def) {
-            $noms[] = (string) $def['table'];
+            $definitions[] = ['source' => 'declarations', 'table' => (string) $def['table']];
         }
-        foreach (['assujettissements', 'contribuables', 'centres'] as $cle) {
-            $noms[] = (string) config("dgi.source.{$cle}.table");
+        foreach (['assujettissements', 'contribuables', 'centres', 'agents'] as $source) {
+            $definitions[] = ['source' => $source, 'table' => (string) config("dgi.source.{$source}.table")];
         }
 
         $tables = [];
         $total = 0;
-        foreach ($noms as $i => $nom) {
-            $existe = $this->tableExiste($nom);
-            $lignes = $existe ? (int) $cx->table($nom)->count() : null;
-            $tables[] = ['table' => $nom, 'existe' => $existe, 'lignes' => $lignes];
-            if ($i < count((array) config('dgi.source.declarations'))) {
+        $base = '';
+        $version = '';
+        foreach ($definitions as $definition) {
+            $source = $definition['source'];
+            $nom = $definition['table'];
+            $cx = $this->connexion($source);
+            $existe = $this->tableExiste($nom, $source);
+            $lignes = $existe ? (int) $cx->table(SourceConnexion::table($source, $nom))->count() : null;
+            $tables[] = [
+                'source' => $source,
+                'connexion' => $this->nomConnexion($source),
+                'base' => $cx->getDatabaseName(),
+                'table' => $nom,
+                'existe' => $existe,
+                'lignes' => $lignes,
+            ];
+            if ($base === '') {
+                $base = (string) $cx->getDatabaseName();
+                if ($cx->getDriverName() === 'pgsql') {
+                    $version = (string) ($cx->selectOne('select version() as v')->v ?? '');
+                }
+            }
+            if ($source === 'declarations') {
                 $total += (int) $lignes; // lignes des tables de déclarations
             }
         }
 
         return [
-            'base' => (string) $cx->getDatabaseName(),
-            'version' => $cx->getDriverName() === 'pgsql' ? (string) ($cx->selectOne('select version() as v')->v ?? '') : '',
-            'table' => implode(', ', $noms),
+            'base' => $base,
+            'version' => $version,
+            'table' => implode(', ', array_column($definitions, 'table')),
             'lignes' => $total,
             'tables' => $tables,
         ];
@@ -88,12 +93,14 @@ class SourceDeclarationImporter
     {
         $cfg = (array) config('dgi.source.centres');
         $table = (string) $cfg['table'];
+        $source = 'centres';
+        $cx = $this->connexion($source);
 
-        if (! $this->tableExiste($table)) {
+        if (! $this->tableExiste($table, $source)) {
             throw new InvalidArgumentException("Table des centres « {$table} » introuvable dans la base source (DGI_SOURCE_TABLE_CENTRES).");
         }
 
-        $col = $this->colonnes($table, (array) $cfg['colonnes'], ['code', 'libelle']);
+        $col = $this->colonnes($table, (array) $cfg['colonnes'], ['code', 'libelle'], $source);
         $select = [];
         foreach (['code', 'libelle', 'abreviation'] as $champ) {
             if ($col[$champ] !== null) {
@@ -112,8 +119,8 @@ class SourceDeclarationImporter
             $parNom[CentreResolver::normaliser($c->nom)] = $c;
         }
 
-        DB::transaction(function () use ($table, $select, &$stats, &$parCode, &$parNom) {
-            foreach ($this->connexion()->table($table)->select($select)->cursor() as $row) {
+        DB::transaction(function () use ($cx, $table, $select, &$stats, &$parCode, &$parNom) {
+            foreach ($cx->table(SourceConnexion::table('centres', $table))->select($select)->cursor() as $row) {
                 $code = trim((string) ($row->code ?? ''));
                 $libelle = trim((string) ($row->libelle ?? ''));
                 $abrev = trim((string) ($row->abreviation ?? ''));
@@ -192,14 +199,16 @@ class SourceDeclarationImporter
     {
         $cfg = (array) config('dgi.source.contribuables');
         $table = (string) $cfg['table'];
+        $source = 'contribuables';
+        $cx = $this->connexion($source);
 
-        if (! $this->tableExiste($table)) {
+        if (! $this->tableExiste($table, $source)) {
             $stats['tables_absentes'][] = $table;
 
             return;
         }
 
-        $col = $this->colonnes($table, (array) $cfg['colonnes'], ['nif']);
+        $col = $this->colonnes($table, (array) $cfg['colonnes'], ['nif'], $source);
         $select = [];
         foreach ($col as $champ => $nom) {
             if ($nom !== null) {
@@ -211,7 +220,7 @@ class SourceDeclarationImporter
         $nouveaux = [];
         $now = now()->toDateTimeString();
 
-        foreach ($this->connexion()->table($table)->select($select)->cursor() as $row) {
+        foreach ($cx->table(SourceConnexion::table('contribuables', $table))->select($select)->cursor() as $row) {
             $nif = Nif::normaliser($row->nif ?? '');
             if ($nif === '' || strlen($nif) > 30) {
                 continue;
@@ -284,14 +293,16 @@ class SourceDeclarationImporter
     {
         $cfg = (array) config('dgi.source.assujettissements');
         $table = (string) $cfg['table'];
+        $source = 'assujettissements';
+        $cx = $this->connexion($source);
 
-        if (! $this->tableExiste($table)) {
+        if (! $this->tableExiste($table, $source)) {
             $stats['tables_absentes'][] = $table;
 
             return;
         }
 
-        $col = $this->colonnes($table, (array) $cfg['colonnes'], ['nif', 'annee', 'periodicite', 'impot']);
+        $col = $this->colonnes($table, (array) $cfg['colonnes'], ['nif', 'annee', 'periodicite', 'impot'], $source);
         $select = [];
         foreach ($col as $champ => $nom) {
             if ($nom !== null) {
@@ -299,7 +310,7 @@ class SourceDeclarationImporter
             }
         }
 
-        $query = $this->connexion()->table($table)->select($select);
+        $query = $cx->table(SourceConnexion::table('assujettissements', $table))->select($select);
         if ($depuis !== null) {
             $query->where($col['annee'], '>=', $depuis);
         }
@@ -372,15 +383,17 @@ class SourceDeclarationImporter
 
         foreach ((array) config('dgi.source.declarations') as $impot => $def) {
             $table = (string) $def['table'];
+            $source = 'declarations';
+            $cx = $this->connexion($source);
 
-            if (! $this->tableExiste($table)) {
+            if (! $this->tableExiste($table, $source)) {
                 $stats['tables_absentes'][] = $table;
                 continue;
             }
             $trouvee = true;
 
-            $col = $this->colonnes($table, (array) $def['colonnes'], ['nif', 'annee', 'ligne', 'montant', 'date_limite']);
-            $w = fn (string $c) => $this->connexion()->getQueryGrammar()->wrap($c);
+            $col = $this->colonnes($table, (array) $def['colonnes'], ['nif', 'annee', 'ligne', 'montant', 'date_limite'], $source);
+            $w = fn (string $c) => $cx->getQueryGrammar()->wrap($c);
 
             $mois = $col['mois'] !== null ? 'coalesce(' . $w($col['mois']) . ', 0)' : '0';
             $version = $col['version'] !== null ? 'coalesce(' . $w($col['version']) . ', 0)' : '0';
@@ -390,7 +403,7 @@ class SourceDeclarationImporter
             $depot = $col['date_depot'] !== null ? 'max(' . $w($col['date_depot']) . ')' : 'null';
 
             // Une ligne par déclaration (et par version) : le chiffre d'affaires est celui de la ligne « ligne_ca »
-            $query = $this->connexion()->table($table)
+            $query = $cx->table(SourceConnexion::table('declarations', $table))
                 ->selectRaw(
                     $w($col['nif']) . ' as nif, ' . $w($col['annee']) . ' as annee, ' . $mois . ' as mois, ' . $version . ' as version, '
                     . 'max(' . $w($col['date_limite']) . ') as date_limite, ' . $depot . ' as date_depot, '
@@ -582,9 +595,9 @@ class SourceDeclarationImporter
     //  Accès à la base source
     // ------------------------------------------------------------------
 
-    private function tableExiste(string $table): bool
+    private function tableExiste(string $table, string $source = 'declarations'): bool
     {
-        return $table !== '' && Schema::connection((string) config('dgi.source.connection'))->hasTable($table);
+        return SourceConnexion::tableExiste($source, $table);
     }
 
     /**
@@ -594,10 +607,10 @@ class SourceDeclarationImporter
      * @param array<int, string>         $obligatoires champs qui doivent exister
      * @return array<string, string|null>  champ => vrai nom (null si non configuré ou absent et facultatif)
      */
-    private function colonnes(string $table, array $voulues, array $obligatoires): array
+    private function colonnes(string $table, array $voulues, array $obligatoires, string $source = 'declarations'): array
     {
         $reelles = [];
-        foreach (Schema::connection((string) config('dgi.source.connection'))->getColumnListing($table) as $nom) {
+        foreach (SourceConnexion::colonnes($source, $table) as $nom) {
             $reelles[mb_strtolower((string) $nom)] = (string) $nom;
         }
 

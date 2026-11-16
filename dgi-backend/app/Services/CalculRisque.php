@@ -2,12 +2,6 @@
 
 namespace App\Services;
 
-/**
- * Calcul des scores de risque R1, R2, R3, R5, R6, R7 (R4 = défaut de dépôt : DefaillanceDetector).
- * Source : document « AR_base_de_calcul_interpretation ». Fonctions PURES (aucun accès base) : testables seules.
- *
- * Sorties : un score et un niveau de risque (null = vert, « moyen » = orange, « eleve » = rouge).
- */
 class CalculRisque
 {
     public const CODES = ['r1', 'r2', 'r3', 'r5', 'r6', 'r7'];
@@ -24,7 +18,7 @@ class CalculRisque
     }
 
     /**
-     * Niveau d'après le score : null (vert), « moyen » (orange), « eleve » (rouge).
+     * Niveau d'après le score : null (vert), moyen (orange), eleve (rouge).
      */
     public static function niveau(float $score, float $seuilMoyen, float $seuilEleve, bool $strict): ?string
     {

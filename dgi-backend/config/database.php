@@ -3,6 +3,47 @@
 use Illuminate\Support\Str;
 use Pdo\Mysql;
 
+// oracle, le port 1521, AL32UTF8 et un SERVICE_NAME (ou le SID dans DATABASE).
+$sourceConnection = [
+    'driver' => env('SOURCE_DB_DRIVER', 'pgsql'),
+    'url' => env('SOURCE_DB_URL'),
+    'host' => env('SOURCE_DB_HOST', '127.0.0.1'),
+    'port' => env('SOURCE_DB_PORT', '5432'),
+    'database' => env('SOURCE_DB_DATABASE', 'dgi_source_test'),
+    'username' => env('SOURCE_DB_USERNAME', 'postgres'),
+    'password' => env('SOURCE_DB_PASSWORD', ''),
+    'charset' => env('SOURCE_DB_CHARSET', 'utf8'),
+    'prefix' => '',
+    'prefix_indexes' => true,
+    'search_path' => env('SOURCE_DB_SCHEMA', 'public'),
+    'sslmode' => env('SOURCE_DB_SSLMODE', 'prefer'),
+    'service_name' => env('SOURCE_DB_SERVICE_NAME', false),
+    // Descripteur TNS complet ou alias du wallet (prioritaire sur hôte/port/service).
+    // Exemple Oracle Cloud : SOURCE_DB_TNS=dgi_high (alias du tnsnames.ora du wallet).
+    'tns' => env('SOURCE_DB_TNS') ?: null,
+    // Oracle : propriétaire des tables quand il diffère de l'utilisateur de connexion
+    // (métadonnées et requêtes sont alors qualifiées « SCHEMA.TABLE »). Ignoré par pgsql.
+    'schema' => env('SOURCE_DB_SCHEMA') ?: null,
+];
+
+$sourceConnectionFor = static function (string $prefix) use ($sourceConnection): array {
+    return array_merge($sourceConnection, [
+        'url' => env($prefix.'_URL', $sourceConnection['url']),
+        'driver' => env($prefix.'_DRIVER', $sourceConnection['driver']),
+        'host' => env($prefix.'_HOST', $sourceConnection['host']),
+        'port' => env($prefix.'_PORT', $sourceConnection['port']),
+        'database' => env($prefix.'_DATABASE', $sourceConnection['database']),
+        'username' => env($prefix.'_USERNAME', $sourceConnection['username']),
+        'password' => env($prefix.'_PASSWORD', $sourceConnection['password']),
+        'charset' => env($prefix.'_CHARSET', $sourceConnection['charset']),
+        'search_path' => env($prefix.'_SCHEMA', $sourceConnection['search_path']),
+        'sslmode' => env($prefix.'_SSLMODE', $sourceConnection['sslmode']),
+        'service_name' => env($prefix.'_SERVICE_NAME', $sourceConnection['service_name']),
+        'tns' => env($prefix.'_TNS', $sourceConnection['tns']),
+        'schema' => env($prefix.'_SCHEMA') ?: $sourceConnection['schema'],
+    ]);
+};
+
 return [
 
     /*
@@ -99,30 +140,17 @@ return [
             'sslmode' => env('DB_SSLMODE', 'prefer'),
         ],
 
-        // Base SOURCE : base externe (lecture seule) d'où l'on récupère les déclarations à analyser.
-        // Distincte de la base de l'application. En test : SOURCE_DB_DATABASE=dgi_source_test
-        // (créée par « php artisan dgi:source-test-db »). En production : idéalement un compte en lecture seule.
-        // PostgreSQL par défaut ; Oracle (yajra/laravel-oci8) avec SOURCE_DB_DRIVER=oracle
-        // (port 1521, SOURCE_DB_CHARSET=AL32UTF8 pour les accents). Connexion par NOM DE SERVICE :
-        // SOURCE_DB_SERVICE_NAME=FREEPDB1 (le nom lui-même, pas « true »). Connexion par SID : laisser
-        // SOURCE_DB_SERVICE_NAME vide et mettre le SID dans SOURCE_DB_DATABASE.
-        // Oracle : les noms de tables et colonnes sont mis en MAJUSCULES par le pilote (excel_declaration_ir -> EXCEL_DECLARATION_IR)
-        // et lus dans le schéma du compte connecté (SOURCE_DB_SCHEMA ne sert qu'à PostgreSQL).
-        'source' => [
-            'driver' => env('SOURCE_DB_DRIVER', 'pgsql'),
-            'url' => env('SOURCE_DB_URL'),
-            'host' => env('SOURCE_DB_HOST', '127.0.0.1'),
-            'port' => env('SOURCE_DB_PORT', '5432'),
-            'database' => env('SOURCE_DB_DATABASE', 'dgi_source_test'),
-            'username' => env('SOURCE_DB_USERNAME', 'postgres'),
-            'password' => env('SOURCE_DB_PASSWORD', ''),
-            'charset' => env('SOURCE_DB_CHARSET', 'utf8'),
-            'prefix' => '',
-            'prefix_indexes' => true,
-            'search_path' => env('SOURCE_DB_SCHEMA', 'public'),
-            'sslmode' => env('SOURCE_DB_SSLMODE', 'prefer'),
-            'service_name' => env('SOURCE_DB_SERVICE_NAME', false), // Oracle uniquement
-        ],
+        // Base source partagée pour les tests. En production, chaque source peut utiliser
+        // une connexion Oracle indépendante, choisie par DGI_SOURCE_CONNECTION_<GROUPE>
+        // et paramétrée par les variables SOURCE_<GROUPE>_DB_*.
+        'source' => $sourceConnection,
+        'source_declarations' => $sourceConnectionFor('SOURCE_DECLARATIONS_DB'),
+        'source_assujettissements' => $sourceConnectionFor('SOURCE_ASSUJETTISSEMENTS_DB'),
+        'source_contribuables' => $sourceConnectionFor('SOURCE_CONTRIBUABLES_DB'),
+        'source_centres' => $sourceConnectionFor('SOURCE_CENTRES_DB'),
+        'source_agents' => $sourceConnectionFor('SOURCE_AGENTS_DB'),
+        'source_recoupement' => $sourceConnectionFor('SOURCE_RECOUPEMENT_DB'),
+        'source_dau' => $sourceConnectionFor('SOURCE_DAU_DB'),
 
         'sqlsrv' => [
             'driver' => 'sqlsrv',

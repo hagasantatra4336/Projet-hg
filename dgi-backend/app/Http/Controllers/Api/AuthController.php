@@ -61,8 +61,8 @@ class AuthController extends Controller
         $data = $request->validate([
             'nom' => ['required', 'string', 'max:255'],
             'email' => ['required', 'email', 'max:255'],
-            'im' => ['nullable', 'string', 'max:50', 'unique:users,im'],
-            'telephone' => ['nullable', 'string', 'max:30'],
+            'im' => ['required', 'string', 'size:6', 'unique:users,im'],
+            'telephone' => ['required', 'string', 'digits:10'],
             'adresse' => ['nullable', 'string', 'max:255'],
             'centre_id' => [
                 'required',

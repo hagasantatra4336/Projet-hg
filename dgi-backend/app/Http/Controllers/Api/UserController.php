@@ -202,9 +202,9 @@ class UserController extends Controller
         return [
             'nom' => ['required', 'string', 'max:255'],
             'email' => ['required', 'email', 'max:255', Rule::unique('users', 'email')->ignore($user?->id)],
-            'telephone' => ['nullable', 'string', 'max:30'],
+            'telephone' => ['required', 'string', 'digits:10'],
             'adresse' => ['nullable', 'string', 'max:255'],
-            'im' => ['nullable', 'string', 'max:50', Rule::unique('users', 'im')->ignore($user?->id)],
+            'im' => ['required', 'string', 'size:6', Rule::unique('users', 'im')->ignore($user?->id)],
             'centre_id' => ['nullable', 'integer', 'exists:centres,id'],
             'fonction_id' => ['required', 'integer', 'exists:fonctions,id'],
             // obligatoire à la création, facultatif à la modification

@@ -1,34 +1,18 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import api, { getErrorMessage } from "../services/api";
 import { useAuth } from "../context/AuthContext";
 import {
   ROLE_LABELS,
-  type AppUser,
-  type Centre,
+  STATUT_LABELS,
+  type ActionDossierType,
+  type DashboardClotureur,
+  type DashboardData,
   type DefaillanceSummary,
-  type Fonction,
-  type Paginated,
+  type StatutAlerte,
 } from "../types";
-import { ErrorBox, RoleBadge, primaryButtonClass } from "../components/ui";
+import { ErrorBox, primaryButtonClass } from "../components/ui";
 import AgentAlertes from "../components/AgentAlertes";
-import {
-  IconAlert,
-  IconBriefcase,
-  IconBuilding,
-  IconChevron,
-  IconClock,
-  IconHourglass,
-  IconSearch,
-  IconUsers,
-} from "../components/icons";
-
-interface Stat {
-  label: string;
-  /** nombre (animé) ou texte, null = en cours de chargement */
-  value: number | string | null;
-  icon: ReactNode;
-}
 
 /** Animation d'entrée unique (désactivée si l'utilisateur réduit les animations). */
 const ANIMATIONS = `
@@ -37,19 +21,40 @@ const ANIMATIONS = `
 @media (prefers-reduced-motion: reduce) { .dash-rise { animation: none; } }
 `;
 
+const MOIS_COURTS = ["Jan", "Fév", "Mar", "Avr", "Mai", "Juin", "Juil", "Août", "Sep", "Oct", "Nov", "Déc"];
+const MOIS_LONGS = [
+  "Janvier",
+  "Février",
+  "Mars",
+  "Avril",
+  "Mai",
+  "Juin",
+  "Juillet",
+  "Août",
+  "Septembre",
+  "Octobre",
+  "Novembre",
+  "Décembre",
+];
+
 /** Compte de 0 jusqu'à la valeur cible. */
 function useCountUp(target: number | null, duration = 700): number | null {
-  const [display, setDisplay] = useState<number | null>(target === null ? null : 0);
+  const [display, setDisplay] = useState<number | null>(target);
 
   useEffect(() => {
     if (target === null) {
       setDisplay(null);
       return;
     }
-    if (window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) {
+
+    const reduire = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+    // Onglet en arrière-plan : les animations sont suspendues par le navigateur, on affiche
+    // directement la valeur finale pour ne jamais laisser un compteur bloqué à zéro.
+    if (reduire || document.hidden) {
       setDisplay(target);
       return;
     }
+
     let frame = 0;
     const start = performance.now();
     const tick = (now: number) => {
@@ -59,7 +64,19 @@ function useCountUp(target: number | null, duration = 700): number | null {
       if (p < 1) frame = requestAnimationFrame(tick);
     };
     frame = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(frame);
+
+    const terminerSiMasque = () => {
+      if (document.hidden) {
+        cancelAnimationFrame(frame);
+        setDisplay(target);
+      }
+    };
+    document.addEventListener("visibilitychange", terminerSiMasque);
+
+    return () => {
+      cancelAnimationFrame(frame);
+      document.removeEventListener("visibilitychange", terminerSiMasque);
+    };
   }, [target, duration]);
 
   return display;
@@ -72,45 +89,9 @@ function StatValue({ value }: { value: number | string | null }) {
   return <>{(animated ?? 0).toLocaleString("fr-FR")}</>;
 }
 
-function StatsCard({ stats }: { stats: Stat[] }) {
-  return (
-    <div
-      className={`grid gap-3 grid-cols-1 sm:grid-cols-2 ${
-        stats.length >= 3 ? "lg:grid-cols-3" : ""
-      } ${stats.length >= 4 ? "xl:grid-cols-4" : ""}`}
-    >
-      {stats.map((s, i) => (
-        <div
-          key={s.label}
-          style={{ animationDelay: `${i * 80}ms` }}
-          className="dash-rise group relative flex items-center gap-3 overflow-hidden rounded-xl border border-line bg-white p-3.5 transition duration-300 hover:-translate-y-1 hover:border-brand-azure/30 hover:shadow-lg"
-        >
-          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-brand-blue to-brand-blue-light text-white shadow-sm shadow-brand-blue/25 transition duration-300 group-hover:scale-110 group-hover:rotate-3">
-            {s.icon}
-          </span>
-          <div className="min-w-0">
-            <p className="text-xs text-slate-500">{s.label}</p>
-            <p className="truncate text-xl font-semibold tabular-nums text-brand-blue">
-              <StatValue value={s.value} />
-            </p>
-          </div>
-          {/* Barre d'accent qui se déploie au survol */}
-          <span className="absolute inset-x-0 bottom-0 h-1 origin-left scale-x-0 bg-gradient-to-r from-brand-gold to-brand-blue transition-transform duration-500 group-hover:scale-x-100" />
-        </div>
-      ))}
-    </div>
-  );
-}
-
-/** Numéros de pages affichés autour de la page courante (max 5). */
-function pageWindow(current: number, last: number): number[] {
-  const size = Math.min(5, last);
-  const start = Math.max(1, Math.min(current - 2, last - size + 1));
-  return Array.from({ length: size }, (_, i) => start + i);
-}
-
 /** Initiales pour l'avatar (2 lettres max). */
-function initials(name?: string | null): string {  if (!name) return "?";
+function initials(name?: string | null): string {
+  if (!name) return "?";
   const parts = name.trim().split(/\s+/).filter(Boolean);
   return ((parts[0]?.[0] ?? "") + (parts.length > 1 ? parts[parts.length - 1][0] : "")).toUpperCase() || "?";
 }
@@ -133,88 +114,434 @@ function libelleJours(valeur: number | null | undefined): string {
   return `${valeur.toLocaleString("fr-FR", { maximumFractionDigits: 1 })} j`;
 }
 
+/** Date courte (« 14 nov. 2026 »). */
+function formatDate(iso: string | null): string {
+  if (!iso) return "—";
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return "—";
+  return date.toLocaleDateString("fr-FR", { day: "2-digit", month: "short", year: "numeric" });
+}
+
+/** Échéance relative (« il y a 2 h », « hier », « 14 nov. »). */
+function formatRelative(iso: string | null): string {
+  if (!iso) return "—";
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return "—";
+
+  const diff = Date.now() - date.getTime();
+  const jours = Math.floor(diff / 86_400_000);
+
+  if (jours <= 0) {
+    const heures = Math.floor(diff / 3_600_000);
+    return heures <= 0 ? "à l'instant" : `il y a ${heures} h`;
+  }
+  if (jours === 1) return "hier";
+  if (jours < 7) return `il y a ${jours} j`;
+  return date.toLocaleDateString("fr-FR", { day: "2-digit", month: "short" });
+}
+
+function Shimmer({ className = "" }: { className?: string }) {
+  return <span className={`block animate-pulse rounded bg-slate-100 ${className}`} />;
+}
+
+type KpiTone = "solid" | "azure" | "green" | "gold";
+
+const KPI_TONES: Record<KpiTone, { card: string; label: string; valeur: string; note: string; barre: string }> = {
+  solid: {
+    card: "border-brand-blue bg-gradient-to-br from-brand-blue via-brand-blue to-brand-blue-dark text-white shadow-lg shadow-brand-blue/25",
+    label: "text-white/75",
+    valeur: "text-white",
+    note: "text-white/70",
+    barre: "bg-brand-gold",
+  },
+  azure: {
+    card: "border-brand-azure/20 bg-brand-azure-soft",
+    label: "text-slate-600",
+    valeur: "text-brand-blue",
+    note: "text-slate-500",
+    barre: "bg-brand-azure",
+  },
+  green: {
+    card: "border-brand-green/20 bg-brand-green-soft",
+    label: "text-slate-600",
+    valeur: "text-brand-green",
+    note: "text-slate-500",
+    barre: "bg-brand-green",
+  },
+  gold: {
+    card: "border-brand-gold/25 bg-brand-gold-soft",
+    label: "text-slate-600",
+    valeur: "text-brand-gold-dark",
+    note: "text-slate-500",
+    barre: "bg-brand-gold",
+  },
+};
+
+interface Kpi {
+  label: string;
+  value: number | string | null;
+  note: string;
+  tone: KpiTone;
+}
+
+function KpiCard({ kpi, delay }: { kpi: Kpi; delay: number }) {
+  const tone = KPI_TONES[kpi.tone];
+
+  return (
+    <div
+      style={{ animationDelay: `${delay}ms` }}
+      className={`dash-rise relative overflow-hidden rounded-2xl border p-4 transition duration-300 hover:-translate-y-1 hover:shadow-lg ${tone.card}`}
+    >
+      <p className={`text-xs font-medium ${tone.label}`}>{kpi.label}</p>
+      <p className={`mt-2 truncate text-2xl font-semibold tabular-nums sm:text-3xl ${tone.valeur}`}>
+        <StatValue value={kpi.value} />
+      </p>
+      <p className={`mt-1 text-xs ${tone.note}`}>{kpi.note}</p>
+      <span aria-hidden="true" className={`absolute inset-x-0 bottom-0 h-1 opacity-80 ${tone.barre}`} />
+    </div>
+  );
+}
+
+/** Graphique en barres des anomalies par mois, avec sélection de l'exercice. */
+function AnomaliesChart({ data }: { data: DashboardData["anomalies_par_mois"] | undefined }) {
+  const [annee, setAnnee] = useState<number | null>(null);
+
+  useEffect(() => {
+    if (!data || data.annees.length === 0) {
+      setAnnee(null);
+      return;
+    }
+    setAnnee((precedent) => (precedent !== null && data.annees.includes(precedent) ? precedent : data.annees[0]));
+  }, [data]);
+
+  const points = useMemo(() => {
+    if (!data || annee === null) return [];
+    return Array.from(
+      { length: 12 },
+      (_, i) => data.series.find((s) => s.annee === annee && s.mois === i + 1)?.total ?? 0
+    );
+  }, [data, annee]);
+
+  const maximum = Math.max(1, ...points);
+  const total = points.reduce((somme, n) => somme + n, 0);
+
+  return (
+    <section
+      className="dash-rise overflow-hidden rounded-2xl border border-line bg-white"
+      style={{ animationDelay: "160ms" }}
+    >
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-line px-4 py-3">
+        <div>
+          <h2 className="text-base font-semibold text-brand-blue">Anomalies par mois</h2>
+          <p className="text-xs text-slate-500">
+            Déclarations contrôlées{annee !== null ? ` — exercice ${annee}` : ""}
+          </p>
+        </div>
+        <div className="flex flex-wrap items-center gap-1.5">
+          {data?.annees.map((a) => (
+            <button
+              key={a}
+              type="button"
+              onClick={() => setAnnee(a)}
+              aria-pressed={a === annee}
+              className={`rounded-full px-3 py-1 text-xs font-semibold tabular-nums transition ${
+                a === annee
+                  ? "bg-brand-blue text-white shadow-sm shadow-brand-blue/25"
+                  : "border border-line bg-white text-slate-600 hover:border-brand-azure hover:text-brand-azure"
+              }`}
+            >
+              {a}
+            </button>
+          ))}
+          <Link
+            to="/defaillances"
+            className="ml-1 text-sm font-medium text-brand-azure transition hover:text-brand-blue hover:underline"
+          >
+            Voir
+          </Link>
+        </div>
+      </div>
+
+      <div className="p-4">
+        {data && data.annees.length > 0 ? (
+          <>
+            <div className="flex items-baseline gap-2">
+              <p className="text-xl font-semibold tabular-nums text-brand-blue">{total.toLocaleString("fr-FR")}</p>
+              <p className="text-xs text-slate-500">anomalies détectées en {annee}</p>
+            </div>
+
+            <div className="mt-4 flex h-28 items-end gap-1 sm:gap-1.5" role="img" aria-label={`Anomalies par mois pour l'exercice ${annee}`}>
+              {points.map((n, i) => (
+                <div key={i} className="group flex h-full flex-1 flex-col items-center justify-end gap-1">
+                  <div className="relative flex w-full flex-1 items-end">
+                    <div
+                      style={{ height: `${Math.max(3, (n / maximum) * 100)}%` }}
+                      title={`${MOIS_LONGS[i]} : ${n.toLocaleString("fr-FR")} anomalie${n > 1 ? "s" : ""}`}
+                      className={`w-full rounded-t-md transition duration-300 ${
+                        n === 0
+                          ? "bg-slate-200"
+                          : "bg-gradient-to-t from-brand-blue to-brand-azure group-hover:from-brand-gold group-hover:to-brand-gold/70"
+                      }`}
+                    />
+                    <span className="pointer-events-none absolute inset-x-0 -top-6 hidden justify-center group-hover:flex">
+                      <span className="rounded bg-brand-blue-dark px-1.5 py-0.5 text-[10px] font-semibold tabular-nums text-white">
+                        {n}
+                      </span>
+                    </span>
+                  </div>
+                  <span className="text-[10px] font-medium uppercase tracking-wide text-slate-500">{MOIS_COURTS[i]}</span>
+                </div>
+              ))}
+            </div>
+          </>
+        ) : (
+          <div className="flex flex-col items-center justify-center py-8 text-center">
+            <p className="font-medium text-brand-blue">Aucune anomalie à afficher</p>
+            <p className="mt-1 text-sm text-slate-500">Lancez une analyse pour alimenter le graphique.</p>
+          </div>
+        )}
+      </div>
+    </section>
+  );
+}
+
+const ACTION_META: Record<ActionDossierType, { label: string; point: string }> = {
+  prise: { label: "Prise en charge", point: "bg-brand-azure" },
+  reprise: { label: "Reprise", point: "bg-brand-gold" },
+  affectation: { label: "Affectation", point: "bg-brand-teal" },
+  liberation: { label: "Libération", point: "bg-slate-400" },
+  cloture: { label: "Clôture", point: "bg-brand-green" },
+  reouverture: { label: "Réouverture", point: "bg-red-500" },
+};
+
+/** Utilisateurs ayant clôturé des dossiers le plus récemment. */
+function Clotureurs({ items, canManageUsers }: { items: DashboardClotureur[]; canManageUsers: boolean }) {
+  return (
+    <section
+      className="dash-rise overflow-hidden rounded-2xl border border-line bg-white"
+      style={{ animationDelay: "220ms" }}
+    >
+      <div className="flex items-center justify-between gap-3 border-b border-line px-4 py-3">
+        <div>
+          <h2 className="text-base font-semibold text-brand-blue">Utilisateurs récents</h2>
+          <p className="text-xs text-slate-500">Dossiers clôturés récemment</p>
+        </div>
+        {canManageUsers && (
+          <Link
+            to="/admin/utilisateurs"
+            className="text-sm font-medium text-brand-azure transition hover:text-brand-blue hover:underline"
+          >
+            Équipe
+          </Link>
+        )}
+      </div>
+
+      <ul className="divide-y divide-line">
+        {items.map((u) => (
+          <li key={u.id} className="group flex items-center gap-3 px-4 py-3 transition hover:bg-slate-50">
+            <Avatar name={u.nom} />
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-sm font-medium text-brand-blue">{u.nom}</p>
+              <p className="truncate text-xs text-slate-500">
+                {u.centre ?? "Sans centre"}
+                {u.role ? ` · ${ROLE_LABELS[u.role]}` : ""}
+              </p>
+            </div>
+            <div className="text-right">
+              <p className="text-sm font-semibold tabular-nums text-brand-blue">{u.dossiers}</p>
+              <p className="text-[11px] text-slate-500">dossier{u.dossiers > 1 ? "s" : ""}</p>
+            </div>
+            <span className="hidden w-20 text-right text-[11px] text-slate-400 sm:block">
+              {formatRelative(u.derniere_cloture)}
+            </span>
+          </li>
+        ))}
+        {items.length === 0 && (
+          <li className="px-4 py-6 text-center text-sm text-slate-500">Aucune clôture enregistrée.</li>
+        )}
+      </ul>
+    </section>
+  );
+}
+
+/** Journal des opérations faites par l'utilisateur connecté. */
+function MonHistorique({ actions }: { actions: DashboardData["historique"] }) {
+  return (
+    <section
+      className="dash-rise overflow-hidden rounded-2xl border border-line bg-white"
+      style={{ animationDelay: "280ms" }}
+    >
+      <div className="flex items-center justify-between gap-3 border-b border-line px-4 py-3">
+        <div>
+          <h2 className="text-base font-semibold text-brand-blue">Mon historique</h2>
+          <p className="text-xs text-slate-500">Vos dernières opérations</p>
+        </div>
+      </div>
+
+      <ul className="divide-y divide-line">
+        {actions.map((h) => {
+          const meta = ACTION_META[h.action] ?? ACTION_META.prise;
+          return (
+            <li key={h.id} className="flex gap-3 px-4 py-3">
+              <span aria-hidden="true" className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${meta.point}`} />
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-medium text-brand-blue">
+                  {meta.label}
+                  <span className="font-normal text-slate-600"> — {h.contribuable.nom ?? "Dossier"}</span>
+                </p>
+                <p className="truncate text-xs text-slate-500">
+                  {h.contribuable.nif ?? "—"}
+                  {h.detail ? ` · ${h.detail}` : ""} · {formatRelative(h.le)}
+                </p>
+                <p className="text-[11px] text-slate-400">
+                  {STATUT_LABELS[h.statut_avant as StatutAlerte] ?? h.statut_avant} →{" "}
+                  {STATUT_LABELS[h.statut_apres as StatutAlerte] ?? h.statut_apres}
+                </p>
+              </div>
+            </li>
+          );
+        })}
+        {actions.length === 0 && (
+          <li className="px-4 py-6 text-center text-sm text-slate-500">Aucune opération pour le moment.</li>
+        )}
+      </ul>
+    </section>
+  );
+}
+
+/** Derniers dossiers clôturés (journal des dossiers). */
+function DerniersDossiers({ items }: { items: DashboardData["derniers_dossiers"] }) {
+  return (
+    <section
+      className="dash-rise overflow-hidden rounded-2xl border border-line bg-white"
+      style={{ animationDelay: "200ms" }}
+    >
+      <div className="flex items-center justify-between gap-3 border-b border-line px-4 py-3">
+        <div>
+          <h2 className="text-base font-semibold text-brand-blue">Derniers dossiers clôturés</h2>
+          <p className="text-xs text-slate-500">Journal des clôtures</p>
+        </div>
+        <Link
+          to="/traitements?vue=traites"
+          className="text-sm font-medium text-brand-azure transition hover:text-brand-blue hover:underline"
+        >
+          Tout voir
+        </Link>
+      </div>
+
+      <div className="overflow-x-auto">
+        <table className="w-full min-w-[560px] text-left text-sm">
+          <thead>
+            <tr className="bg-slate-50 text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+              {["Dossier", "Centre", "Clôturé par", "Date"].map((h) => (
+                <th key={h} className="whitespace-nowrap px-4 py-2.5">
+                  {h}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {items.map((d) => (
+              <tr key={d.id} className="group border-t border-line transition-colors even:bg-slate-50/60 hover:bg-slate-100">
+                <td className="px-4 py-3">
+                  <div className="flex items-center gap-2.5">
+                    <Avatar name={d.contribuable.nom} />
+                    <div className="min-w-0">
+                      {d.contribuable.id !== null ? (
+                        <Link
+                          to={`/contribuables/${d.contribuable.id}`}
+                          className="block truncate font-medium text-brand-blue hover:underline"
+                        >
+                          {d.contribuable.nom ?? "—"}
+                        </Link>
+                      ) : (
+                        <span className="block truncate font-medium text-slate-700">{d.contribuable.nom ?? "—"}</span>
+                      )}
+                      <p className="text-xs text-slate-500">{d.contribuable.nif ?? "—"}</p>
+                    </div>
+                  </div>
+                </td>
+                <td className="px-4 py-3 text-slate-700">{d.contribuable.centre ?? "—"}</td>
+                <td className="px-4 py-3 font-medium text-slate-700">{d.auteur}</td>
+                <td className="whitespace-nowrap px-4 py-3 text-slate-500">{formatDate(d.le)}</td>
+              </tr>
+            ))}
+            {items.length === 0 && (
+              <tr>
+                <td colSpan={4} className="px-4 py-6 text-center">
+                  <p className="font-medium text-brand-blue">Aucun dossier clôturé</p>
+                  <p className="mt-1 text-sm text-slate-500">Les dossiers traités apparaîtront ici.</p>
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  );
+}
+
 /** Indicateurs de décision : délais réels des dossiers du périmètre de l'utilisateur. */
 function PilotageDossiers({ summary }: { summary: DefaillanceSummary | null }) {
   const enRetard = summary?.dossiers_en_retard ?? 0;
 
-  const cartes = [
+  const lignes = [
     {
       label: "Délai moyen de traitement",
       valeur: libelleJours(summary?.delai_moyen_jours),
       note: "de l'ouverture à la clôture",
-      icon: <IconClock className="h-4 w-4" />,
+      point: "bg-brand-azure",
       alerte: false,
     },
     {
       label: "Attente avant prise",
       valeur: libelleJours(summary?.attente_moyenne_jours),
       note: "avant qu'un agent s'en saisisse",
-      icon: <IconHourglass className="h-4 w-4" />,
+      point: "bg-brand-gold",
       alerte: false,
     },
     {
       label: "Dossiers en retard",
       valeur: summary ? enRetard.toLocaleString("fr-FR") : "—",
       note: "ouverts depuis plus de 30 j",
-      icon: <IconAlert className="h-4 w-4" />,
+      point: "bg-red-500",
       alerte: enRetard > 0,
     },
   ];
 
   return (
-    <section className="dash-rise overflow-hidden rounded-2xl border border-line bg-white" style={{ animationDelay: "120ms" }}>
-      <div className="flex items-center justify-between gap-2 border-b border-line bg-slate-50 px-5 py-3">
-        <h2 className="text-base font-semibold text-brand-blue">Pilotage des dossiers</h2>
+    <section
+      className="dash-rise overflow-hidden rounded-2xl border border-line bg-white"
+      style={{ animationDelay: "320ms" }}
+    >
+      <div className="flex items-center justify-between gap-3 border-b border-line px-4 py-3">
+        <div>
+          <h2 className="text-base font-semibold text-brand-blue">Pilotage des dossiers</h2>
+          <p className="text-xs text-slate-500">Délais observés dans votre périmètre</p>
+        </div>
         <Link
-          to="/defaillances"
-          className="inline-flex items-center gap-1 text-sm font-medium text-brand-blue hover:underline"
+          to="/traitements"
+          className="text-sm font-medium text-brand-azure transition hover:text-brand-blue hover:underline"
         >
-          Voir les dossiers
-          <IconChevron className="h-4 w-4" />
+          Dossiers
         </Link>
       </div>
-      <div className="grid gap-3 p-5 sm:grid-cols-3">
-        {cartes.map((c) => (
-          <div
-            key={c.label}
-            className="rounded-xl border border-line bg-white p-3.5 transition duration-200 hover:-translate-y-0.5 hover:border-brand-azure/40 hover:shadow-md"
-          >
-            <div className="flex items-center gap-2">
-              <span
-                className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-white ${
-                  c.alerte ? "bg-red-600 shadow-sm shadow-red-600/25" : "bg-gradient-to-br from-brand-blue to-brand-blue-light shadow-sm shadow-brand-blue/25"
-                }`}
-              >
-                {c.icon}
-              </span>
-              <p className="text-xs text-slate-500">{c.label}</p>
-            </div>
-            <p className={`mt-2 text-2xl font-semibold tabular-nums ${c.alerte ? "text-red-600" : "text-brand-blue"}`}>
-              {c.valeur}
-            </p>
-            <p className="text-xs text-slate-500">{c.note}</p>
-          </div>
-        ))}
-      </div>
-    </section>
-  );
-}
 
-function SkeletonRows() {  return (
-    <>
-      {Array.from({ length: 6 }, (_, i) => (
-        <tr key={i} className="border-t border-line">
-          {Array.from({ length: 6 }, (_, j) => (
-            <td key={j} className="px-3 py-2.5">
-              <span
-                className="block h-4 animate-pulse rounded bg-slate-100"
-                style={{ width: `${55 + ((i + j) % 4) * 12}%` }}
-              />
-            </td>
-          ))}
-        </tr>
-      ))}
-    </>
+      <ul className="divide-y divide-line">
+        {lignes.map((l) => (
+          <li key={l.label} className="flex items-center gap-3 px-4 py-3">
+            <span aria-hidden="true" className={`h-2 w-2 shrink-0 rounded-full ${l.point}`} />
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-medium text-slate-700">{l.label}</p>
+              <p className="text-xs text-slate-500">{l.note}</p>
+            </div>
+            <span className={`text-lg font-semibold tabular-nums ${l.alerte ? "text-red-600" : "text-brand-blue"}`}>
+              {l.valeur}
+            </span>
+          </li>
+        ))}
+      </ul>
+    </section>
   );
 }
 
@@ -223,87 +550,100 @@ export default function DashboardPage() {
   const role = user?.role ?? null;
 
   const canUsers = role === "superadmin" || role === "central" || role === "admin";
-  const canCentres = role === "superadmin" || role === "central";
-  const canFonctions = role === "superadmin";
+  const isAgent = role === "agent";
 
-  const [data, setData] = useState<Paginated<AppUser> | null>(null);
-  const [totalUsers, setTotalUsers] = useState<number | null>(null);
-  const [centresCount, setCentresCount] = useState<number | null>(null);
-  const [fonctionsCount, setFonctionsCount] = useState<number | null>(null);
-  const [alerteSummary, setAlerteSummary] = useState<DefaillanceSummary | null>(null);
-  const [loading, setLoading] = useState<boolean>(canUsers);
+  const [dash, setDash] = useState<DashboardData | null>(null);
+  const [summary, setSummary] = useState<DefaillanceSummary | null>(null);
   const [error, setError] = useState<string>("");
+  const [tick, setTick] = useState<number>(0);
 
-  const [page, setPage] = useState<number>(1);
-  const [searchInput, setSearchInput] = useState<string>("");
-  const [search, setSearch] = useState<string>("");
-
-  // Recherche avec un petit délai
+  // Rafraîchissement automatique : l'analyse serveur tourne toutes les 5 minutes.
   useEffect(() => {
-    const t = setTimeout(() => {
-      setSearch(searchInput.trim());
-      setPage(1);
-    }, 300);
-    return () => clearTimeout(t);
-  }, [searchInput]);
+    const timer = setInterval(() => setTick((n) => n + 1), 60_000);
+    return () => clearInterval(timer);
+  }, []);
 
-  // Liste des utilisateurs (même API que la page Administration > Utilisateurs)
   useEffect(() => {
-    if (!canUsers) return;
     let cancelled = false;
-    setLoading(true);
-    api
-      .get<Paginated<AppUser>>("/users", { params: { page, search: search || undefined } })
-      .then((res) => {
+
+    Promise.all([
+      api.get<DashboardData>("/dashboard"),
+      api.get<DefaillanceSummary>("/defaillances/summary").catch(() => null),
+    ])
+      .then(([d, s]) => {
         if (cancelled) return;
-        setData(res.data);
-        if (!search) setTotalUsers(res.data.total);
+        setDash(d.data);
+        if (s) setSummary(s.data);
         setError("");
       })
       .catch((err) => {
-        if (!cancelled) setError(getErrorMessage(err, "Impossible de charger les utilisateurs."));
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
+        if (!cancelled) setError(getErrorMessage(err, "Impossible de charger le tableau de bord."));
       });
+
     return () => {
       cancelled = true;
     };
-  }, [canUsers, page, search]);
+  }, [tick]);
 
-  // Compteurs centres / fonctions selon les droits
-  useEffect(() => {
-    if (canCentres) {
-      // Compteur total : la page de gestion compte aussi les services centraux masqués (?tous=1).
-      api.get<Centre[]>("/centres", { params: { tous: 1 } }).then((res) => setCentresCount(res.data.length)).catch(() => undefined);
+  const totaux = dash?.totaux;
+  const kpis: Kpi[] = [];
+
+  if (totaux) {
+    kpis.push({
+      label: "Anomalies à traiter",
+      value: totaux.anomalies_a_traiter,
+      note: `${totaux.dossiers_a_traiter.toLocaleString("fr-FR")} dossier${totaux.dossiers_a_traiter > 1 ? "s" : ""} concerné${totaux.dossiers_a_traiter > 1 ? "s" : ""}`,
+      tone: "solid",
+    });
+
+    if (role === "admin") {
+      kpis.push({
+        label: "Mon centre",
+        value: user?.centre?.nom ?? "—",
+        note: "votre périmètre de traitement",
+        tone: "azure",
+      });
+    } else if (totaux.centres !== null) {
+      kpis.push({
+        label: "Centres",
+        value: totaux.centres,
+        note: "périmètre couvert",
+        tone: "azure",
+      });
     }
-    if (canFonctions) {
-      api.get<Fonction[]>("/fonctions").then((res) => setFonctionsCount(res.data.length)).catch(() => undefined);
+
+    if (totaux.utilisateurs !== null) {
+      kpis.push({
+        label: role === "admin" ? "Agents du centre" : "Utilisateurs",
+        value: totaux.utilisateurs,
+        note:
+          role === "superadmin" && totaux.fonctions !== null
+            ? `${totaux.fonctions.toLocaleString("fr-FR")} fonctions`
+            : role === "admin"
+              ? "comptes actifs"
+              : "comptes enregistrés",
+        tone: "green",
+      });
     }
-  }, [canCentres, canFonctions]);
 
-  // Délais et retards des dossiers : même périmètre que les listes (centre pour l'admin, tous pour le central)
-  useEffect(() => {
-    if (!canUsers) return;
-    let cancelled = false;
-    api
-      .get<DefaillanceSummary>("/defaillances/summary")
-      .then((res) => {
-        if (!cancelled) setAlerteSummary(res.data);
-      })
-      .catch(() => undefined);
-    return () => {
-      cancelled = true;
-    };
-  }, [canUsers]);
-
-  const stats: Stat[] = [];
-  if (canUsers) stats.push({ label: "Total utilisateurs", value: totalUsers, icon: <IconUsers className="h-5 w-5" /> });
-  if (canCentres) stats.push({ label: "Centres", value: centresCount, icon: <IconBuilding className="h-5 w-5" /> });
-  if (canFonctions) stats.push({ label: "Fonctions", value: fonctionsCount, icon: <IconBriefcase className="h-5 w-5" /> });
-  if (role === "admin") {
-    stats.push({ label: "Mon centre", value: user?.centre?.nom ?? "—", icon: <IconBuilding className="h-5 w-5" /> });
+    kpis.push({
+      label: "Anomalies traitées",
+      value: totaux.anomalies_traitees,
+      note: `${totaux.anomalies_en_traitement.toLocaleString("fr-FR")} en traitement`,
+      tone: "gold",
+    });
   }
+
+  const aujourdhui = useMemo(
+    () =>
+      new Date().toLocaleDateString("fr-FR", {
+        weekday: "long",
+        day: "numeric",
+        month: "long",
+        year: "numeric",
+      }),
+    []
+  );
 
   return (
     <div className="space-y-5">
@@ -314,226 +654,139 @@ export default function DashboardPage() {
         <span aria-hidden="true" className="pointer-events-none absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-brand-gold via-brand-gold/50 to-transparent" />
         <span aria-hidden="true" className="pointer-events-none absolute -right-8 -top-12 h-36 w-36 rounded-full bg-white/10" />
         <span aria-hidden="true" className="pointer-events-none absolute -bottom-14 right-20 h-28 w-28 rounded-full bg-white/5" />
-        <div className="relative flex items-center gap-3">
-          <span
-            aria-hidden="true"
-            className="hidden h-10 w-10 shrink-0 items-center justify-center rounded-full bg-white text-sm font-semibold text-brand-blue shadow-sm sm:flex"
-          >
-            {initials(user?.nom)}
-          </span>
-          <div className="min-w-0">
-            <h1 className="truncate text-base font-semibold tracking-tight sm:text-lg">Bonjour {user?.nom}</h1>
-            <div className="mt-1 flex flex-wrap items-center gap-1.5 text-xs">
-              {role && (
-                <span className="rounded-full bg-white/15 px-2.5 py-0.5 font-medium">{ROLE_LABELS[role]}</span>
-              )}
-              {user?.centre && (
-                <span className="inline-flex items-center gap-1.5 rounded-full bg-white/15 px-2.5 py-0.5">
-                  <IconBuilding className="h-3 w-3" />
-                  {user.centre.nom}
-                </span>
-              )}
+        <div className="relative flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <span
+              aria-hidden="true"
+              className="hidden h-10 w-10 shrink-0 items-center justify-center rounded-full bg-white text-sm font-semibold text-brand-blue shadow-sm sm:flex"
+            >
+              {initials(user?.nom)}
+            </span>
+            <div className="min-w-0">
+              <h1 className="truncate text-base font-semibold tracking-tight sm:text-lg">Bonjour {user?.nom}</h1>
+              <div className="mt-1 flex flex-wrap items-center gap-1.5 text-xs">
+                {role && <span className="rounded-full bg-white/15 px-2.5 py-0.5 font-medium">{ROLE_LABELS[role]}</span>}
+                {user?.centre && (
+                  <span className="inline-flex items-center gap-1.5 rounded-full bg-white/15 px-2.5 py-0.5">
+                    {user.centre.nom}
+                  </span>
+                )}
+              </div>
             </div>
           </div>
+          <span className="hidden rounded-full bg-white/10 px-3 py-1 text-xs capitalize sm:inline-flex">{aujourdhui}</span>
         </div>
       </header>
 
+      <ErrorBox message={error} />
+
       {!canUsers ? (
-        // Agent : alertes de son centre + résumé de son compte
-        <>
-          <AgentAlertes />
-          <section className="dash-rise overflow-hidden rounded-2xl border border-line bg-white" style={{ animationDelay: "120ms" }}>
-            <div className="flex items-center gap-3 border-b border-line bg-slate-50 px-5 py-4">
-              <Avatar name={user?.nom} size="lg" />
-              <div className="min-w-0">
-                <h2 className="text-base font-semibold text-brand-blue">Mon compte</h2>
-                <p className="truncate text-sm text-slate-500">{user?.email}</p>
-              </div>
-            </div>
-            <dl className="grid gap-3 p-5 text-sm sm:grid-cols-2">
-              {[
-                ["E-mail", user?.email],
-                ["IM", user?.im],
-                ["Centre", user?.centre?.nom],
-                ["Fonction", user?.fonction?.nom],
-              ].map(([k, v]) => (
-                <div
-                  key={k}
-                  className="rounded-xl border border-line p-3 transition duration-200 hover:-translate-y-0.5 hover:border-brand-blue hover:shadow-md"
-                >
-                  <dt className="text-slate-500">{k}</dt>
-                  <dd className="mt-1 break-words text-base font-medium text-brand-blue">{v || "—"}</dd>
-                </div>
-              ))}
-            </dl>
-            <div className="px-5 pb-5">
-              <Link
-                to="/profile"
-                className={`${primaryButtonClass} group inline-flex items-center gap-1`}
-              >
-                Modifier mon profil
-                <IconChevron className="h-4 w-4 transition-transform group-hover:translate-x-1" />
-              </Link>
-            </div>
-          </section>
-        </>
+        // Agent : ses dossiers assignés + le suivi personnel du tableau de bord.
+        <AgentAlertes />
       ) : (
         <>
-          <StatsCard stats={stats} />
-
-          <PilotageDossiers summary={alerteSummary} />
-
-          <section
-            className="dash-rise overflow-hidden rounded-2xl border border-line bg-white"
-            style={{ animationDelay: "200ms" }}
-          >
-            {/* Barre de titre + recherche */}
-            <div className="flex flex-col gap-3 border-b border-line p-4 sm:flex-row sm:items-center sm:justify-between sm:p-5">
-              <div className="flex items-center gap-3">
-                <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-brand-blue to-brand-blue-light text-white shadow-sm shadow-brand-blue/25">
-                  <IconUsers className="h-5 w-5" />
-                </span>
-                <div>
-                  <h2 className="text-base font-semibold text-brand-blue">Tous les utilisateurs</h2>
-                  <p className="text-sm text-slate-500">Comptes de votre périmètre</p>
-                </div>
-              </div>
-              <div className="flex items-center gap-3">
-                <div className="relative flex-1 sm:w-72">
-                  <IconSearch className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                  <input
-                    value={searchInput}
-                    onChange={(e) => setSearchInput(e.target.value)}
-                    placeholder="Rechercher..."
-                    aria-label="Rechercher un utilisateur"
-                    className="w-full rounded-full border border-line bg-slate-50 py-2 pl-9 pr-9 text-sm placeholder-slate-400 shadow-sm transition focus:border-brand-azure focus:bg-white focus:outline-none focus:ring-4 focus:ring-brand-azure/10"
-                  />
-                  {searchInput && (
-                    <button
-                      type="button"
-                      onClick={() => setSearchInput("")}
-                      aria-label="Effacer la recherche"
-                      className="absolute right-2.5 top-1/2 flex h-5 w-5 -translate-y-1/2 items-center justify-center rounded-full text-slate-400 transition hover:bg-slate-200 hover:text-slate-600"
-                    >
-                      ×
-                    </button>
-                  )}
-                </div>
-                <Link
-                  to="/admin/utilisateurs"
-                  className={`${primaryButtonClass} group inline-flex items-center gap-1 whitespace-nowrap text-sm`}
-                >
-                  Gérer
-                  <IconChevron className="h-4 w-4 transition-transform group-hover:translate-x-1" />
-                </Link>
-              </div>
+          {dash ? (
+            <div
+              className={`grid gap-4 sm:grid-cols-2 ${
+                kpis.length >= 4 ? "xl:grid-cols-4" : kpis.length === 3 ? "xl:grid-cols-3" : ""
+              }`}
+            >
+              {kpis.map((kpi, i) => (
+                <KpiCard key={kpi.label} kpi={kpi} delay={i * 70} />
+              ))}
             </div>
-
-            <div className="px-5 sm:px-6">
-              <ErrorBox message={error} />
-            </div>
-
-            {/* Tableau */}
-            <div className="max-h-[640px] overflow-auto">
-              <table className="w-full min-w-[680px] text-left text-sm">
-                <thead className="sticky top-0 z-10">
-                  <tr className="border-b border-line bg-slate-50 text-slate-500">
-                    {["Nom", "Centre", "Téléphone", "E-mail", "Fonction", "Rôle"].map((h) => (
-                      <th key={h} className="whitespace-nowrap px-3 py-2.5 text-[11px] font-semibold tracking-wider">
-                        {h}
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody className={loading && data ? "opacity-50 transition" : "transition"}>
-                  {data?.data.map((u) => (
-                    <tr
-                      key={u.id}
-                      className="group border-t border-line transition-colors even:bg-slate-50/60 hover:bg-slate-100"
-                    >
-                      <td className="relative px-3 py-2">
-                        {/* Repère d'accent visible au survol */}
-                        <span className="absolute inset-y-0 left-0 w-1 scale-y-0 bg-brand-blue transition-transform duration-200 group-hover:scale-y-100" />
-                        <div className="flex items-center gap-3">
-                          <Avatar name={u.nom} />
-                          <span className="font-medium text-brand-blue">{u.nom}</span>
-                          {u.desactive && (
-                            <span
-                              className="rounded-full bg-red-50 px-2 py-0.5 text-[11px] font-semibold text-red-700"
-                              title={u.motif_desactivation ?? undefined}
-                            >
-                              Désactivé
-                            </span>
-                          )}
-                        </div>
-                      </td>
-                      <td className="px-3 py-2 text-slate-700">{u.centre?.nom ?? "—"}</td>
-                      <td className="whitespace-nowrap px-3 py-2 tabular-nums text-slate-700">{u.telephone ?? "—"}</td>
-                      <td className="px-3 py-2 text-slate-700">{u.email}</td>
-                      <td className="px-3 py-2 text-slate-700">{u.fonction?.nom ?? "—"}</td>
-                      <td className="px-3 py-2">
-                        <RoleBadge role={u.role} />
-                      </td>
-                    </tr>
-                  ))}
-                  {data && data.data.length === 0 && (
-                    <tr>
-                      <td colSpan={6} className="px-3 py-10 text-center">
-                        <span className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-slate-100 text-slate-400">
-                          <IconSearch className="h-5 w-5" />
-                        </span>
-                        <p className="font-medium text-brand-blue">Aucun utilisateur trouvé</p>
-                        <p className="mt-1 text-slate-500">Essayez un autre nom ou effacez la recherche.</p>
-                      </td>
-                    </tr>
-                  )}
-                  {!data && loading && <SkeletonRows />}
-                </tbody>
-              </table>
-            </div>
-
-            {/* Pagination */}
-            {data && data.total > 0 && (
-              <div className="flex justify-end border-t border-line bg-slate-50 px-5 py-3 sm:px-6">
-                <div className="flex items-center gap-1.5">
-                  <button
-                    type="button"
-                    onClick={() => setPage((p) => Math.max(1, p - 1))}
-                    disabled={data.current_page <= 1}
-                    aria-label="Page précédente"
-                    className="flex h-8 w-8 items-center justify-center rounded-full border border-line bg-white text-slate-500 transition hover:border-brand-blue hover:text-brand-blue disabled:opacity-40 disabled:hover:border-line disabled:hover:text-slate-500"
-                  >
-                    ‹
-                  </button>
-                  {pageWindow(data.current_page, data.last_page).map((n) => (
-                    <button
-                      key={n}
-                      type="button"
-                      onClick={() => setPage(n)}
-                      aria-current={n === data.current_page ? "page" : undefined}
-                      className={`h-8 min-w-8 rounded-full px-2.5 text-sm tabular-nums transition ${
-                        n === data.current_page
-                          ? "bg-brand-blue font-semibold text-white shadow-sm"
-                          : "border border-transparent text-slate-600 hover:border-line hover:bg-white"
-                      }`}
-                    >
-                      {n}
-                    </button>
-                  ))}
-                  <button
-                    type="button"
-                    onClick={() => setPage((p) => Math.min(data.last_page, p + 1))}
-                    disabled={data.current_page >= data.last_page}
-                    aria-label="Page suivante"
-                    className="flex h-8 w-8 items-center justify-center rounded-full border border-line bg-white text-slate-500 transition hover:border-brand-blue hover:text-brand-blue disabled:opacity-40 disabled:hover:border-line disabled:hover:text-slate-500"
-                  >
-                    ›
-                  </button>
+          ) : (
+            <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+              {Array.from({ length: 4 }, (_, i) => (
+                <div key={i} className="rounded-2xl border border-line bg-white p-4">
+                  <Shimmer className="h-3 w-24" />
+                  <Shimmer className="mt-3 h-8 w-20" />
+                  <Shimmer className="mt-2 h-3 w-32" />
                 </div>
-              </div>
-            )}
-          </section>
+              ))}
+            </div>
+          )}
         </>
+      )}
+
+      {dash ? (
+        <div className="grid gap-5 xl:grid-cols-3">
+          <div className="space-y-5 xl:col-span-2">
+            <AnomaliesChart data={dash.anomalies_par_mois} />
+            <DerniersDossiers items={dash.derniers_dossiers} />
+          </div>
+
+          <div className="space-y-5">
+            {!isAgent && <Clotureurs items={dash.clotureurs} canManageUsers={canUsers} />}
+            <MonHistorique actions={dash.historique} />
+            <PilotageDossiers summary={summary} />
+          </div>
+        </div>
+      ) : (
+        !error && (
+          <div className="grid gap-5 xl:grid-cols-3">
+            <div className="space-y-5 xl:col-span-2">
+              <div className="rounded-2xl border border-line bg-white p-5">
+                <Shimmer className="h-4 w-40" />
+                <Shimmer className="mt-6 h-28 w-full" />
+              </div>
+              <div className="rounded-2xl border border-line bg-white p-5">
+                <Shimmer className="h-4 w-48" />
+                <div className="mt-4 space-y-3">
+                  {Array.from({ length: 5 }, (_, i) => (
+                    <Shimmer key={i} className="h-8 w-full" />
+                  ))}
+                </div>
+              </div>
+            </div>
+            <div className="space-y-5">
+              {Array.from({ length: 2 }, (_, i) => (
+                <div key={i} className="rounded-2xl border border-line bg-white p-5">
+                  <Shimmer className="h-4 w-36" />
+                  <div className="mt-4 space-y-3">
+                    {Array.from({ length: 4 }, (_, j) => (
+                      <Shimmer key={j} className="h-8 w-full" />
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )
+      )}
+
+      {!canUsers && (
+        // Agent : résumé de son compte, sous les blocs de suivi.
+        <section className="dash-rise overflow-hidden rounded-2xl border border-line bg-white" style={{ animationDelay: "360ms" }}>
+          <div className="flex items-center gap-3 border-b border-line bg-slate-50 px-4 py-3">
+            <Avatar name={user?.nom} size="lg" />
+            <div className="min-w-0">
+              <h2 className="text-base font-semibold text-brand-blue">Mon compte</h2>
+              <p className="truncate text-sm text-slate-500">{user?.email}</p>
+            </div>
+          </div>
+          <dl className="grid gap-3 p-4 text-sm sm:grid-cols-2">
+            {[
+              ["E-mail", user?.email],
+              ["IM", user?.im],
+              ["Centre", user?.centre?.nom],
+              ["Fonction", user?.fonction?.nom],
+            ].map(([k, v]) => (
+              <div
+                key={k}
+                className="rounded-xl border border-line p-3 transition duration-200 hover:-translate-y-0.5 hover:border-brand-blue hover:shadow-md"
+              >
+                <dt className="text-slate-500">{k}</dt>
+                <dd className="mt-1 break-words text-base font-medium text-brand-blue">{v || "—"}</dd>
+              </div>
+            ))}
+          </dl>
+          <div className="px-4 pb-4">
+            <Link to="/profile" className={primaryButtonClass}>
+              Modifier mon profil
+            </Link>
+          </div>
+        </section>
       )}
     </div>
   );

@@ -3,9 +3,8 @@
 namespace App\Console\Commands;
 
 use App\Models\Centre;
+use App\Support\SourceConnexion;
 use Illuminate\Console\Command;
-use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Schema;
 use Throwable;
 
 /**
@@ -35,7 +34,6 @@ class AjouterDonneesSourceTest extends Command
 
     public function handle(): int
     {
-        $connexion = (string) config('dgi.source.connection');
         $tableContrib = (string) config('dgi.source.contribuables.table');
         $cc = (array) config('dgi.source.contribuables.colonnes');
         $tableTva = (string) config('dgi.source.declarations.TVA.table');
@@ -80,26 +78,36 @@ class AjouterDonneesSourceTest extends Command
         }
 
         try {
-            foreach ([$tableContrib, $tableTva] as $table) {
-                if ($table === '' || ! Schema::connection($connexion)->hasTable($table)) {
-                    $this->error("La table « {$table} » n'existe pas dans la connexion « {$connexion} » : vérifiez config/dgi.php.");
+            if (! SourceConnexion::tableExiste('contribuables', $tableContrib)) {
+                $this->error("La table « {$tableContrib} » n'existe pas dans la base source des contribuables : vérifiez config/dgi.php.");
 
-                    return self::FAILURE;
-                }
+                return self::FAILURE;
+            }
+            if (! SourceConnexion::tableExiste('declarations', $tableTva)) {
+                $this->error("La table « {$tableTva} » n'existe pas dans la base source des déclarations : vérifiez config/dgi.php.");
+
+                return self::FAILURE;
             }
 
-            $cx = DB::connection($connexion);
-            $dernier = (string) $cx->table($tableContrib)->where($cc['nif'], 'like', 'NIF-AJT-%')->max($cc['nif']);
+            $cxContrib = SourceConnexion::db('contribuables');
+            $cxTva = SourceConnexion::db('declarations');
+            $tableContribSql = SourceConnexion::table('contribuables', $tableContrib);
+            $tableTvaSql = SourceConnexion::table('declarations', $tableTva);
+
+            $dernier = (string) $cxContrib->table($tableContribSql)->where($cc['nif'], 'like', 'NIF-AJT-%')->max($cc['nif']);
             $debut = preg_match('/(\d+)$/', $dernier, $m) ? (int) $m[1] + 1 : 1;
 
             [$contribuables, $declarations] = $this->generer($centres, $debut, $nombre, $manques, $serie, $cc, $ct, $ligneCa);
 
-            $cx->transaction(function () use ($cx, $tableContrib, $tableTva, $contribuables, $declarations) {
+            // Une transaction par base : les deux groupes peuvent être dans des bases différentes.
+            $cxContrib->transaction(function () use ($cxContrib, $tableContribSql, $contribuables) {
                 foreach (array_chunk($contribuables, 500) as $lot) {
-                    $cx->table($tableContrib)->insertOrIgnore($lot);
+                    $cxContrib->table($tableContribSql)->insertOrIgnore($lot);
                 }
+            });
+            $cxTva->transaction(function () use ($cxTva, $tableTvaSql, $declarations) {
                 foreach (array_chunk($declarations, 500) as $lot) {
-                    $cx->table($tableTva)->insertOrIgnore($lot);
+                    $cxTva->table($tableTvaSql)->insertOrIgnore($lot);
                 }
             });
         } catch (Throwable $e) {

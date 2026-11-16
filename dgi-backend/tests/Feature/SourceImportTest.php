@@ -7,6 +7,9 @@ use App\Models\Assujettissement;
 use App\Models\Centre;
 use App\Models\Contribuable;
 use App\Models\Declaration;
+use App\Models\Fonction;
+use App\Models\User;
+use App\Enums\Role;
 use App\Services\DefaillanceDetector;
 use App\Services\SourceDeclarationImporter;
 use DateTimeImmutable;
@@ -14,6 +17,7 @@ use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
+use Laravel\Sanctum\Sanctum;
 use Tests\TestCase;
 
 /**
@@ -280,6 +284,115 @@ class SourceImportTest extends TestCase
         $noms = array_column($info['tables'], 'table');
         $this->assertContains('info_contribuable', $noms);
         $this->assertContains('assujettissement', $noms);
+    }
+
+    public function test_la_recherche_du_personnel_par_im_utilise_sa_connexion_dediee(): void
+    {
+        config([
+            'database.connections.source_agents_test' => [
+                'driver' => 'sqlite', 'database' => ':memory:', 'prefix' => '', 'foreign_key_constraints' => false,
+            ],
+            'dgi.source.connections.agents' => 'source_agents_test',
+        ]);
+        DB::purge('source_agents_test');
+
+        Schema::connection('source_agents_test')->create('agents', function (Blueprint $table): void {
+            $table->string('MATRICULE');
+            $table->string('NOM');
+            $table->string('EMAIL')->nullable();
+            $table->string('CENTRE_CODE')->nullable();
+            $table->string('CENTRE_LIBELLE')->nullable();
+            $table->string('GRADE')->nullable();
+            $table->boolean('ACTIF')->default(true);
+        });
+        DB::connection('source_agents_test')->table('agents')->insert([
+            'MATRICULE' => 'AG-001',
+            'NOM' => 'Agent Test',
+            'EMAIL' => 'agent@example.test',
+            'CENTRE_CODE' => '21-1-702',
+            'CENTRE_LIBELLE' => 'Centre Nord',
+            'GRADE' => 'Agent',
+            'ACTIF' => true,
+        ]);
+
+        $centre = Centre::create(['nom' => 'Centre Nord', 'code' => '21-1-702']);
+        $fonction = Fonction::create(['nom' => 'Superadmin source', 'role' => Role::Superadmin]);
+        $superadmin = User::create([
+            'nom' => 'Admin source',
+            'email' => 'admin-source@example.test',
+            'password' => 'motdepasse123',
+            'centre_id' => $centre->id,
+            'fonction_id' => $fonction->id,
+        ]);
+        Sanctum::actingAs($superadmin);
+
+        $this->getJson('/api/source/agents/AG-001')
+            ->assertOk()
+            ->assertJsonPath('im', 'AG-001')
+            ->assertJsonPath('nom', 'Agent Test')
+            ->assertJsonPath('centre_id', $centre->id)
+            ->assertJsonPath('actif', true);
+    }
+
+    public function test_les_contribuables_peuvent_venir_dune_base_distincte(): void
+    {
+        config([
+            'database.connections.source_taxpayers_test' => [
+                'driver' => 'sqlite', 'database' => ':memory:', 'prefix' => '', 'foreign_key_constraints' => false,
+            ],
+            'dgi.source.connections.contribuables' => 'source_taxpayers_test',
+        ]);
+        DB::purge('source_taxpayers_test');
+        Schema::connection('source_taxpayers_test')->create('info_contribuable', function (Blueprint $table): void {
+            $table->string('NIF', 20);
+            $table->string('RAISON_SOCIALE')->nullable();
+            $table->string('CENTRE_GEST')->nullable();
+            $table->smallInteger('ETAT')->nullable();
+            $table->date('DATE_CESSATION')->nullable();
+            $table->date('DATE_RADIE')->nullable();
+            $table->date('DATE_BLOQUE')->nullable();
+        });
+        DB::connection('source_taxpayers_test')->table('info_contribuable')->insert([
+            'NIF' => '9100000001',
+            'RAISON_SOCIALE' => 'Contribuable multi-source',
+            'CENTRE_GEST' => 'Centre Nord',
+            'ETAT' => 1,
+        ]);
+        Centre::create(['nom' => 'Centre Nord']);
+
+        $stats = app(SourceDeclarationImporter::class)->importer();
+
+        $this->assertSame(1, $stats['contribuables_crees']);
+        $this->assertDatabaseHas('contribuables', [
+            'nif' => '9100000001',
+            'nom' => 'Contribuable multi-source',
+        ]);
+    }
+
+    public function test_les_centres_peuvent_etre_importes_depuis_une_base_distincte(): void
+    {
+        config([
+            'database.connections.source_centres_test' => [
+                'driver' => 'sqlite', 'database' => ':memory:', 'prefix' => '', 'foreign_key_constraints' => false,
+            ],
+            'dgi.source.connections.centres' => 'source_centres_test',
+        ]);
+        DB::purge('source_centres_test');
+        Schema::connection('source_centres_test')->create('centre_gestionnaire', function (Blueprint $table): void {
+            $table->string('CENTRE ID', 20);
+            $table->string('LIBELLE CENTRE');
+            $table->string('CENTRE ABREV')->nullable();
+        });
+        DB::connection('source_centres_test')->table('centre_gestionnaire')->insert([
+            'CENTRE ID' => '21-1-702',
+            'LIBELLE CENTRE' => 'Centre Nord',
+            'CENTRE ABREV' => 'CN',
+        ]);
+
+        $stats = app(SourceDeclarationImporter::class)->importerCentres();
+
+        $this->assertSame(1, $stats['crees']);
+        $this->assertDatabaseHas('centres', ['code' => '21-1-702', 'nom' => 'Centre Nord']);
     }
 
     public function test_assujettissements_importes_et_filtres(): void
