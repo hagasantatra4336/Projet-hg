@@ -293,6 +293,65 @@ export interface DashboardData {
   derniere_analyse: { at: string; date: string } | null;
 }
 
+// ---- Comparatif des centres ----
+
+/** Ligne du comparatif : un centre et ses indicateurs de traitement. */
+export interface ComparatifCentre {
+  /** null pour les contribuables sans centre. */
+  id: number | null;
+  nom: string;
+  abreviation: string | null;
+  code: string | null;
+  type_centre: TypeCentre | null;
+  contribuables: number;
+  agents: number;
+  dossiers_total: number;
+  dossiers_ouverts: number;
+  dossiers_clotures: number;
+  dossiers_en_retard: number;
+  anomalies_a_traiter: number;
+  anomalies_en_traitement: number;
+  anomalies_traitees: number;
+  anomalies_regularisees: number;
+  anomalies_total: number;
+  /** Pourcentage de dossiers clôturés parmi les dossiers ouverts ou clôturés (null si aucun). */
+  taux_cloture: number | null;
+  delai_moyen_jours: number | null;
+  attente_moyenne_jours: number | null;
+  /** Anomalies à traiter pour 100 contribuables du centre. */
+  densite: number | null;
+  charge_par_agent: number | null;
+  reouvertures: number;
+  taux_reouverture: number | null;
+}
+
+export interface ComparatifCentresTotaux {
+  centres: number;
+  centres_actifs: number;
+  centres_sans_activite: number;
+  dossiers_total: number;
+  dossiers_ouverts: number;
+  dossiers_clotures: number;
+  dossiers_en_retard: number;
+  anomalies_a_traiter: number;
+  anomalies_en_traitement: number;
+  anomalies_traitees: number;
+  anomalies_regularisees: number;
+  anomalies_total: number;
+}
+
+export interface ComparatifCentresData {
+  annees: number[];
+  filtres: { annee_fiscale: number | null; regle: string | null; inclure_centraux: boolean };
+  totaux: ComparatifCentresTotaux;
+  medianes: {
+    taux_cloture: number | null;
+    delai_moyen_jours: number | null;
+    attente_moyenne_jours: number | null;
+  };
+  centres: ComparatifCentre[];
+}
+
 export const ETAT_LABELS: Record<number, string> = { 1: "Actif", 2: "Bloqué", 3: "Cessation", 4: "Radié" };
 
 export interface CelluleDeclaration {

@@ -680,6 +680,19 @@ export default function DashboardPage() {
 
       <ErrorBox message={error} />
 
+      {(role === "central" || role === "superadmin") && (
+        <Link
+          to="/statistiques/centres"
+          className="dash-rise flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-line bg-white px-4 py-3 transition hover:border-brand-azure"
+        >
+          <div>
+            <p className="text-sm font-semibold text-brand-blue">Comparatif des centres</p>
+            <p className="text-xs text-slate-500">Taux de clôture, délais et retards, centre par centre.</p>
+          </div>
+          <span className="text-sm font-medium text-brand-azure">Ouvrir</span>
+        </Link>
+      )}
+
       {!canUsers ? (
         // Agent : ses dossiers assignés + le suivi personnel du tableau de bord.
         <AgentAlertes />

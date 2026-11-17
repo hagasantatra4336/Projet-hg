@@ -1,3 +1,4 @@
+import { lazy, Suspense } from "react";
 import { Routes, Route, Navigate } from "react-router-dom";
 import { useAuth } from "./context/AuthContext";
 import LoginPage from "./pages/Auth/LoginPage";
@@ -22,6 +23,9 @@ import ProfilePage from "./pages/ProfilePage";
 import ProfileWaitingPage from "./pages/ProfileWaitingPage";
 import ConfirmChangePage from "./pages/ConfirmChangePage";
 
+/** Page de pilotage chargée à la demande : garde le bundle initial léger. */
+const ComparatifCentresPage = lazy(() => import("./pages/ComparatifCentresPage"));
+
 /** Les agents n'ont pas de page Anomalies : leur liste de travail est la page Traitements. */
 function AnomaliesRoute() {
   const { user } = useAuth();
@@ -42,6 +46,23 @@ export default function App() {
       <Route element={<ProtectedRoute />}>
         <Route element={<AppLayout />}>
           <Route path="/dashboard" element={<DashboardPage />} />
+          {/* Comparatif des centres : central et superadmin */}
+          <Route element={<ProtectedRoute roles={["superadmin", "central"]} />}>
+            <Route
+              path="/statistiques/centres"
+              element={
+                <Suspense
+                  fallback={
+                    <div className="rounded-2xl border border-line bg-white p-6 text-sm text-slate-500">
+                      Chargement du comparatif…
+                    </div>
+                  }
+                >
+                  <ComparatifCentresPage />
+                </Suspense>
+              }
+            />
+          </Route>
           <Route path="/profile" element={<ProfilePage />} />
           {/* Attente de la validation par e-mail d'une modification du profil */}
           <Route path="/profile/attente" element={<ProfileWaitingPage />} />

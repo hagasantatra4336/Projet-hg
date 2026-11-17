@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
+import { Link } from "react-router-dom";
 import api, { getErrorMessage } from "../../services/api";
 import { useAuth } from "../../context/AuthContext";
 import type { Centre, TypeCentre } from "../../types";
@@ -31,6 +32,8 @@ const normalize = (value: string): string =>
 export default function CentresPage() {
   const { user } = useAuth();
   const peutGererAffichage = user?.role === "superadmin";
+  // Le comparatif est réservé au central et au superadmin.
+  const peutComparer = user?.role === "superadmin" || user?.role === "central";
 
   const [centres, setCentres] = useState<Centre[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
@@ -146,34 +149,43 @@ export default function CentresPage() {
   return (
     <div>
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-        <input
-          className={`${inputClass} max-w-sm`}
-          type="search"
-          aria-label="Rechercher un centre"
-          placeholder="Rechercher par nom ou adresse..."
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-        />
-        <select
-          className={`${inputClass} max-w-xs`}
-          aria-label="Filtrer par type de centre"
-          value={typeFilter}
-          onChange={(e) => {
-            const value = e.target.value;
-            if (value === "tous" || value === "central" || value === "fiscal") setTypeFilter(value);
-          }}
-        >
-          <option value="tous">Tous les types</option>
-          <option value="central">Services centraux</option>
-          <option value="fiscal">Centres fiscaux</option>
-        </select>
-        <p className="text-sm text-slate-600">
-          {filteredCentres.length} centre(s)
-          {(search.trim() || typeFilter !== "tous") && ` sur ${centres.length}`}
-        </p>
-        <button type="button" className={primaryButtonClass} onClick={openNew}>
-          + Ajouter un centre
-        </button>
+        <div className="flex flex-1 flex-wrap items-center gap-2 sm:flex-nowrap">
+          <input
+            className={`${inputClass} h-10 sm:w-72`}
+            type="search"
+            aria-label="Rechercher un centre"
+            placeholder="Rechercher par nom ou adresse..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
+          <select
+            className={`${inputClass} h-10 sm:w-56`}
+            aria-label="Filtrer par type de centre"
+            value={typeFilter}
+            onChange={(e) => {
+              const value = e.target.value;
+              if (value === "tous" || value === "central" || value === "fiscal") setTypeFilter(value);
+            }}
+          >
+            <option value="tous">Tous les types</option>
+            <option value="central">Services centraux</option>
+            <option value="fiscal">Centres fiscaux</option>
+          </select>
+          <p className="text-sm text-slate-600 sm:ml-1">
+            {filteredCentres.length} centre(s)
+            {(search.trim() || typeFilter !== "tous") && ` sur ${centres.length}`}
+          </p>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <button type="button" className={primaryButtonClass} onClick={openNew}>
+            + Ajouter un centre
+          </button>
+          {peutComparer && (
+            <Link to="/statistiques/centres" className={`${primaryButtonClass} inline-flex items-center justify-center`}>
+              Comparatif des centres
+            </Link>
+          )}
+        </div>
       </div>
 
       <ErrorBox message={error} />

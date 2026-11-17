@@ -643,7 +643,7 @@ export default function SignupPage() {
             )}
           </div>
           <input
-            className={inputClass}
+            className={`${inputClass} self-start`}
             type="tel"
             inputMode="numeric"
             pattern="[0-9]{10}"
@@ -677,7 +677,7 @@ export default function SignupPage() {
               className={inputClass}
               required
               label="Fonction"
-              placeholder="Fonction (rechercher parmi la liste)"
+              placeholder="rechercher parmi la liste"
               emptyLabel="Aucune fonction trouvée"
             />
           </div>

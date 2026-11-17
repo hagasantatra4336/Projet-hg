@@ -3,6 +3,7 @@
 use App\Http\Controllers\Api\AnalyseAutoController;
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\CentreController;
+use App\Http\Controllers\Api\ComparatifCentresController;
 use App\Http\Controllers\Api\ContribuableController;
 use App\Http\Controllers\Api\DashboardController;
 use App\Http\Controllers\Api\DeclarationImportController;
@@ -77,6 +78,10 @@ Route::middleware(['auth:sanctum', RejeterCompteDesactive::class])->group(functi
     Route::get('/notifications', NotificationController::class);
     // Tableau de bord : chiffres clés, anomalies par mois, clôtures récentes et historique personnel.
     Route::get('/dashboard', DashboardController::class);
+
+    // Comparatif des centres (central et superadmin) : taux de clôture, délais et retards par centre.
+    Route::get('/statistiques/centres', ComparatifCentresController::class)
+        ->middleware(EnsureRole::class.':superadmin,central');
     Route::post('/profile/request-change', [ProfileController::class, 'requestChange'])->middleware('throttle:5,1,profile-change');
     Route::delete('/profile/request-change', [ProfileController::class, 'cancelChange']);
     // Défaillances de déclaration : consultation et traitement des alertes par tous les rôles

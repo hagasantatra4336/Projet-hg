@@ -6,7 +6,7 @@ export default function AuthLayout({ children }: { children: ReactNode }) {
   return (
     <div className="grid min-h-screen bg-white lg:grid-cols-2">
       {/* Côté image (ordinateur) */}
-      <aside className="relative hidden overflow-hidden lg:block">
+      <aside className="relative hidden overflow-hidden lg:sticky lg:top-0 lg:block lg:h-screen lg:self-start">
         <img src="/efehy-auth.jpg" alt="E-Fehy" className="absolute inset-0 h-full w-full object-cover" />
         <div className="absolute inset-0 bg-gradient-to-t from-brand-blue-dark/95 via-brand-blue/25 to-transparent" />
         <div className="absolute inset-x-0 bottom-0 p-10 text-white xl:p-14">

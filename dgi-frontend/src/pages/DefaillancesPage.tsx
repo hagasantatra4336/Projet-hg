@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type ChangeEvent, type FormEvent } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import api, { getErrorMessage } from "../services/api";
 import { useAuth } from "../context/AuthContext";
 import {
@@ -141,6 +141,7 @@ export default function DefaillancesPage() {
   const estAgent = role === "agent";
   const canManage = role === "superadmin" || role === "central" || role === "admin";
   const canPickCentre = role === "superadmin" || role === "central";
+  const [searchParams] = useSearchParams();
 
   const [data, setData] = useState<Paginated<GroupeAlerte> | null>(null);
   const [summary, setSummary] = useState<DefaillanceSummary | null>(null);
@@ -156,16 +157,21 @@ export default function DefaillancesPage() {
   const [voirId, setVoirId] = useState<number | null>(null);
   const [voirErreur, setVoirErreur] = useState<string>("");
 
-  const [filters, setFilters] = useState<Filters>({
-    regle: "",
-    niveau: "",
-    type_impot: "",
-    statut: "a_traiter",
-    annee_fiscale: "",
-    annee_min: "",
-    annee_max: "",
-    centre_id: "",
-    age_min: "",
+  const [filters, setFilters] = useState<Filters>(() => {
+    // Lien direct depuis le comparatif des centres : ?centre_id=12
+    const centre = searchParams.get("centre_id") ?? "";
+
+    return {
+      regle: "",
+      niveau: "",
+      type_impot: "",
+      statut: "a_traiter",
+      annee_fiscale: "",
+      annee_min: "",
+      annee_max: "",
+      centre_id: canPickCentre && /^\d+$/.test(centre) ? centre : "",
+      age_min: "",
+    };
   });
   const [searchInput, setSearchInput] = useState<string>("");
   const [filtresOuverts, setFiltresOuverts] = useState<boolean>(false);
