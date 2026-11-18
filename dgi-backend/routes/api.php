@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Api\ActiviteController;
+use App\Http\Controllers\Api\ActivitesAnomaliesController;
 use App\Http\Controllers\Api\AnalyseAutoController;
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\CentreController;
@@ -91,6 +92,8 @@ Route::middleware(['auth:sanctum', RejeterCompteDesactive::class, JournaliserAct
     Route::get('/defaillances', [DefaillanceController::class, 'index']);
     Route::get('/defaillances/export', [DefaillanceController::class, 'export'])->middleware('throttle:20,1,export');
     Route::get('/defaillances/summary', [DefaillanceController::class, 'summary']);
+    Route::get('/defaillances/activites', [ActivitesAnomaliesController::class, 'index'])
+        ->middleware(EnsureRole::class.':superadmin,central,admin');
 
     // Agents proposés dans les filtres des archives (chefs de centre, central, superadmin)
     Route::get('/defaillances/agents', [DefaillanceController::class, 'agents']);

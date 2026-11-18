@@ -15,6 +15,7 @@ import ReglesHistoriquePage from "./pages/Admin/ReglesHistoriquePage";
 import ReglesPersonnaliseesPage from "./pages/Admin/ReglesPersonnaliseesPage";
 import IndicateursPage from "./pages/Admin/IndicateursPage";
 import ActivitesPage from "./pages/Admin/ActivitesPage";
+import ActivitesAnomaliesPage from "./pages/Admin/ActivitesAnomaliesPage";
 import DashboardPage from "./pages/DashboardPage";
 import DefaillancesPage from "./pages/DefaillancesPage";
 import TraitementsPage from "./pages/TraitementsPage";
@@ -98,6 +99,9 @@ export default function App() {
                 <Route path="indicateurs" element={<IndicateursPage />} />
                 {/* Journal d'activités du système : central et superadmin */}
                 <Route path="activites" element={<ActivitesPage />} />
+              </Route>
+              <Route element={<ProtectedRoute roles={["superadmin", "central", "admin"]} />}>
+                <Route path="activites-anomalies" element={<ActivitesAnomaliesPage />} />
               </Route>
               <Route element={<ProtectedRoute roles={["superadmin"]} />}>
                 <Route path="fonctions" element={<FonctionsPage />} />

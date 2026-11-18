@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type ChangeEvent, type FormEvent } from "react";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import api, { getErrorMessage } from "../services/api";
 import { useAuth } from "../context/AuthContext";
 import {
@@ -29,10 +29,11 @@ import {
 } from "../components/ui";
 import {
   IconChevron,
+  IconClock,
   IconDownload,
+  IconEdit,
   IconEye,
   IconFile,
-  IconPlay,
   IconRefresh,
   IconSearch,
   IconSliders,
@@ -634,6 +635,11 @@ export default function DefaillancesPage() {
         </div>
 
         <div className="flex flex-wrap gap-2">
+          {canManage && (
+            <Link to="/admin/activites-anomalies" className={`${secondaryButtonClass} inline-flex items-center gap-2`}>
+              <IconClock className="h-4 w-4" /> Suivi des activités
+            </Link>
+          )}
           <button
             type="button"
             className={`${secondaryButtonClass} inline-flex items-center gap-2`}
@@ -1077,7 +1083,7 @@ export default function DefaillancesPage() {
                             {priseId === g.representant_id ? (
                               <IconRefresh className="h-4 w-4 animate-spin" />
                             ) : g.statut === "a_traiter" || g.statut === "en_traitement" ? (
-                              <IconPlay className="h-4 w-4" />
+                              <IconEdit className="h-4 w-4" />
                             ) : (
                               <IconFile className="h-4 w-4" />
                             )}

@@ -261,6 +261,26 @@ export interface ActionDossier {
   le: string | null;
 }
 
+/** Une action du journal global des anomalies, avec le dossier et son centre. */
+export interface ActiviteAnomalie {
+  id: number;
+  alerte_id: number | null;
+  action: ActionDossierType;
+  action_libelle: string;
+  auteur: string;
+  detail: string | null;
+  statut_avant: StatutAlerte;
+  statut_avant_libelle: string;
+  statut_apres: StatutAlerte;
+  statut_apres_libelle: string;
+  cree_le: string | null;
+  contribuable: { id: number | null; nom: string | null; nif: string | null; centre: string | null };
+}
+
+export interface JournalActivitesAnomalies extends Paginated<ActiviteAnomalie> {
+  actions: { value: ActionDossierType; label: string }[];
+}
+
 // ---- Tableau de bord ----
 
 /** Répartition mensuelle des anomalies, par exercice. */

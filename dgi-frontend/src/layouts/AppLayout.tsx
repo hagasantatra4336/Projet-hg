@@ -12,6 +12,7 @@ import {
   IconChevron,
   IconChevronDown,
   IconChevronUp,
+  IconClock,
   IconClose,
   IconDashboard,
   IconLogout,
@@ -36,6 +37,7 @@ const ADMIN_ITEMS: SubItem[] = [
   { to: "/admin/demandes", label: "Demandes d'inscription", icon: <IconUserPlus className="h-4 w-4" />, roles: ["superadmin", "central", "admin"] },
   { to: "/admin/centres", label: "Centres", icon: <IconBuilding className="h-4 w-4" />, roles: ["superadmin", "central"] },
   { to: "/admin/regles", label: "Règles de détection", icon: <IconSliders className="h-4 w-4" />, roles: ["superadmin", "central"] },
+  { to: "/admin/activites-anomalies", label: "Activités des anomalies", icon: <IconClock className="h-4 w-4" />, roles: ["superadmin", "central", "admin"] },
   { to: "/admin/fonctions", label: "Fonctions & rôles", icon: <IconBriefcase className="h-4 w-4" />, roles: ["superadmin"] },
 ];
 

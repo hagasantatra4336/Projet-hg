@@ -680,7 +680,7 @@ export default function DashboardPage() {
 
       <ErrorBox message={error} />
 
-      {(role === "central" || role === "superadmin") && (
+    {/* {(role === "central" || role === "superadmin") && (
         <Link
           to="/statistiques/centres"
           className="dash-rise flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-line bg-white px-4 py-3 transition hover:border-brand-azure"
@@ -691,7 +691,7 @@ export default function DashboardPage() {
           </div>
           <span className="text-sm font-medium text-brand-azure">Ouvrir</span>
         </Link>
-      )}
+      )}*/}
 
       {!canUsers ? (
         // Agent : ses dossiers assignés + le suivi personnel du tableau de bord.
