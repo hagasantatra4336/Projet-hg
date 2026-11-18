@@ -40,6 +40,7 @@ class IndicateurController extends Controller
                 'utilise' => in_array($i->code, $utilises, true),
             ])->values(),
             'colonnes_disponibles' => $this->colonnesNumeriques(),
+            'impots_disponibles' => array_values((array) config('anomalies.defaillance.impots')),
         ]);
     }
 
@@ -61,6 +62,16 @@ class IndicateurController extends Controller
         }
         if (array_key_exists('actif', $data) && ! $data['actif'] && in_array($indicateur->code, $this->codesUtilises(), true)) {
             throw ValidationException::withMessages(['actif' => 'Cet indicateur est utilisé par une règle personnalisée : modifiez ou supprimez la règle d\'abord.']);
+        }
+        // Changer le code ou la colonne d'un indicateur utilisé modifierait silencieusement
+        // les conditions des règles : on l'interdit tant que la règle existe.
+        if (in_array($indicateur->code, $this->codesUtilises(), true)) {
+            if (array_key_exists('code', $data) && $data['code'] !== $indicateur->code) {
+                throw ValidationException::withMessages(['code' => 'Cet indicateur est utilisé par une règle personnalisée : son code ne peut pas être modifié.']);
+            }
+            if (array_key_exists('colonne', $data) && $data['colonne'] !== $indicateur->colonne) {
+                throw ValidationException::withMessages(['colonne' => 'Cet indicateur est utilisé par une règle personnalisée : sa colonne ne peut pas être modifiée.']);
+            }
         }
 
         $indicateur->update($data);

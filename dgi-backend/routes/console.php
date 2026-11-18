@@ -15,3 +15,8 @@ Artisan::command('inspire', function () {
 // Purge quotidienne des jetons Sanctum expirés ou inutilisés depuis plus de 24 h : sans elle,
 // personal_access_tokens grossirait indéfiniment (un jeton créé à chaque connexion).
 Schedule::command('sanctum:prune-expired --hours=24')->daily();
+
+// Code d'approbation valable 24 h : rappel une heure avant l'expiration, puis clôture des
+// demandes dont le code a expiré sans être saisi (l'agent doit déposer une nouvelle demande).
+Schedule::command('dgi:rappeler-otp-approbation')->everyFiveMinutes()->withoutOverlapping();
+Schedule::command('dgi:expirer-otp-approbation')->everyFiveMinutes()->withoutOverlapping();

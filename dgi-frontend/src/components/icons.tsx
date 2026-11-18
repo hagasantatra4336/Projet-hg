@@ -208,6 +208,13 @@ export const IconCheck = (p: IconProps) => (
   </Svg>
 );
 
+/** Triangle « lecture » : lancer ou reprendre un traitement. */
+export const IconPlay = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M7 4.5v15l13-7.5-13-7.5z" />
+  </Svg>
+);
+
 export const IconPlus = (p: IconProps) => (
   <Svg {...p}>
     <path d="M12 5v14M5 12h14" />

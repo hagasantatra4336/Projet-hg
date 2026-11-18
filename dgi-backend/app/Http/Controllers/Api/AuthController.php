@@ -5,12 +5,14 @@ namespace App\Http\Controllers\Api;
 use App\Enums\Role;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\UserResource;
+use App\Models\Activite;
 use App\Models\Centre;
 use App\Models\DemandeInscription;
 use App\Models\Fonction;
 use App\Models\User;
 use App\Notifications\DemandeInscriptionNotification;
 use App\Services\ControleAffectationSource;
+use App\Services\JournalActivite;
 use App\Services\OtpMailer;
 use App\Services\OtpService;
 use App\Services\SessionsAppareils;
@@ -18,6 +20,7 @@ use App\Support\FrontendUrl;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Log;
@@ -33,7 +36,7 @@ use Throwable;
  * Inscription d'un agent en 4 étapes :
  *   1. infos → une DEMANDE est créée en base et l'approbateur est prévenu (aucun code encore) ;
  *   2. l'approbateur approuve (ou refuse) depuis « Demandes d'inscription » ;
- *   3. si approuvée, un code OTP valable 5 minutes est envoyé → l'agent le saisit ;
+ *   3. si approuvée, un code OTP valable 24 heures est envoyé → l'agent le saisit ;
  *   4. l'agent choisit son mot de passe : le compte est créé.
  *
  * L'approbateur dépend de la FONCTION demandée, selon la hiérarchie agent → chef de centre → central → superadmin :
@@ -45,6 +48,7 @@ use Throwable;
 class AuthController extends Controller
 {
     private const SETUP_TTL_MINUTES = 30;
+
     private const DEMANDE_TTL_DAYS = 7;
 
     public function __construct(
@@ -52,8 +56,8 @@ class AuthController extends Controller
         private readonly OtpMailer $mailer,
         private readonly SessionsAppareils $sessions,
         private readonly ControleAffectationSource $affectations,
-    ) {
-    }
+        private readonly JournalActivite $journal,
+    ) {}
 
     /** Étape 1 : crée la demande d'inscription et prévient l'approbateur (selon la fonction). */
     public function register(Request $request): JsonResponse
@@ -247,7 +251,7 @@ class AuthController extends Controller
             'disponible' => $disponible,
             'message' => $disponible
                 ? 'IM disponible.'
-                : "Cet IM est déjà utilisé ou associé à une demande en cours.",
+                : 'Cet IM est déjà utilisé ou associé à une demande en cours.',
         ]);
     }
 
@@ -303,7 +307,19 @@ class AuthController extends Controller
 
         $demande = DemandeInscription::where('request_id', $data['request_id'])->first();
 
-        if ($demande === null || $demande->statutEffectif() !== DemandeInscription::APPROUVEE) {
+        if ($demande === null) {
+            return response()->json([
+                'message' => "Votre demande n'est pas encore approuvée.",
+            ], 422);
+        }
+
+        if ($demande->statutEffectif() === DemandeInscription::EXPIREE) {
+            return response()->json([
+                'message' => "Votre code a expiré et la demande est clôturée. Déposez une nouvelle demande d'inscription.",
+            ], 422);
+        }
+
+        if ($demande->statutEffectif() !== DemandeInscription::APPROUVEE) {
             return response()->json([
                 'message' => "Votre demande n'est pas encore approuvée.",
             ], 422);
@@ -337,26 +353,29 @@ class AuthController extends Controller
                 'approbation'
             );
         } catch (Throwable $e) {
-            Log::error('Renvoi OTP inscription impossible : ' . $e->getMessage());
+            Log::error('Renvoi OTP inscription impossible : '.$e->getMessage());
 
             return response()->json([
                 'message' => "Impossible d'envoyer l'e-mail pour le moment. Réessayez dans un instant.",
             ], 502);
         }
 
-        // Un nouveau code remplace l'ancien ; une vérification déjà faite est annulée.
+        // Un nouveau code remplace l'ancien ; une vérification déjà faite est annulée,
+        // et le rappel repart pour ce nouveau code.
         $demande->update([
             'otp_hash' => $this->otp->hacher($demande->email, $code),
             'otp_expires_at' => now()->addMinutes(OtpService::TTL_INSCRIPTION_MINUTES),
             'otp_attempts' => 0,
             'otp_renvois' => $demande->otp_renvois + 1,
             'otp_envoye_le' => now(),
+            'rappel_otp_envoye_le' => null,
             'setup_hash' => null,
             'setup_expires_at' => null,
         ]);
 
         $payload = [
-            'message' => 'Un nouveau code a été envoyé. Il est valable 5 minutes.',
+            'message' => 'Un nouveau code a été envoyé. Il est valable '
+                .OtpService::dureeLisible(OtpService::TTL_INSCRIPTION_MINUTES).'.',
             'otp_expires_at' => $demande->otp_expires_at?->toIso8601String(),
         ];
 
@@ -376,10 +395,10 @@ class AuthController extends Controller
         ]);
 
         // Même principe que pour la connexion : le compteur survit aux renvois de code.
-        $cleEchecs = 'otp-echecs:signup:' . sha1($data['request_id']);
+        $cleEchecs = 'otp-echecs:signup:'.sha1($data['request_id']);
         if (RateLimiter::tooManyAttempts($cleEchecs, 10)) {
             return response()->json([
-                'message' => 'Trop de tentatives. Réessayez dans ' . RateLimiter::availableIn($cleEchecs) . ' secondes.',
+                'message' => 'Trop de tentatives. Réessayez dans '.RateLimiter::availableIn($cleEchecs).' secondes.',
             ], 429);
         }
 
@@ -474,7 +493,7 @@ class AuthController extends Controller
             'adresse' => $demande->adresse,
             'centre_id' => $demande->centre_id,
             'fonction_id' => $demande->fonction_id,
-            'password' => $data['password'], 
+            'password' => $data['password'],
             'email_verified_at' => now(),
         ]);
 
@@ -487,6 +506,15 @@ class AuthController extends Controller
         // Le centre choisi à l'inscription peut déjà avoir changé dans la base du personnel.
         $this->affectations->synchroniser($user);
         $user->refresh();
+
+        $this->journal->enregistrer(
+            $request,
+            'creation_compte',
+            Activite::CATEGORIE_CONNEXION,
+            'Création de compte après inscription',
+            null,
+            $user,
+        );
 
         return response()->json([
             'message' => 'Compte créé avec succès.',
@@ -535,10 +563,10 @@ class AuthController extends Controller
 
         // Limitation par COMPTE, en plus du throttle par IP de la route : des tentatives réparties
         // sur plusieurs adresses (ou derrière un proxy) ne contournent plus le compteur.
-        $cleEchecs = 'login-echecs:' . sha1(Str::lower($data['email']));
+        $cleEchecs = 'login-echecs:'.sha1(Str::lower($data['email']));
         if (RateLimiter::tooManyAttempts($cleEchecs, 5)) {
             return response()->json([
-                'message' => 'Trop de tentatives pour ce compte. Réessayez dans ' . RateLimiter::availableIn($cleEchecs) . ' secondes.',
+                'message' => 'Trop de tentatives pour ce compte. Réessayez dans '.RateLimiter::availableIn($cleEchecs).' secondes.',
             ], 429);
         }
 
@@ -569,10 +597,10 @@ class AuthController extends Controller
 
         // Compteur cumulé sur 15 minutes, volontairement NON remis à zéro par « Renvoyer le code » :
         // sinon un cycle renvoi/tentatives illimité annulerait l'effet de MAX_TENTATIVES (5 essais par code).
-        $cleEchecs = 'otp-echecs:login:' . sha1(Str::lower($data['email']));
+        $cleEchecs = 'otp-echecs:login:'.sha1(Str::lower($data['email']));
         if (RateLimiter::tooManyAttempts($cleEchecs, 10)) {
             return response()->json([
-                'message' => 'Trop de tentatives. Veuillez vous reconnecter dans ' . RateLimiter::availableIn($cleEchecs) . ' secondes.',
+                'message' => 'Trop de tentatives. Veuillez vous reconnecter dans '.RateLimiter::availableIn($cleEchecs).' secondes.',
             ], 429);
         }
 
@@ -616,8 +644,19 @@ class AuthController extends Controller
         $this->affectations->synchroniser($user);
         $user->refresh();
 
+        $token = $this->sessions->ouvrir($user, $request);
+
+        $this->journal->enregistrer(
+            $request,
+            'connexion',
+            Activite::CATEGORIE_CONNEXION,
+            'Connexion au système',
+            null,
+            $user,
+        );
+
         return response()->json([
-            'token' => $this->sessions->ouvrir($user, $request),
+            'token' => $token,
             'user' => $this->userPayload($user),
         ]);
     }
@@ -647,7 +686,18 @@ class AuthController extends Controller
 
     public function logout(Request $request): JsonResponse
     {
-        $request->user()->currentAccessToken()->delete();
+        $user = $request->user();
+
+        $this->journal->enregistrer(
+            $request,
+            'deconnexion',
+            Activite::CATEGORIE_CONNEXION,
+            'Déconnexion du système',
+            null,
+            $user,
+        );
+
+        $user->currentAccessToken()->delete();
 
         return response()->json(['message' => 'Déconnecté.']);
     }
@@ -700,7 +750,7 @@ class AuthController extends Controller
      *   chef de centre → central (sinon superadmin) ;
      *   central → superadmin.
      *
-     * @return array{users: \Illuminate\Support\Collection<int, User>, niveau: string}
+     * @return array{users: Collection<int, User>, niveau: string}
      */
     private function approbateurs(int $centreId, Role $roleDemandee): array
     {
@@ -729,7 +779,7 @@ class AuthController extends Controller
         ];
     }
 
-    /** @return array{users: \Illuminate\Support\Collection<int, User>, niveau: string} */
+    /** @return array{users: Collection<int, User>, niveau: string} */
     private function approbateursCentraux(): array
     {
         $centraux = User::query()
@@ -751,7 +801,7 @@ class AuthController extends Controller
     /** E-mail aux approbateurs : après la réponse, pour ne pas ralentir l'inscription. */
     private function notifierApprobateurs(DemandeInscription $demande, iterable $approbateurs, Request $request): void
     {
-        $url = FrontendUrl::base($request) . '/admin/demandes';
+        $url = FrontendUrl::base($request).'/admin/demandes';
 
         app()->terminating(function () use ($demande, $approbateurs, $url): void {
             foreach ($approbateurs as $approbateur) {
@@ -759,7 +809,7 @@ class AuthController extends Controller
                     Notification::route('mail', $approbateur->email)
                         ->notify(new DemandeInscriptionNotification($demande, $url));
                 } catch (Throwable $e) {
-                    Log::warning("Notification du chef de centre {$approbateur->email} impossible : " . $e->getMessage());
+                    Log::warning("Notification du chef de centre {$approbateur->email} impossible : ".$e->getMessage());
                 }
             }
         });
@@ -873,7 +923,7 @@ class AuthController extends Controller
 
     public static function cleConnexion(string $email): string
     {
-        return 'login:' . sha1(Str::lower($email));
+        return 'login:'.sha1(Str::lower($email));
     }
 
     private function userPayload(User $user): array

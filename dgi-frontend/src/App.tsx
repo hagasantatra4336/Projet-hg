@@ -13,6 +13,8 @@ import FonctionsPage from "./pages/Admin/FonctionsPage";
 import ReglesPage from "./pages/Admin/ReglesPage";
 import ReglesHistoriquePage from "./pages/Admin/ReglesHistoriquePage";
 import ReglesPersonnaliseesPage from "./pages/Admin/ReglesPersonnaliseesPage";
+import IndicateursPage from "./pages/Admin/IndicateursPage";
+import ActivitesPage from "./pages/Admin/ActivitesPage";
 import DashboardPage from "./pages/DashboardPage";
 import DefaillancesPage from "./pages/DefaillancesPage";
 import TraitementsPage from "./pages/TraitementsPage";
@@ -92,6 +94,10 @@ export default function App() {
                 <Route path="regles" element={<ReglesPage />} />
                 <Route path="regles/historique" element={<ReglesHistoriquePage />} />
                 <Route path="regles-personnalisees" element={<ReglesPersonnaliseesPage />} />
+                {/* Catalogue des indicateurs lus dans les déclarations (liste, ajout, modification) */}
+                <Route path="indicateurs" element={<IndicateursPage />} />
+                {/* Journal d'activités du système : central et superadmin */}
+                <Route path="activites" element={<ActivitesPage />} />
               </Route>
               <Route element={<ProtectedRoute roles={["superadmin"]} />}>
                 <Route path="fonctions" element={<FonctionsPage />} />

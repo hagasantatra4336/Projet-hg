@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useMemo, useState, type FormEvent, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import api, { getErrorMessage } from "../../services/api";
 import type { GroupeConditions, ModeleRegle, OptionsReglesPerso, ReglePerso, ResultatSimulation } from "../../typesReglesPerso";
@@ -15,7 +15,6 @@ import {
 } from "../../components/ui";
 import { formatDateHeure } from "../../components/defaillance";
 import ConditionsEditor, { compter, decrire } from "./reglesPerso/ConditionsEditor";
-import IndicateursSection from "./reglesPerso/IndicateursSection";
 
 type Valeurs = Record<string, string | number>;
 
@@ -25,27 +24,40 @@ const badge: Record<string, string> = {
   desactivee: "bg-brand-gold-soft text-brand-gold-dark ring-1 ring-inset ring-brand-gold/30",
 };
 
+const normalize = (value: string): string =>
+  value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+
 function ImpotsChoix({ options, choisis, onChange }: { options: string[]; choisis: string[]; onChange: (v: string[]) => void }) {
   return (
-    <div className="flex flex-wrap gap-3">
-      {options.map((impot) => (
-        <label key={impot} className="flex items-center gap-2 text-sm text-slate-700">
-          <input
-            type="checkbox"
-            className="h-4 w-4 accent-brand-blue"
-            checked={choisis.includes(impot)}
-            onChange={(e) => onChange(e.target.checked ? [...choisis, impot] : choisis.filter((i) => i !== impot))}
-          />
-          {impot}
-        </label>
-      ))}
+    <div className="flex flex-wrap gap-2">
+      {options.map((impot) => {
+        const coche = choisis.includes(impot);
+        return (
+          <label
+            key={impot}
+            className={`flex cursor-pointer items-center gap-2 rounded-lg border px-3 py-1.5 text-sm transition ${
+              coche
+                ? "border-brand-azure bg-brand-azure-soft font-medium text-brand-azure ring-1 ring-inset ring-brand-azure/20"
+                : "border-line text-slate-600 hover:border-brand-azure/40 hover:bg-slate-50"
+            }`}
+          >
+            <input
+              type="checkbox"
+              className="h-4 w-4 accent-brand-blue"
+              checked={coche}
+              onChange={(e) => onChange(e.target.checked ? [...choisis, impot] : choisis.filter((i) => i !== impot))}
+            />
+            {impot}
+          </label>
+        );
+      })}
     </div>
   );
 }
 
 // ---------------------------------------------------------------- création
 
-function NouvelleRegle({ options, onCree }: { options: OptionsReglesPerso; onCree: (r: ReglePerso) => void }) {
+function NouvelleRegle({ options, onCree, onFermer }: { options: OptionsReglesPerso; onCree: (r: ReglePerso) => void; onFermer: () => void }) {
   const [modele, setModele] = useState<ModeleRegle>(options.modeles[0]);
   const [nom, setNom] = useState<string>("");
   const [valeurs, setValeurs] = useState<Valeurs>({});
@@ -72,7 +84,7 @@ function NouvelleRegle({ options, onCree }: { options: OptionsReglesPerso; onCre
     try {
       const res = await api.post<ReglePerso>("/regles-personnalisees", { modele: modele.code, nom, parametres: valeurs, impots, niveau });
       onCree(res.data);
-      setNom("");
+      onFermer();
     } catch (err) {
       setError(getErrorMessage(err, "Création impossible."));
     } finally {
@@ -81,14 +93,29 @@ function NouvelleRegle({ options, onCree }: { options: OptionsReglesPerso; onCre
   }
 
   return (
-    <section className="rounded-xl bg-white p-5 border border-line sm:p-6">
-      <h2 className="flex items-center gap-2 text-lg font-semibold text-brand-blue">
-        <span className="h-4 w-1 rounded-full bg-brand-gold" />
-        Nouvelle règle à partir d'un modèle
-      </h2>
-      <p className="mt-1 text-sm text-slate-600">La règle est créée en brouillon : elle ne produit aucune alerte tant qu'elle n'est pas simulée puis activée. Vous pourrez ensuite modifier ses conditions.</p>
+    <section className="rounded-xl border border-line bg-white">
+      <div className="flex items-start justify-between gap-3 border-b border-line px-5 py-4 sm:px-6">
+        <div className="min-w-0">
+          <h2 className="flex items-center gap-2 text-lg font-semibold text-brand-blue">
+            <span className="h-4 w-1 rounded-full bg-brand-gold" />
+            Nouvelle règle à partir d'un modèle
+          </h2>
+          <p className="mt-1 max-w-3xl text-sm text-slate-600">
+            La règle est créée en brouillon : elle ne produit aucune alerte tant qu'elle n'est pas
+            simulée puis activée. Vous pourrez ensuite modifier ses conditions.
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={onFermer}
+          aria-label="Fermer la création"
+          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-xl leading-none text-slate-400 transition hover:bg-slate-100 hover:text-slate-700 focus:outline-none focus:ring-2 focus:ring-brand-azure"
+        >
+          ×
+        </button>
+      </div>
 
-      <form onSubmit={creer} className="mt-5 space-y-4">
+      <form onSubmit={creer} className="space-y-5 px-5 py-5 sm:px-6">
         <FormGrid>
           <Field label="Modèle" required className="sm:col-span-2" hint={modele.description}>
             <select className={inputClass} value={modele.code} onChange={(e) => setModele(options.modeles.find((m) => m.code === e.target.value) ?? options.modeles[0])}>
@@ -154,11 +181,11 @@ function NouvelleRegle({ options, onCree }: { options: OptionsReglesPerso; onCre
           })}
 
           <div className="sm:col-span-2">
-            <span className="mb-1 block text-sm font-medium text-slate-700">
+            <span className="mb-1.5 block text-sm font-medium text-slate-700">
               Impôts contrôlés <span className="text-red-600" aria-hidden="true">*</span>
             </span>
             <ImpotsChoix options={options.impots} choisis={impots} onChange={setImpots} />
-            <span className="mt-1 block text-xs text-slate-500">Au moins un impôt : la règle ne s'applique qu'aux déclarations de ces impôts.</span>
+            <span className="mt-1.5 block text-xs text-slate-500">Au moins un impôt : la règle ne s'applique qu'aux déclarations de ces impôts.</span>
           </div>
 
           <Field label="Niveau de risque des alertes" hint="Niveau attribué aux alertes produites par cette règle.">
@@ -175,6 +202,9 @@ function NouvelleRegle({ options, onCree }: { options: OptionsReglesPerso; onCre
         <ErrorBox message={error} />
 
         <FormActions>
+          <button type="button" className={secondaryButtonClass} onClick={onFermer}>
+            Annuler
+          </button>
           <button type="submit" className={primaryButtonClass} disabled={saving || impots.length === 0}>
             {saving ? "Création..." : "Créer le brouillon"}
           </button>
@@ -227,6 +257,16 @@ function Simulation({ r }: { r: ReglePerso }) {
   );
 }
 
+/** Métadonnée de la carte : libellé discret au-dessus de la valeur. */
+function Metadonnee({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <div>
+      <dt className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">{label}</dt>
+      <dd className="mt-0.5 text-slate-700">{children}</dd>
+    </div>
+  );
+}
+
 // ---------------------------------------------------------------- carte d'une règle
 
 function RegleCard({ regle, options, onChange, onSupprimee }: { regle: ReglePerso; options: OptionsReglesPerso; onChange: (r: ReglePerso) => void; onSupprimee: (id: number) => void }) {
@@ -240,6 +280,7 @@ function RegleCard({ regle, options, onChange, onSupprimee }: { regle: ReglePers
   const [error, setError] = useState<string>("");
   const [message, setMessage] = useState<string>("");
   const [aConfirmer, setAConfirmer] = useState<"desactiver" | "supprimer" | null>(null);
+  const [detailsOuverts, setDetailsOuverts] = useState<boolean>(false);
 
   useEffect(() => {
     setNom(regle.nom);
@@ -257,6 +298,13 @@ function RegleCard({ regle, options, onChange, onSupprimee }: { regle: ReglePers
       const r = await requete();
       if (r) onChange(r);
       setMessage(ok);
+
+      // Le détail (simulation et historique) n'est pas renvoyé par les actions : on le
+      // recharge si le panneau est ouvert, pour ne pas afficher de données périmées.
+      if (detailsOuverts && nomAction !== "detail") {
+        const detail = await api.get<ReglePerso>(`/regles-personnalisees/${regle.id}`);
+        onChange(detail.data);
+      }
       return true;
     } catch (err) {
       setError(getErrorMessage(err, "Opération impossible."));
@@ -300,32 +348,53 @@ function RegleCard({ regle, options, onChange, onSupprimee }: { regle: ReglePers
 
   const modifiable = regle.statut !== "active";
   const peutSupprimer = modifiable && regle.nb_alertes === 0;
+  const derniere = regle.derniere_simulation;
 
   return (
-    <section className="rounded-xl bg-white p-5 border border-line sm:p-6">
-      <div className="flex flex-wrap items-start justify-between gap-3">
+    <section className="overflow-hidden rounded-xl border border-line bg-white">
+      <div className="flex flex-wrap items-start justify-between gap-3 border-b border-line px-5 py-4 sm:px-6">
         <div className="min-w-0 flex-1">
           <h3 className="flex items-center gap-2 text-lg font-semibold text-brand-blue">
             <span className="h-4 w-1 rounded-full bg-brand-gold" />
             {regle.nom}
           </h3>
           <p className="mt-1 text-sm text-slate-600">{decrire(regle.conditions, options.indicateurs)}</p>
-          <p className="mt-1 text-xs text-slate-500">
-            {regle.impots.join(", ")} · risque {NIVEAU_REGLE_LABELS[regle.niveau] ?? regle.niveau} · version {regle.version} · {regle.nb_alertes} alerte{regle.nb_alertes > 1 ? "s" : ""} produite{regle.nb_alertes > 1 ? "s" : ""}
-            {regle.modifie_par && regle.modifie_le ? ` · modifiée par ${regle.modifie_par} le ${formatDateHeure(regle.modifie_le)}` : ""}
-          </p>
         </div>
         <span className={`inline-flex items-center rounded-md px-2 py-0.5 text-[11px] font-semibold leading-5 ${badge[regle.statut]}`}>{STATUT_REGLE_LABELS[regle.statut]}</span>
       </div>
 
+      <dl className="grid gap-x-6 gap-y-4 px-5 py-4 text-sm sm:grid-cols-2 sm:px-6 lg:grid-cols-4">
+        <Metadonnee label="Impôts contrôlés">{regle.impots.join(", ") || "Tous"}</Metadonnee>
+        <Metadonnee label="Niveau de risque">{NIVEAU_REGLE_LABELS[regle.niveau] ?? regle.niveau}</Metadonnee>
+        <Metadonnee label="Version">
+          v{regle.version}
+          <span className="block text-xs text-slate-500">
+            {derniere ? `Simulée le ${derniere.date ? formatDateHeure(derniere.date) : "—"}` : "Jamais simulée"}
+            {derniere && !derniere.a_jour ? " — à refaire" : ""}
+          </span>
+        </Metadonnee>
+        <Metadonnee label="Alertes produites">
+          {regle.nb_alertes}
+          <span className="block text-xs text-slate-500">
+            {regle.nb_alertes === 1 ? "alerte existante" : "alertes existantes"}
+          </span>
+        </Metadonnee>
+      </dl>
+
+      <p className="border-t border-line/70 px-5 py-3 text-xs text-slate-500 sm:px-6">
+        {compter(regle.conditions)} condition{compter(regle.conditions) > 1 ? "s" : ""} · {regle.fenetre_annees === 0 ? "année en cours seulement" : `${regle.fenetre_annees} exercice(s) en plus de l'année en cours`}
+        {regle.cree_par ? ` · créée par ${regle.cree_par}` : ""}
+        {regle.modifie_par && regle.modifie_le ? ` · modifiée par ${regle.modifie_par} le ${formatDateHeure(regle.modifie_le)}` : ""}
+      </p>
+
       {edition && (
-        <form onSubmit={enregistrer} className="mt-5 space-y-4">
+        <form onSubmit={enregistrer} className="space-y-4 border-t border-line bg-slate-50/40 px-5 py-5 sm:px-6">
           <Field label="Nom" required>
             <input className={inputClass} value={nom} onChange={(e) => setNom(e.target.value)} required maxLength={150} />
           </Field>
           <ConditionsEditor groupe={conditions} options={options} onChange={setConditions} total={compter(conditions)} />
           <div>
-            <span className="mb-1 block text-sm font-medium text-slate-700">Impôts contrôlés</span>
+            <span className="mb-1.5 block text-sm font-medium text-slate-700">Impôts contrôlés</span>
             <ImpotsChoix options={options.impots} choisis={impots} onChange={setImpots} />
           </div>
           <div className="grid gap-4 md:grid-cols-2">
@@ -353,37 +422,48 @@ function RegleCard({ regle, options, onChange, onSupprimee }: { regle: ReglePers
         </form>
       )}
 
-      <div className="mt-4">
-        <ErrorBox message={error} />
-        {message && <p className="mb-3 rounded-lg border border-brand-green/25 bg-brand-green-soft px-3 py-2 text-sm text-brand-green">{message}</p>}
-      </div>
+      {(error || message) && (
+        <div className="border-t border-line px-5 py-4 sm:px-6">
+          <ErrorBox message={error} />
+          {message && <p className="rounded-lg border border-brand-green/25 bg-brand-green-soft px-3 py-2 text-sm text-brand-green">{message}</p>}
+        </div>
+      )}
 
-      <div className="flex flex-wrap justify-end gap-3">
-        {modifiable && !edition && (
-          <button type="button" className={secondaryButtonClass} onClick={() => setEdition(true)}>
-            Modifier
+      {!edition && (
+        <div className="flex flex-wrap items-center justify-end gap-2 border-t border-line bg-slate-50/60 px-5 py-3 sm:px-6">
+          {modifiable && (
+            <button type="button" className={secondaryButtonClass} onClick={() => setEdition(true)}>
+              Modifier
+            </button>
+          )}
+          {peutSupprimer && (
+            <button type="button" className={secondaryButtonClass} onClick={() => setAConfirmer("supprimer")} disabled={busy !== ""}>
+              Supprimer
+            </button>
+          )}
+          <button type="button" className={secondaryButtonClass} onClick={simuler} disabled={busy !== ""}>
+            {busy === "simuler" ? "Simulation..." : "Simuler"}
           </button>
-        )}
-        {peutSupprimer && (
-          <button type="button" className={secondaryButtonClass} onClick={() => setAConfirmer("supprimer")} disabled={busy !== ""}>
-            Supprimer
-          </button>
-        )}
-        <button type="button" className={secondaryButtonClass} onClick={simuler} disabled={busy !== ""}>
-          {busy === "simuler" ? "Simulation..." : "Simuler"}
-        </button>
-        {regle.statut === "active" ? (
-          <button type="button" className={secondaryButtonClass} onClick={() => setAConfirmer("desactiver")} disabled={busy !== ""}>
-            Désactiver
-          </button>
-        ) : (
-          <button type="button" className={primaryButtonClass} onClick={activer} disabled={busy !== "" || !regle.simulation_valide} title={regle.simulation_valide ? "" : "Simulez d'abord la règle dans sa version actuelle"}>
-            Activer
-          </button>
-        )}
-      </div>
+          {regle.statut === "active" ? (
+            <button type="button" className={secondaryButtonClass} onClick={() => setAConfirmer("desactiver")} disabled={busy !== ""}>
+              Désactiver
+            </button>
+          ) : (
+            <button type="button" className={primaryButtonClass} onClick={activer} disabled={busy !== "" || !regle.simulation_valide} title={regle.simulation_valide ? "" : "Simulez d'abord la règle dans sa version actuelle"}>
+              Activer
+            </button>
+          )}
+        </div>
+      )}
 
-      <details className="mt-5 border-t border-line pt-4" onToggle={(e) => { if ((e.currentTarget as HTMLDetailsElement).open && !regle.historique) charger(); }}>
+      <details
+        className="border-t border-line px-5 py-4 sm:px-6"
+        onToggle={(e) => {
+          const ouvert = (e.currentTarget as HTMLDetailsElement).open;
+          setDetailsOuverts(ouvert);
+          if (ouvert && !regle.historique) charger();
+        }}
+      >
         <summary className="cursor-pointer text-sm font-medium text-brand-blue">Résultat de simulation et historique</summary>
         <div className="mt-3 space-y-4">
           {regle.historique ? (
@@ -439,6 +519,9 @@ export default function ReglesPersonnaliseesPage() {
   const [options, setOptions] = useState<OptionsReglesPerso | null>(null);
   const [regles, setRegles] = useState<ReglePerso[] | null>(null);
   const [error, setError] = useState<string>("");
+  const [creation, setCreation] = useState<boolean>(false);
+  const [search, setSearch] = useState<string>("");
+  const [statutFilter, setStatutFilter] = useState<"tous" | "brouillon" | "active" | "desactivee">("tous");
 
   const chargerOptions = useCallback(() => {
     api
@@ -455,25 +538,139 @@ export default function ReglesPersonnaliseesPage() {
       .catch((err) => setError(getErrorMessage(err, "Impossible de charger les règles.")));
   }, [chargerOptions]);
 
+  // Les indicateurs vivent sur leur propre page : une règle peut en référencer un
+  // supprimé dans l'intervalle, d'où le rechargement des options à l'ouverture de l'onglet.
+  useEffect(() => {
+    const surFocus = () => chargerOptions();
+    window.addEventListener("focus", surFocus);
+    return () => window.removeEventListener("focus", surFocus);
+  }, [chargerOptions]);
+
+  const filtered = useMemo(() => {
+    const term = normalize(search.trim());
+    return (regles ?? []).filter((r) => {
+      const correspondStatut = statutFilter === "tous" || r.statut === statutFilter;
+      const correspondRecherche = !term || normalize(r.nom).includes(term);
+      return correspondStatut && correspondRecherche;
+    });
+  }, [regles, search, statutFilter]);
+
+  const total = regles?.length ?? 0;
+  const compte = {
+    active: (regles ?? []).filter((r) => r.statut === "active").length,
+    brouillon: (regles ?? []).filter((r) => r.statut === "brouillon").length,
+    desactivee: (regles ?? []).filter((r) => r.statut === "desactivee").length,
+  };
+  const alertes = (regles ?? []).reduce((n, r) => n + r.nb_alertes, 0);
+
   return (
     <div className="space-y-5">
-      <Link to="/admin/regles" className="inline-flex items-center gap-1 text-sm font-medium text-brand-azure underline-offset-4 hover:underline">
-        ← Retour aux règles de détection
-      </Link>
       <p className="max-w-3xl text-sm text-slate-600">
-        Créez vos propres règles à partir d'un modèle, avec des conditions combinables. Une règle suit trois étapes : <strong>brouillon</strong> (aucune alerte),
-        <strong> simulation</strong> (voir ce qu'elle donnerait, sans rien créer), puis <strong>activation</strong>. Modifier une règle la remet en brouillon.
+        Créez vos propres règles à partir d'un modèle, avec des conditions combinables. Une règle suit
+        trois étapes : <strong>brouillon</strong> (aucune alerte), <strong>simulation</strong> (voir ce
+        qu'elle donnerait, sans rien créer), puis <strong>activation</strong>. Modifier une règle la
+        remet en brouillon.
       </p>
+
+      {/* Barre d'outils : recherche, filtre, navigation et création */}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex flex-1 flex-wrap items-center gap-2 sm:flex-nowrap">
+          <input
+            className={`${inputClass} h-10 sm:w-72`}
+            type="search"
+            aria-label="Rechercher une règle personnalisée"
+            placeholder="Rechercher une règle..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
+          <select
+            className={`${inputClass} h-10 sm:w-48`}
+            aria-label="Filtrer par statut"
+            value={statutFilter}
+            onChange={(e) => {
+              const v = e.target.value;
+              if (v === "tous" || v === "brouillon" || v === "active" || v === "desactivee") setStatutFilter(v);
+            }}
+          >
+            <option value="tous">Tous les statuts</option>
+            <option value="active">Actives</option>
+            <option value="brouillon">Brouillons</option>
+            <option value="desactivee">Désactivées</option>
+          </select>
+          <p className="text-sm text-slate-600 sm:ml-1">
+            {filtered.length} règle(s)
+            {(search.trim() || statutFilter !== "tous") && ` sur ${total}`}
+          </p>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <Link to="/admin/regles" className={`${secondaryButtonClass} inline-flex items-center justify-center`}>
+            Règles de détection
+          </Link>
+          <Link to="/admin/indicateurs" className={`${secondaryButtonClass} inline-flex items-center justify-center`}>
+            Indicateurs
+          </Link>
+          <button type="button" className={primaryButtonClass} onClick={() => setCreation((ouvert) => !ouvert)}>
+            {creation ? "Fermer la création" : "+ Nouvelle règle"}
+          </button>
+        </div>
+      </div>
+
+      {/* Repères rapides */}
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="rounded-xl border border-line bg-white px-4 py-3">
+          <p className="text-xs font-medium uppercase tracking-wider text-slate-500">Actives</p>
+          <p className="mt-1 text-2xl font-semibold text-brand-green">{compte.active}</p>
+        </div>
+        <div className="rounded-xl border border-line bg-white px-4 py-3">
+          <p className="text-xs font-medium uppercase tracking-wider text-slate-500">Brouillons</p>
+          <p className="mt-1 text-2xl font-semibold text-slate-700">{compte.brouillon}</p>
+        </div>
+        <div className="rounded-xl border border-line bg-white px-4 py-3">
+          <p className="text-xs font-medium uppercase tracking-wider text-slate-500">Désactivées</p>
+          <p className="mt-1 text-2xl font-semibold text-brand-gold-dark">{compte.desactivee}</p>
+        </div>
+        <div className="rounded-xl border border-line bg-white px-4 py-3">
+          <p className="text-xs font-medium uppercase tracking-wider text-slate-500">Alertes produites</p>
+          <p className="mt-1 text-2xl font-semibold text-brand-blue">{alertes}</p>
+        </div>
+      </div>
 
       <ErrorBox message={error} />
       {!options && !error && <p className="text-sm text-slate-500">Chargement...</p>}
 
       {options && (
         <>
-          <IndicateursSection impots={options.impots} onChange={chargerOptions} />
-          <NouvelleRegle options={options} onCree={(r) => setRegles((l) => [r, ...(l ?? [])])} />
-          {regles?.length === 0 && <p className="text-sm text-slate-500">Aucune règle personnalisée pour l'instant.</p>}
-          {regles?.map((r) => (
+          {creation && (
+            <NouvelleRegle
+              options={options}
+              onCree={(r) => {
+                setRegles((l) => [r, ...(l ?? [])]);
+                // La nouvelle règle est un brouillon : on lève les filtres pour qu'elle soit visible.
+                setStatutFilter("tous");
+                setSearch("");
+              }}
+              onFermer={() => setCreation(false)}
+            />
+          )}
+
+          {!regles && !error && <p className="text-sm text-slate-500">Chargement des règles...</p>}
+          {regles?.length === 0 && (
+            <div className="rounded-xl border border-dashed border-line bg-white px-5 py-8 text-center">
+              <p className="text-sm font-medium text-brand-blue">Aucune règle personnalisée pour l'instant.</p>
+              <p className="mt-1 text-sm text-slate-500">
+                Créez une première règle à partir d'un modèle pour l'adapter à vos contrôles.
+              </p>
+              <button type="button" className={`${primaryButtonClass} mt-4`} onClick={() => setCreation(true)}>
+                + Nouvelle règle
+              </button>
+            </div>
+          )}
+          {regles && regles.length > 0 && filtered.length === 0 && (
+            <p className="rounded-xl border border-line bg-white px-5 py-4 text-sm text-slate-500">
+              Aucune règle ne correspond aux filtres sélectionnés.
+            </p>
+          )}
+          {filtered.map((r) => (
             <RegleCard
               key={r.id}
               regle={r}

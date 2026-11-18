@@ -13,8 +13,11 @@ use Illuminate\Support\Str;
  */
 class OtpService
 {
-    /** Code d'inscription : 5 minutes à partir de l'approbation du chef de centre. */
-    public const TTL_INSCRIPTION_MINUTES = 5;
+    /** Code d'inscription : 24 heures à partir de l'approbation du chef de centre. */
+    public const TTL_INSCRIPTION_MINUTES = 24 * 60;
+
+    /** Rappel envoyé une heure avant l'expiration du code d'approbation. */
+    public const RAPPEL_AVANT_EXPIRATION_MINUTES = 60;
 
     /** Code de connexion : 10 minutes (inchangé). */
     public const TTL_CONNEXION_MINUTES = 10;
@@ -36,5 +39,28 @@ class OtpService
     public function verifier(string $email, string $code, string $hash): bool
     {
         return hash_equals($hash, $this->hacher($email, $code));
+    }
+
+    /**
+     * Durée en français, telle qu'elle doit apparaître dans un e-mail
+     * (« 24 heures », « 10 minutes »). Les gabarits n'ont pas à connaître l'unité.
+     */
+    public static function dureeLisible(int $minutes): string
+    {
+        // Les jours ne sont utilisés qu'à partir de 48 h : « 24 heures » est plus explicite
+        // qu'« 1 jour » pour un code d'activation.
+        if ($minutes >= 2 * 24 * 60 && $minutes % (24 * 60) === 0) {
+            $jours = intdiv($minutes, 24 * 60);
+
+            return $jours . ' jour' . ($jours > 1 ? 's' : '');
+        }
+
+        if ($minutes >= 60 && $minutes % 60 === 0) {
+            $heures = intdiv($minutes, 60);
+
+            return $heures . ' heure' . ($heures > 1 ? 's' : '');
+        }
+
+        return $minutes . ' minute' . ($minutes > 1 ? 's' : '');
     }
 }

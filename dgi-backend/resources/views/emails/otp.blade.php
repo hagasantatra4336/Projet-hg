@@ -32,9 +32,11 @@
         </p>
 
         <p style="margin:0;color:#666666;font-size:13px;">
-            Ce code est valable <strong>{{ $minutes }} minutes</strong>.
+            Ce code est valable <strong>{{ \App\Services\OtpService::dureeLisible($minutes) }}</strong>.
             @if (($contexte ?? 'inscription') === 'connexion')
                 Si vous n'êtes pas à l'origine de cette connexion, ne communiquez ce code à personne et changez votre mot de passe.
+            @elseif (($contexte ?? 'inscription') === 'approbation')
+                Passé ce délai, la demande est clôturée : vous devrez déposer une nouvelle demande d'inscription.
             @else
                 Si vous n'êtes pas à l'origine de cette demande, ignorez simplement cet e-mail.
             @endif

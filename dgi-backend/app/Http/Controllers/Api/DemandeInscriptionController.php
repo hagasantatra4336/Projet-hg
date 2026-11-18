@@ -25,7 +25,8 @@ use Throwable;
  *  - superadmin : voit tout et approuve en dernier ressort (dont les demandes de fonction central).
  *
  * L'approbateur dépend de la fonction demandée (voir AuthController).
- * Approuver envoie immédiatement à l'agent un code OTP valable 5 minutes.
+ * Approuver envoie immédiatement à l'agent un code OTP valable 24 heures ; un rappel part
+ * automatiquement une heure avant l'expiration (dgi:rappeler-otp-approbation).
  * Refuser n'envoie aucun code et bloque la création du compte.
  */
 class DemandeInscriptionController extends Controller
@@ -52,7 +53,13 @@ class DemandeInscriptionController extends Controller
         if ($statut === DemandeInscription::EN_ATTENTE) {
             $query->where('statut', DemandeInscription::EN_ATTENTE)->where('expires_at', '>', now());
         } elseif ($statut === DemandeInscription::EXPIREE) {
-            $query->where('statut', DemandeInscription::EN_ATTENTE)->where('expires_at', '<=', now());
+            // Deux familles : les demandes jamais traitées (7 jours) et celles dont le code
+            // d'approbation n'a pas été saisi dans les 24 heures.
+            $query->where(function ($q): void {
+                $q->where('statut', DemandeInscription::EXPIREE)
+                    ->orWhere(fn ($x) => $x->where('statut', DemandeInscription::EN_ATTENTE)
+                        ->where('expires_at', '<=', now()));
+            });
         } elseif ($statut !== 'tous') {
             $query->where('statut', $statut);
         }
@@ -134,6 +141,7 @@ class DemandeInscriptionController extends Controller
             'otp_attempts' => 0,
             'otp_renvois' => 1,
             'otp_envoye_le' => now(),
+            'rappel_otp_envoye_le' => null,
             'setup_hash' => null,
             'setup_expires_at' => null,
         ]);
@@ -141,7 +149,9 @@ class DemandeInscriptionController extends Controller
         $demande->load(['centre', 'fonction', 'traitePar']);
 
         $payload = [
-            'message' => "Demande approuvée. Un code valable 5 minutes a été envoyé à {$demande->email}.",
+            'message' => 'Demande approuvée. Un code valable '
+                . OtpService::dureeLisible(OtpService::TTL_INSCRIPTION_MINUTES)
+                . " a été envoyé à {$demande->email}.",
             'demande' => $this->payload($demande),
         ];
 

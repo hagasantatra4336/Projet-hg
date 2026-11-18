@@ -51,6 +51,35 @@ export interface AppUser {
   desactive: boolean;
   desactive_le?: string | null;
   motif_desactivation?: string | null;
+  /** Statut calculé côté serveur : jeton Sanctum encore utilisé récemment. */
+  en_ligne?: boolean;
+  derniere_activite_le?: string | null;
+}
+
+/** Une entrée du journal d'activités du système (central et superadmin). */
+export interface Activite {
+  id: number;
+  user_id: number | null;
+  user_nom: string;
+  role: Role | null;
+  categorie: string;
+  categorie_libelle: string;
+  action: string;
+  description: string;
+  cible: string | null;
+  ip: string | null;
+  user_agent: string | null;
+  cree_le: string | null;
+}
+
+export interface JournalActivites extends Paginated<Activite> {
+  categories: { value: string; label: string }[];
+  compteurs: {
+    total: number;
+    aujourdhui: number;
+    connexions: number;
+    utilisateurs: number;
+  };
 }
 
 export interface Paginated<T> {

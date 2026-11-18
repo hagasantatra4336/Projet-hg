@@ -1,0 +1,1595 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>Guide de déploiement — DGI E-Fehy</title>
+<style>
+  @page { size: A4; margin: 17mm 15mm 15mm 15mm; }
+
+  * { box-sizing: border-box; }
+
+  html { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+
+  body {
+    margin: 0;
+    font-family: "Segoe UI", "Calibri", Arial, sans-serif;
+    font-size: 10.2pt;
+    line-height: 1.52;
+    color: #1f2937;
+  }
+
+  /* ---------- Couverture ---------- */
+  .cover { page-break-after: always; }
+
+  .cover-band {
+    background: #1E3A8A;
+    color: #ffffff;
+    padding: 22mm 16mm 18mm 16mm;
+    margin: -17mm -15mm 0 -15mm;
+  }
+
+  .cover-band .eyebrow {
+    font-size: 8.2pt;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: #C7D2FE;
+    margin: 0 0 10mm 0;
+  }
+
+  .cover-band h1 {
+    font-size: 34pt;
+    line-height: 1.05;
+    margin: 0 0 4mm 0;
+    letter-spacing: -0.02em;
+  }
+
+  .cover-band .sub {
+    font-size: 15pt;
+    font-weight: 300;
+    color: #DBEAFE;
+    margin: 0;
+  }
+
+  .cover-band .rule {
+    width: 34mm; height: 1.2mm; background: #C4952B;
+    margin: 9mm 0 6mm 0;
+  }
+
+  .cover-band .tagline {
+    font-size: 10pt; color: #E0E7FF; margin: 0; max-width: 120mm;
+  }
+
+  .cover-meta { margin-top: 14mm; }
+
+  .cover-meta table { width: 100%; border-collapse: collapse; font-size: 9.4pt; }
+  .cover-meta th {
+    text-align: left; width: 42mm; padding: 2.4mm 0;
+    color: #64748B; font-weight: 600; vertical-align: top;
+    border-bottom: 1px solid #E2E7F1;
+  }
+  .cover-meta td {
+    padding: 2.4mm 0; border-bottom: 1px solid #E2E7F1; color: #0f172a;
+  }
+
+  .cover-foot {
+    margin-top: 16mm; padding-top: 4mm; border-top: 1px solid #E2E7F1;
+    font-size: 8.4pt; color: #64748B;
+  }
+
+  /* ---------- Structure ---------- */
+  .part { page-break-before: always; }
+
+  h2 {
+    font-size: 17pt; color: #1E3A8A; margin: 0 0 1.5mm 0;
+    letter-spacing: -0.01em; page-break-after: avoid;
+  }
+
+  h2 .num {
+    display: inline-block; min-width: 12mm;
+    color: #C4952B;
+  }
+
+  .part-intro {
+    font-size: 9.6pt; color: #475569; margin: 0 0 6mm 0;
+    padding-bottom: 3mm; border-bottom: 2px solid #E2E7F1;
+  }
+
+  h3 {
+    font-size: 12pt; color: #172554; margin: 7mm 0 2mm 0;
+    page-break-after: avoid;
+  }
+
+  h4 {
+    font-size: 10.4pt; color: #1E3A8A; margin: 5mm 0 1.5mm 0;
+    page-break-after: avoid;
+  }
+
+  p { margin: 0 0 2.6mm 0; }
+  ul, ol { margin: 0 0 3mm 0; padding-left: 6mm; }
+  li { margin-bottom: 1.2mm; }
+
+  strong { color: #0f172a; }
+  code {
+    font-family: "Consolas", "Courier New", monospace;
+    font-size: 9pt; background: #EEF2FF; color: #172554;
+    padding: 0.4mm 1.4mm; border-radius: 1.2mm;
+  }
+
+  pre {
+    font-family: "Consolas", "Courier New", monospace;
+    font-size: 8.3pt; line-height: 1.45;
+    background: #F6F8FC; border: 1px solid #E2E7F1;
+    border-left: 1.2mm solid #1E3A8A;
+    border-radius: 1.5mm; padding: 3mm 3.5mm;
+    margin: 1.5mm 0 4mm 0;
+    white-space: pre-wrap; word-break: break-word;
+    color: #172554;
+  }
+
+  pre .c { color: #64748B; }        /* commentaire */
+  pre .p { color: #8A6414; }        /* invite / remarque */
+
+  table {
+    width: 100%; border-collapse: collapse; font-size: 8.9pt;
+    margin: 1.5mm 0 4mm 0; page-break-inside: avoid;
+  }
+  th {
+    background: #EEF2FF; color: #172554; text-align: left;
+    padding: 2mm 2.4mm; border: 1px solid #DBE3F0; font-weight: 600;
+  }
+  td {
+    padding: 1.9mm 2.4mm; border: 1px solid #DBE3F0; vertical-align: top;
+  }
+  td code { font-size: 8.2pt; }
+
+  tr { page-break-inside: avoid; }
+
+  .box {
+    border: 1px solid #E2E7F1; border-radius: 2mm;
+    padding: 3mm 3.5mm; margin: 2mm 0 4mm 0;
+    page-break-inside: avoid; background: #FBFCFE;
+  }
+
+  .callout {
+    border-radius: 2mm; padding: 3mm 3.5mm; margin: 2mm 0 4mm 0;
+    page-break-inside: avoid; font-size: 9.4pt;
+    border: 1px solid; border-left-width: 1.2mm;
+  }
+  .callout .t {
+    display: block; font-weight: 700; font-size: 9pt;
+    text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 1mm;
+  }
+  .info { background: #EFF6FF; border-color: #BFDBFE; border-left-color: #2563EB; }
+  .info .t { color: #1D4ED8; }
+  .warn { background: #FBF3E1; border-color: #F0DCB0; border-left-color: #C4952B; }
+  .warn .t { color: #8A6414; }
+  .danger { background: #FEF2F2; border-color: #FBD5D5; border-left-color: #B91C1C; }
+  .danger .t { color: #991B1B; }
+  .ok { background: #EEF6E7; border-color: #CFE4BE; border-left-color: #4F8437; }
+  .ok .t { color: #3F6B2C; }
+
+  .sommaire { margin-top: 2mm; }
+  .sommaire ol { padding-left: 8mm; }
+  .sommaire li { margin-bottom: 1.8mm; font-size: 10pt; }
+  .sommaire .annexes { margin-top: 4mm; font-size: 9.4pt; color: #475569; }
+
+  .two-col { column-count: 2; column-gap: 8mm; }
+  .two-col ul { margin-top: 0; }
+
+  .small { font-size: 8.8pt; color: #475569; }
+  .nowrap { white-space: nowrap; }
+  .center { text-align: center; }
+
+  .kbd {
+    font-family: "Consolas", monospace; font-size: 8.4pt;
+    border: 1px solid #CBD5E1; border-bottom-width: 2px;
+    border-radius: 1mm; padding: 0.2mm 1.2mm; background: #F8FAFC;
+  }
+
+  .file-tree {
+    font-family: "Consolas", monospace; font-size: 8.4pt;
+    background: #F6F8FC; border: 1px solid #E2E7F1; border-radius: 1.5mm;
+    padding: 3mm 3.5mm; white-space: pre; line-height: 1.55; color: #172554;
+  }
+
+  .checklist { list-style: none; padding-left: 0; }
+  .checklist li { padding-left: 6mm; position: relative; margin-bottom: 1.4mm; }
+  .checklist li::before {
+    content: "☐"; position: absolute; left: 0; color: #1E3A8A; font-size: 10pt;
+  }
+
+  .footer-note {
+    margin-top: 8mm; padding-top: 3mm; border-top: 1px solid #E2E7F1;
+    font-size: 8.4pt; color: #64748B;
+  }
+</style>
+</head>
+<body>
+
+<!-- ================================================================= -->
+<!-- COUVERTURE                                                        -->
+<!-- ================================================================= -->
+<section class="cover">
+  <div class="cover-band">
+    <p class="eyebrow">République de Madagascar · Direction Générale des Impôts</p>
+    <h1>DGI E-Fehy</h1>
+    <p class="sub">Guide de déploiement sur serveur</p>
+    <div class="rule"></div>
+    <p class="tagline">
+      De la récupération du projet sur GitHub jusqu'à la mise en ligne :
+      préparation du serveur, configuration, base de données, build, nginx, sécurité et exploitation.
+    </p>
+  </div>
+
+  <div class="cover-meta">
+    <table>
+      <tr><th>Projet</th><td>DGI E-Fehy — analyse des anomalies déclaratives</td></tr>
+      <tr><th>Dépôt GitHub</th><td><code>https://github.com/hagasantatra4336/Projet-hg.git</code></td></tr>
+      <tr><th>Branche</th><td><code>main</code></td></tr>
+      <tr><th>Composants</th><td><code>dgi-backend</code> (Laravel 13, API) · <code>dgi-frontend</code> (React 18 + Vite 5)</td></tr>
+      <tr><th>Cible</th><td>Ubuntu 24.04 LTS · nginx · PHP 8.3 / 8.4 · PostgreSQL 16</td></tr>
+      <tr><th>Version du guide</th><td>1.3 — 18 novembre 2026</td></tr>
+      <tr><th>Public</th><td>Administrateur système, développeur chargé de la mise en production</td></tr>
+    </table>
+  </div>
+
+  <div class="cover-foot">
+    Ce document décrit une installation complète sur un serveur neuf. Les valeurs d'exemple
+    (<code>dgi.exemple.mg</code>, mots de passe, chemins) sont à remplacer par celles de votre
+    infrastructure. Les secrets ne doivent jamais être commités dans le dépôt.
+  </div>
+</section>
+
+<!-- ================================================================= -->
+<!-- SOMMAIRE                                                          -->
+<!-- ================================================================= -->
+<section>
+  <h2><span class="num">·</span>Sommaire</h2>
+  <p class="part-intro">Onze étapes, dans l'ordre, plus cinq annexes de référence.</p>
+
+  <div class="sommaire">
+    <ol>
+      <li>Comprendre le projet avant de déployer</li>
+      <li>Préparer le serveur (paquets, PHP, Composer, Node, PostgreSQL)</li>
+      <li>Récupérer le code depuis GitHub</li>
+      <li>Configurer et initialiser le backend Laravel</li>
+      <li>Construire le frontend React</li>
+      <li>Mettre en place nginx, PHP-FPM et HTTPS</li>
+      <li>Exploitation courante : tâches planifiées, journaux, sauvegardes</li>
+      <li>Procédure de recette : vérifier que tout fonctionne</li>
+      <li>Mettre à jour une installation existante</li>
+      <li>Dépannage : les pannes les plus fréquentes</li>
+      <li>Durcissement et bonnes pratiques de sécurité</li>
+    </ol>
+
+    <p class="annexes">
+      <strong>Annexes</strong> — A. Variables d'environnement · B. Commandes Artisan utiles ·
+      C. Connexion aux bases sources Oracle · D. Tests automatisés · E. Installation locale pour le développement
+    </p>
+  </div>
+
+  <div class="callout info" style="margin-top:8mm">
+    <span class="t">Trois parcours possibles</span>
+    <strong>Installation complète</strong> : suivez les parties 1 à 8 dans l'ordre.
+    <strong>Remise en service d'un serveur existant</strong> : parties 4, 5, 6 et 8.
+    <strong>Mise à jour de version</strong> : partie 9 uniquement.
+  </div>
+
+  <div class="callout warn">
+    <span class="t">À lire avant de commencer</span>
+    Trois points conditionnent la réussite du déploiement :
+    <ol style="margin-bottom:0">
+      <li>La connexion se fait par <strong>mot de passe + code à usage unique envoyé par e-mail</strong> :
+          sans serveur SMTP fonctionnel, personne ne peut se connecter en production.</li>
+      <li>Le paquet <code>yajra/laravel-oci8</code> exige l'extension PHP <code>oci8</code> :
+          <code>composer install</code> échoue si elle est absente (deux solutions sont données en 4.1).</li>
+      <li>Le frontend est compilé : son adresse d'API est <strong>figée au moment du build</strong>.
+          Un <code>.env</code> de développement laissé en place enverrait les appels vers <code>localhost</code>.</li>
+    </ol>
+  </div>
+</section>
+
+<!-- ================================================================= -->
+<!-- 1. COMPRENDRE                                                    -->
+<!-- ================================================================= -->
+<section class="part">
+  <h2><span class="num">1.</span>Comprendre le projet avant de déployer</h2>
+  <p class="part-intro">
+    Le dépôt contient deux applications distinctes, qui doivent être déployées ensemble mais se configurent séparément.
+  </p>
+
+  <h3>1.1 Deux applications, une seule adresse</h3>
+
+  <table>
+    <thead>
+      <tr><th style="width:32mm">Dossier</th><th style="width:38mm">Rôle</th><th>Technologies</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><code>dgi-backend/</code></td>
+        <td>API REST, authentification, règles de détection, PDF, imports</td>
+        <td>Laravel 13 · PHP 8.3+ · Sanctum (jetons) · DomPDF · oci8 (sources Oracle)</td>
+      </tr>
+      <tr>
+        <td><code>dgi-frontend/</code></td>
+        <td>Interface web (tableau de bord, anomalies, administration, comparatif)</td>
+        <td>React 18 · TypeScript · Vite 5 · Tailwind CSS 3 · axios</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <p>
+    En production, le navigateur ne parle qu'à <strong>une seule origine</strong> (par exemple
+    <code>https://dgi.exemple.mg</code>) : nginx sert les fichiers statiques du frontend et transmet
+    <code>/api/…</code> à Laravel. C'est ce qui évite toute configuration CORS et tout problème de cookie.
+  </p>
+
+  <h4>Chemin d'une requête</h4>
+  <div class="file-tree">Navigateur
+   │  GET https://dgi.exemple.mg/admin/centres
+   ├─► nginx ──► /var/www/dgi/dgi-frontend/dist/index.html      (SPA React)
+   │
+   │  GET https://dgi.exemple.mg/api/statistiques/centres
+   ├─► nginx ──► PHP-FPM ──► dgi-backend/public/index.php       (Laravel)
+   │                              │
+   │                              ├─► PostgreSQL  (base applicative : users, alertes, centres…)
+   │                              └─► Oracle      (bases sources, LECTURE SEULE, facultatif)
+   └─◄ JSON</div>
+
+  <h3>1.2 Ce que le dépôt ne contient pas</h3>
+  <p>Ces éléments sont volontairement ignorés par Git et doivent être recréés sur le serveur :</p>
+  <ul>
+    <li><code>dgi-backend/.env</code> — la configuration et les secrets ;</li>
+    <li><code>dgi-backend/vendor/</code> — dépendances PHP, recréées par <code>composer install</code> ;</li>
+    <li><code>dgi-frontend/node_modules/</code> — dépendances JavaScript, recréées par <code>npm ci</code> ;</li>
+    <li><code>dgi-frontend/dist/</code> — le build de production, recréé par <code>npm run build</code> ;</li>
+    <li>les journaux, caches et fichiers uploadés.</li>
+  </ul>
+
+  <h3>1.3 Deux bases de données à ne pas confondre</h3>
+  <table>
+    <thead>
+      <tr><th style="width:45mm">Base</th><th style="width:32mm">Rôle</th><th>Configuration</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><strong>Base applicative</strong></td>
+        <td>Lecture / écriture</td>
+        <td><code>DB_*</code> — PostgreSQL recommandé. Contient utilisateurs, centres, alertes, historiques, règles.</td>
+      </tr>
+      <tr>
+        <td><strong>Bases sources</strong></td>
+        <td>Lecture seule</td>
+        <td><code>SOURCE_DB_*</code> / <code>DGI_SOURCE_CONNECTION_*</code> — Oracle en production, PostgreSQL en test.
+            Servent à importer contribuables, déclarations et centres officiels.</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="callout info">
+    <span class="t">Sans bases sources, l'application démarre quand même</span>
+    Le socle (connexion, utilisateurs, centres saisis à la main, imports CSV) fonctionne sans Oracle.
+    Les sources ne deviennent nécessaires que pour l'import massif et les règles de recoupement.
+  </div>
+</section>
+
+<!-- ================================================================= -->
+<!-- 2. SERVEUR                                                        -->
+<!-- ================================================================= -->
+<section class="part">
+  <h2><span class="num">2.</span>Préparer le serveur</h2>
+  <p class="part-intro">
+    Toutes les commandes supposent Ubuntu 24.04 LTS et un compte disposant de <code>sudo</code>.
+    Adaptez les numéros de version (8.3 / 8.4) à votre distribution.
+  </p>
+
+  <h3>2.1 Dimensionnement conseillé</h3>
+  <table>
+    <thead>
+      <tr><th>Ressource</th><th>Minimum</th><th>Conseillé</th><th>Remarque</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>Processeurs</td><td>2 vCPU</td><td>4 vCPU</td><td>L'analyse d'anomalies est gourmande en CPU.</td></tr>
+      <tr><td>Mémoire</td><td>4 Go</td><td>8 Go</td><td>PHP-FPM, PostgreSQL et le build Node sur la même machine.</td></tr>
+      <tr><td>Disque</td><td>40 Go SSD</td><td>80 Go SSD</td><td>Historique des déclarations et sauvegardes.</td></tr>
+      <tr><td>Réseau</td><td colspan="2">Accès HTTPS sortant</td><td>Polices Google Fonts et, si utilisé, SMTP.</td></tr>
+    </tbody>
+  </table>
+
+  <h3>2.2 Mise à jour et paquets de base</h3>
+<pre>sudo apt update &amp;&amp; sudo apt upgrade -y
+
+<span class="c"># PHP livré par Ubuntu 24.04 est en 8.3.6 : vulnérable (voir 2.3).
+# Le dépôt officiel ondrej/php fournit 8.3.36+ et les correctifs à jour.</span>
+sudo apt install -y software-properties-common
+sudo add-apt-repository -y ppa:ondrej/php
+sudo apt update
+
+sudo apt install -y nginx git unzip curl ca-certificates ufw \
+  php8.3-fpm php8.3-cli php8.3-pgsql php8.3-mbstring php8.3-xml \
+  php8.3-curl php8.3-zip php8.3-gd php8.3-bcmath php8.3-intl \
+  postgresql postgresql-contrib</pre>
+
+  <div class="callout info">
+    <span class="t">PHP 8.3 ou 8.4 ?</span>
+    Ubuntu 24.04 installe PHP 8.3 par défaut, ce qui suffit (<code>composer.json</code> exige
+    <code>^8.3</code>). Pour PHP 8.4, ajoutez le dépôt <code>ondrej/php</code> puis remplacez
+    <code>php8.3-*</code> par <code>php8.4-*</code> et le socket FPM par
+    <code>/run/php/php8.4-fpm.sock</code>.
+  </div>
+
+  <h3>2.3 Vérifier la version et les extensions PHP</h3>
+<pre>php -v
+php -m | grep -E 'pdo_pgsql|mbstring|dom|curl|zip|gd|bcmath|openssl|tokenizer'</pre>
+
+  <div class="callout danger">
+    <span class="t">Version minimale : 8.3.36 (ou 8.4.27)</span>
+    Le 21/10/2026, deux exécutions de code à distance critiques, non authentifiées, ont été
+    corrigées en <strong>8.5.12, 8.4.27, 8.3.36 et 8.2.35</strong> :
+    <strong>CVE-2026-109618</strong> et <strong>CVE-2026-109619</strong>
+    (« php2shell », CVSS 9.2). Elles figurent au catalogue KEV de la CISA depuis le
+    26/10/2026, donc avec <strong>exploitation active constatée</strong>.
+    Toutes les interfaces web sont concernées (PHP-FPM, <code>mod_php</code>,
+    <code>php-cgi</code>, FrankenPHP, LiteSpeed) ; <code>mod_php</code> est le cas le plus
+    exposé, car l'état global y persiste dans le processus Apache.
+    <br><br>
+    <code>php -v</code> doit afficher <strong>8.3.36 au minimum</strong> — jamais 8.3.6, la
+    version livrée par les dépôts Ubuntu 24.04. En mesure d'attente uniquement :
+    <code>session.upload_progress.enabled=0</code>.
+  </div>
+
+  <p>Les extensions suivantes doivent apparaître (Laravel + DomPDF + PostgreSQL) :</p>
+  <table>
+    <thead><tr><th>Extension</th><th>Utilité</th></tr></thead>
+    <tbody>
+      <tr><td><code>pdo_pgsql</code></td><td>Connexion à la base applicative PostgreSQL.</td></tr>
+      <tr><td><code>mbstring</code>, <code>dom</code>, <code>xml</code></td><td>Laravel et génération des PDF.</td></tr>
+      <tr><td><code>curl</code>, <code>openssl</code></td><td>Appels HTTP et envoi SMTP sécurisé.</td></tr>
+      <tr><td><code>zip</code>, <code>gd</code>, <code>bcmath</code></td><td>Composer, images, calculs.</td></tr>
+      <tr><td><code>oci8</code></td><td>Uniquement si les sources Oracle sont utilisées (annexe C).</td></tr>
+    </tbody>
+  </table>
+
+  <h3>2.4 Composer</h3>
+<pre>curl -sS https://getcomposer.org/installer -o /tmp/composer-setup.php
+sudo php /tmp/composer-setup.php --install-dir=/usr/local/bin --filename=composer
+composer -V        <span class="c"># attendu : Composer version 2.x</span></pre>
+
+  <h3>2.5 Node.js (pour compiler le frontend)</h3>
+<pre>curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
+sudo apt install -y nodejs
+node -v            <span class="c"># attendu : v20.x</span>
+npm -v             <span class="c"># attendu : 10.x</span></pre>
+
+  <p>
+    Node ne sert qu'à produire <code>dgi-frontend/dist</code>. Une fois le build copié sur le serveur,
+    Node n'est plus sollicité à l'exécution.
+  </p>
+
+  <h3>2.6 PostgreSQL</h3>
+  <p>Le paquet crée un service local déjà démarré. Créez le rôle et la base applicative :</p>
+<pre>sudo -u postgres psql -c "CREATE ROLE dgi LOGIN PASSWORD 'MotDePasseFort2026';"
+sudo -u postgres psql -c "CREATE DATABASE dgi_prod OWNER dgi ENCODING 'UTF8' TEMPLATE template0;"
+<span class="c"># Vérification de la connexion par mot de passe</span>
+psql "postgresql://dgi:MotDePasseFort2026@127.0.0.1:5432/dgi_prod" -c "SELECT version();"</pre>
+
+  <div class="callout warn">
+    <span class="t">Mot de passe</span>
+    Évitez les caractères <code>@ : / ? #</code> dans le mot de passe, ou encodez-les
+    (<code>%40</code>, etc.) : ils cassent l'URL de connexion.
+  </div>
+
+  <h3>2.7 Pare-feu</h3>
+<pre>sudo ufw allow OpenSSH
+sudo ufw allow 'Nginx Full'
+sudo ufw enable
+sudo ufw status</pre>
+</section>
+
+<!-- ================================================================= -->
+<!-- 3. GITHUB                                                         -->
+<!-- ================================================================= -->
+<section class="part">
+  <h2><span class="num">3.</span>Récupérer le code depuis GitHub</h2>
+  <p class="part-intro">
+    Le dépôt contient les deux dossiers à la racine. On le clone directement dans le répertoire de publication.
+  </p>
+
+  <h3>3.1 Accès au dépôt</h3>
+  <p>
+    Si le dépôt est <strong>public</strong>, la commande ci-dessous suffit. S'il est
+    <strong>privé</strong>, deux options :
+  </p>
+  <ul>
+    <li><strong>Jeton d'accès personnel (PAT)</strong> : <code>git clone https://TOKEN@github.com/hagasantatra4336/Projet-hg.git</code> ;</li>
+    <li><strong>Clé de déploiement</strong> (recommandé, révocable et limitée à un dépôt) : générez une paire de clés
+        sur le serveur, puis déclarez la clé publique dans <em>Settings → Deploy keys</em> du dépôt GitHub.</li>
+  </ul>
+
+<pre>ssh-keygen -t ed25519 -C "serveur-dgi" -f ~/.ssh/id_ed25519 -N ""
+cat ~/.ssh/id_ed25519.pub      <span class="c"># à coller dans GitHub → Deploy keys (lecture seule)</span></pre>
+
+  <h3>3.2 Clonage</h3>
+<pre>sudo mkdir -p /var/www/dgi
+sudo chown -R $USER:www-data /var/www/dgi
+
+git clone https://github.com/hagasantatra4336/Projet-hg.git /var/www/dgi
+cd /var/www/dgi
+git switch main
+git log -1 --oneline</pre>
+
+  <p>Arborescence obtenue :</p>
+  <div class="file-tree">/var/www/dgi
+├── dgi-backend/           API Laravel
+│   ├── app/               contrôleurs, modèles, services, commandes
+│   ├── config/            database.php, dgi.php, cors.php, sanctum.php
+│   ├── database/          migrations et seeders
+│   ├── public/            racine web de Laravel (index.php)
+│   ├── routes/            api.php, console.php, web.php
+│   ├── storage/           journaux et caches (à rendre inscriptible)
+│   └── composer.json / composer.lock
+├── dgi-frontend/          interface React
+│   ├── src/               pages, composants, contextes, types
+│   ├── public/            images, favicon, theme-init.js
+│   ├── package.json / package-lock.json
+│   └── vite.config.ts
+└── docs/                  documentation du projet</div>
+
+  <div class="callout info">
+    <span class="t">Droits du répertoire</span>
+    Le propriétaire reste le compte de déploiement ; le groupe <code>www-data</code> doit pouvoir
+    <strong>lire</strong> les fichiers. Les droits d'écriture seront limités à
+    <code>dgi-backend/storage</code> et <code>dgi-backend/bootstrap/cache</code> (partie 6.3).
+  </div>
+</section>
+
+<!-- ================================================================= -->
+<!-- 4. BACKEND                                                        -->
+<!-- ================================================================= -->
+<section class="part">
+  <h2><span class="num">4.</span>Configurer et initialiser le backend Laravel</h2>
+  <p class="part-intro">
+    Toutes les commandes de cette partie s'exécutent dans <code>/var/www/dgi/dgi-backend</code>.
+  </p>
+
+  <h3>4.1 Installer les dépendances PHP</h3>
+<pre>cd /var/www/dgi/dgi-backend
+composer install --no-dev --optimize-autoloader</pre>
+
+  <div class="callout danger">
+    <span class="t">Échec attendu sans Oracle : ext-oci8</span>
+    <code>yajra/laravel-oci8</code> déclare <code>ext-oci8</code> comme dépendance. Sur un serveur sans
+    Oracle Instant Client, Composer s'arrête avec
+    <em>« Your requirements could not be resolved… ext-oci8 »</em>. Deux issues :
+    <ul style="margin-bottom:0">
+      <li><strong>Les sources Oracle sont utilisées</strong> → installez le client et l'extension (annexe C), puis relancez la commande ;</li>
+      <li><strong>Oracle n'est pas utilisé pour l'instant</strong> → ignorez la plateforme :
+        <code>composer install --no-dev --ignore-platform-req=ext-oci8</code>.
+        Le reste de l'application fonctionne ; seul le pilote <code>oracle</code> échouera si vous le configurez plus tard.</li>
+    </ul>
+  </div>
+
+  <p>Contrôle final :</p>
+<pre>php artisan --version
+composer check-platform-reqs | tail -n 5</pre>
+
+  <h3>4.2 Fichier <code>.env</code> de production</h3>
+<pre>cp .env.example .env
+php artisan key:generate</pre>
+
+  <p>Puis remplacez le contenu par la configuration suivante, adaptée à votre infrastructure :</p>
+
+<pre>APP_NAME="DGI E-Fehy"
+APP_ENV=production
+APP_KEY=base64:...               <span class="c"># généré par key:generate</span>
+APP_DEBUG=false
+APP_URL=https://dgi.exemple.mg
+FRONTEND_URL=https://dgi.exemple.mg
+
+APP_LOCALE=fr
+APP_FALLBACK_LOCALE=fr
+APP_FAKER_LOCALE=fr_FR
+
+LOG_CHANNEL=daily
+LOG_LEVEL=warning
+
+<span class="c"># --- Base applicative -------------------------------------------------</span>
+DB_CONNECTION=pgsql
+DB_HOST=127.0.0.1
+DB_PORT=5432
+DB_DATABASE=dgi_prod
+DB_USERNAME=dgi
+DB_PASSWORD="MotDePasseFort2026"
+DB_SSLMODE=prefer
+
+<span class="c"># --- Sessions, cache, files d'attente ---------------------------------</span>
+SESSION_DRIVER=file
+SESSION_LIFETIME=120
+SESSION_SECURE_COOKIE=true
+CACHE_STORE=database
+QUEUE_CONNECTION=database
+
+<span class="c"># --- Messagerie : INDISPENSABLE (codes de connexion par e-mail) -------</span>
+MAIL_MAILER=smtp
+MAIL_HOST=smtp.exemple.mg
+MAIL_PORT=587
+MAIL_SCHEME=smtp
+MAIL_USERNAME=no-reply@dgi.gov.mg
+MAIL_PASSWORD="mot-de-passe-smtp"
+MAIL_FROM_ADDRESS="no-reply@dgi.gov.mg"
+MAIL_FROM_NAME="DGI E-Fehy"
+
+<span class="c"># --- Sécurité ---------------------------------------------------------</span>
+CORS_ALLOWED_ORIGINS=https://dgi.exemple.mg
+SANCTUM_EXPIRATION=480
+TRUSTED_PROXIES=127.0.0.1,::1</pre>
+
+  <table>
+    <thead><tr><th style="width:48mm">Variable</th><th>Pourquoi elle compte</th></tr></thead>
+    <tbody>
+      <tr><td><code>APP_URL</code></td><td>Base des URL générées par Laravel (liens, PDF, redirections).</td></tr>
+      <tr><td><code>FRONTEND_URL</code></td><td>Adresse utilisée dans les e-mails d'approbation. Si elle reste à
+          <code>localhost:5173</code>, les liens reçus par les agents seront inutilisables.</td></tr>
+      <tr><td><code>APP_DEBUG</code></td><td>Doit être <code>false</code> : sinon, une erreur affiche la configuration et les secrets.</td></tr>
+      <tr><td><code>SESSION_DRIVER</code></td><td>Laissez <code>file</code> : les migrations ne créent aucune table <code>sessions</code>
+          (l'application s'authentifie par jetons, sans session serveur).</td></tr>
+      <tr><td><code>MAIL_*</code></td><td>La connexion est en deux étapes (mot de passe puis code à 6 chiffres). Sans SMTP, pas de connexion.</td></tr>
+      <tr><td><code>CORS_ALLOWED_ORIGINS</code></td><td>Origine exacte du front, sans slash final. Inutile si le front et l'API partagent le même domaine.</td></tr>
+      <tr><td><code>SANCTUM_EXPIRATION</code></td><td>Durée de vie du jeton en minutes (480 = 8 h par défaut).</td></tr>
+      <tr><td><code>TRUSTED_PROXIES</code></td><td>Pour que les limitations par IP voient la vraie adresse client derrière nginx.</td></tr>
+    </tbody>
+  </table>
+
+  <div class="callout warn">
+    <span class="t">SMTP : port et chiffrement</span>
+    Port <strong>587</strong> → <code>MAIL_SCHEME=smtp</code> (STARTTLS automatique).
+    Port <strong>465</strong> → <code>MAIL_SCHEME=smtps</code> (TLS direct).
+    Vérifiez ensuite l'envoi avec la procédure de la partie 8.
+  </div>
+
+  <h3>4.3 Créer le schéma et les données de départ</h3>
+<pre>php artisan migrate --force
+php artisan db:seed --class=FonctionSeeder --force</pre>
+
+  <p>
+    <code>FonctionSeeder</code> crée les quatre fonctions de base (Super administrateur, Responsable central,
+    Chef de centre, Agent). Les rôles sont portés par les fonctions, pas directement par les utilisateurs.
+  </p>
+
+  <div class="callout danger">
+    <span class="t">Ne lancez pas <code>php artisan db:seed</code> sans classe</span>
+    Le seeder par défaut du squelette Laravel crée un « Test User » incompatible avec le schéma réel
+    (la colonne <code>name</code> n'existe pas). Utilisez uniquement les seeders nommés,
+    à commencer par <code>FonctionSeeder</code>.
+  </div>
+
+  <h4>Créer le premier super administrateur</h4>
+<pre>php artisan dgi:make-superadmin admin@dgi.gov.mg --nom="Administrateur DGI"</pre>
+  <p>
+    La commande demande le mot de passe (8 caractères minimum) de façon interactive. Elle crée le compte
+    s'il n'existe pas, ou promeut un compte existant. C'est le seul point d'entrée possible : toute la
+    gestion des utilisateurs en dépend.
+  </p>
+
+  <h3>4.4 Importer les centres (facultatif à ce stade)</h3>
+  <p>
+    Après migration, la base ne contient que le service central <strong>SSIF</strong>. Deux méthodes :
+  </p>
+  <ul>
+    <li><strong>Depuis l'interface</strong> : Administration → Centres → « + Ajouter un centre » ;</li>
+    <li><strong>Depuis la base source</strong>, si elle est configurée (annexe C) :
+      <code>php artisan dgi:importer-centres</code>.</li>
+  </ul>
+
+  <h3>4.5 Droits sur les fichiers</h3>
+<pre>sudo chown -R www-data:www-data storage bootstrap/cache
+sudo find storage bootstrap/cache -type d -exec chmod 775 {} \;
+sudo find storage bootstrap/cache -type f -exec chmod 664 {} \;
+sudo chown $USER:www-data .env
+sudo chmod 640 .env</pre>
+
+  <div class="callout info">
+    <span class="t">Pourquoi ces droits ?</span>
+    Laravel écrit dans <code>storage/</code> (journaux, sessions, vues compilées, PDF temporaires) et dans
+    <code>bootstrap/cache/</code>. Le reste du code doit rester en lecture seule pour le serveur web.
+  </div>
+
+  <h3>4.6 Figer la configuration</h3>
+<pre>sudo -u www-data php artisan optimize</pre>
+  <p>
+    <code>optimize</code> met en cache la configuration, les routes, les événements et les vues.
+    Exécutez-le <strong>en tant que <code>www-data</code></strong> : sinon, les fichiers de cache
+    appartiennent à <code>root</code> et l'application ne peut plus les mettre à jour.
+  </p>
+  <p>
+    Après toute modification du <code>.env</code> : <code>sudo -u www-data php artisan optimize:clear</code>
+    puis <code>optimize</code> à nouveau.
+  </p>
+</section>
+
+<!-- ================================================================= -->
+<!-- 5. FRONTEND                                                       -->
+<!-- ================================================================= -->
+<section class="part">
+  <h2><span class="num">5.</span>Construire le frontend React</h2>
+  <p class="part-intro">
+    Le frontend est une application statique : une fois compilée, aucun serveur Node n'est nécessaire.
+  </p>
+
+  <h3>5.1 Installer les dépendances</h3>
+<pre>cd /var/www/dgi/dgi-frontend
+npm ci</pre>
+
+  <p>
+    <code>npm ci</code> installe exactement les versions du <code>package-lock.json</code>.
+    Le build lance <code>tsc --noEmit</code> : les dépendances de développement (TypeScript, Vite)
+    sont donc nécessaires. Si votre environnement force <code>NODE_ENV=production</code>, utilisez
+    <code>npm ci --include=dev</code>.
+  </p>
+
+  <h3>5.2 Adresse de l'API : le piège du <code>.env</code></h3>
+  <p>
+    L'URL de l'API est lue <strong>au moment du build</strong> via <code>VITE_API_URL</code>.
+    En l'absence de cette variable, l'application appelle <code>/api</code> sur sa propre origine —
+    c'est le comportement souhaité en production.
+  </p>
+
+  <div class="callout danger">
+    <span class="t">Un <code>.env</code> de développement peut casser la production</span>
+    Si le fichier <code>dgi-frontend/.env</code> contient
+    <code>VITE_API_URL=http://127.0.0.1:8000/api</code> (valeur typique du poste de développement),
+    le build de production appellera <code>localhost</code> depuis le navigateur de l'utilisateur.
+    Créez donc un <code>.env.production</code>, prioritaire sur <code>.env</code> :
+<pre style="margin-bottom:0">printf 'VITE_API_URL=/api\n' &gt; .env.production</pre>
+  </div>
+
+  <h3>5.3 Compiler</h3>
+<pre>cd /var/www/dgi/dgi-frontend
+npm run build
+ls -la dist
+head -c 400 dist/index.html</pre>
+
+  <p>Le build doit produire :</p>
+  <div class="file-tree">dist/
+├── index.html
+├── theme-init.js
+├── favicon.svg
+├── logo-dgi.png
+├── logo-mef.png
+├── icons.svg
+├── efehy-auth.jpg
+└── assets/
+    ├── index-XXXXXXXX.js       (bundle principal)
+    ├── ComparatifCentresPage-XXXXXXXX.js   (page chargée à la demande)
+    └── index-XXXXXXXX.css</div>
+
+  <div class="callout warn">
+    <span class="t">Avertissement de taille de bundle</span>
+    Vite signale parfois un chunk supérieur à 500 kB. C'est informatif, pas bloquant :
+    la page de comparatif est déjà extraite dans un chunk séparé.
+  </div>
+
+  <h3>5.4 Rendre le build lisible par nginx</h3>
+<pre>sudo chmod -R o+rX /var/www/dgi/dgi-frontend/dist
+sudo find /var/www/dgi/dgi-frontend/dist -type d -exec chmod 755 {} \;</pre>
+</section>
+
+<!-- ================================================================= -->
+<!-- 6. NGINX                                                          -->
+<!-- ================================================================= -->
+<section class="part">
+  <h2><span class="num">6.</span>Mettre en place nginx, PHP-FPM et HTTPS</h2>
+  <p class="part-intro">
+    nginx sert le build React et transmet uniquement <code>/api/…</code> à Laravel. Le code PHP reste
+    hors de la racine web.
+  </p>
+
+  <h3>6.1 Le virtual host</h3>
+  <p>Créez <code>/etc/nginx/sites-available/dgi</code> :</p>
+
+<pre>server {
+    listen 80;
+    listen [::]:80;
+    server_name dgi.exemple.mg;
+
+    <span class="c"># Le frontend compilé</span>
+    root /var/www/dgi/dgi-frontend/dist;
+    index index.html;
+    charset utf-8;
+
+    <span class="c"># Imports CSV et pièces jointes</span>
+    client_max_body_size 32m;
+
+    <span class="c"># --- API Laravel ------------------------------------------------</span>
+    location ^~ /api/ {
+        include fastcgi_params;
+        fastcgi_pass unix:/run/php/php8.3-fpm.sock;
+        fastcgi_param SCRIPT_FILENAME /var/www/dgi/dgi-backend/public/index.php;
+        fastcgi_param SCRIPT_NAME /index.php;
+        fastcgi_param DOCUMENT_ROOT /var/www/dgi/dgi-backend/public;
+
+        <span class="c"># Un client ne doit jamais pouvoir imposer ces valeurs :</span>
+        <span class="c"># sans elles, un X-Forwarded-Host forgé est cru par Laravel.</span>
+        fastcgi_param HTTP_X_FORWARDED_HOST  $host;
+        fastcgi_param HTTP_X_FORWARDED_PROTO $scheme;
+        fastcgi_param HTTP_X_FORWARDED_FOR   $remote_addr;
+        fastcgi_param HTTP_X_FORWARDED_PORT  $server_port;
+    }
+
+    <span class="c"># --- Sonde de santé Laravel (/up) --------------------------------</span>
+    location = /up {
+        include fastcgi_params;
+        fastcgi_pass unix:/run/php/php8.3-fpm.sock;
+        fastcgi_param SCRIPT_FILENAME /var/www/dgi/dgi-backend/public/index.php;
+        fastcgi_param SCRIPT_NAME /index.php;
+        fastcgi_param DOCUMENT_ROOT /var/www/dgi/dgi-backend/public;
+    }
+
+    <span class="c"># --- Fichiers du build : cache long ------------------------------</span>
+    location /assets/ {
+        expires 1y;
+        try_files $uri =404;
+    }
+
+    <span class="c"># --- Routes React : tout retombe sur index.html ------------------</span>
+    location / {
+        try_files $uri $uri/ /index.html;
+    }
+
+    <span class="c"># --- En-têtes de sécurité (voir docs/securite-deploiement.md) ----</span>
+    add_header X-Content-Type-Options "nosniff" always;
+    add_header X-Frame-Options "DENY" always;
+    add_header Referrer-Policy "no-referrer" always;
+    add_header Permissions-Policy "camera=(), microphone=(), geolocation=()" always;
+    add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
+    add_header Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self'; frame-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'" always;
+}</pre>
+
+  <div class="callout info">
+    <span class="t">Pourquoi <code>^~ /api/</code> ?</span>
+    Ce préfixe empêche <code>try_files</code> de servir <code>index.html</code> à la place de l'API.
+    <code>SCRIPT_FILENAME</code> pointe vers <code>dgi-backend/public/index.php</code> : le code
+    Laravel n'a pas besoin d'être dans la racine web.
+    <br><br>
+    <strong>Variante</strong> : vous pouvez aussi copier <code>dist/*</code> dans
+    <code>dgi-backend/public/</code> et utiliser une seule racine. La méthode ci-dessus garde les deux
+    projets séparés et n'écrase jamais <code>index.php</code>.
+  </div>
+
+  <div class="callout warn">
+    <span class="t">Piège des en-têtes nginx</span>
+    Dès qu'un bloc <code>location</code> déclare son propre <code>add_header</code>, il n'hérite plus de
+    ceux du bloc <code>server</code>. C'est pourquoi <code>/assets/</code> n'utilise que
+    <code>expires</code> : les en-têtes de sécurité restent ainsi appliqués partout.
+    Contrôlez le résultat avec <code>curl -I</code> (partie 8).
+  </div>
+
+  <div class="callout danger">
+    <span class="t">Les en-têtes X-Forwarded-* doivent être écrasés</span>
+    <code>TRUSTED_PROXIES=127.0.0.1</code> est indispensable pour que les limitations par IP
+    voient la vraie adresse du client. Mais en FastCGI, nginx transmet <strong>tous</strong> les
+    en-têtes du navigateur, y compris ceux qu'un attaquant forge. Comme la requête arrive bien
+    de <code>127.0.0.1</code>, Laravel les croit : un
+    <code>X-Forwarded-Host: site-pirate.mg</code> suffit à détourner les URL générées
+    (liens d'e-mail, redirections). C'est le vecteur de <strong>CVE-2026-123339</strong>.
+    Les quatre lignes <code>fastcgi_param HTTP_X_FORWARDED_*</code> ci-dessus écrasent ces
+    valeurs avec les vraies : ne les supprimez pas, et n'ajoutez jamais
+    <code>private_ranges</code> dans <code>TRUSTED_PROXIES</code> (CVE-2026-121619).
+  </div>
+
+  <h3>6.2 Activer le site et recharger nginx</h3>
+<pre>sudo ln -s /etc/nginx/sites-available/dgi /etc/nginx/sites-enabled/dgi
+sudo rm -f /etc/nginx/sites-enabled/default
+sudo nginx -t
+sudo systemctl reload nginx
+sudo systemctl enable nginx</pre>
+
+  <h3>6.3 Limites PHP-FPM (imports)</h3>
+  <p>Éditez <code>/etc/php/8.3/fpm/php.ini</code> et alignez les valeurs sur nginx :</p>
+<pre>upload_max_filesize = 32M
+post_max_size = 32M
+memory_limit = 256M
+max_execution_time = 120</pre>
+<pre>sudo systemctl restart php8.3-fpm
+sudo systemctl status php8.3-fpm --no-pager</pre>
+
+  <div class="callout info">
+    <span class="t">Le socket FPM</span>
+    Vérifiez son nom exact : <code>ls /run/php/</code>. Sur PHP 8.4, ce sera
+    <code>php8.4-fpm.sock</code> — la valeur doit correspondre à celle du virtual host.
+  </div>
+
+  <h3>6.4 HTTPS avec Let's Encrypt</h3>
+<pre>sudo apt install -y certbot python3-certbot-nginx
+sudo certbot --nginx -d dgi.exemple.mg
+sudo systemctl status certbot.timer --no-pager</pre>
+
+  <p>
+    Certbot réécrit le virtual host (redirection HTTP → HTTPS et certificat). Le renouvellement est
+    automatique. Si le serveur n'a pas d'accès Internet entrant, installez un certificat de l'autorité
+    interne et adaptez manuellement les directives <code>ssl_*</code>.
+  </p>
+
+  <div class="callout warn">
+    <span class="t">Après le passage en HTTPS</span>
+    Mettez à jour <code>APP_URL</code>, <code>FRONTEND_URL</code> et <code>CORS_ALLOWED_ORIGINS</code>
+    avec <code>https://</code>, puis relancez <code>sudo -u www-data php artisan optimize</code>.
+    Un mélange HTTP/HTTPS provoque des erreurs de contenu mixte et des appels API bloqués.
+  </div>
+</section>
+
+<!-- ================================================================= -->
+<!-- 7. EXPLOITATION                                                   -->
+<!-- ================================================================= -->
+<section class="part">
+  <h2><span class="num">7.</span>Exploitation courante</h2>
+  <p class="part-intro">
+    Trois mécanismes doivent tourner après la mise en ligne : le planificateur, la purge des jetons
+    et les sauvegardes.
+  </p>
+
+  <h3>7.1 Planificateur Laravel (obligatoire)</h3>
+  <p>
+    Trois tâches sont planifiées par l'application :
+  </p>
+  <ul>
+    <li><strong>Purge quotidienne des jetons Sanctum expirés</strong> — sans elle, la table
+        <code>personal_access_tokens</code> grossit indéfiniment ;</li>
+    <li><strong>Rappel du code d'activation</strong>, une heure avant son expiration ;</li>
+    <li><strong>Clôture des demandes</strong> dont le code d'activation a expiré sans être saisi.</li>
+  </ul>
+<pre>sudo crontab -u www-data -e</pre>
+  <p>Ajoutez cette ligne :</p>
+<pre>* * * * * cd /var/www/dgi/dgi-backend &amp;&amp; /usr/bin/php artisan schedule:run &gt;&gt; /dev/null 2&gt;&amp;1</pre>
+
+  <p>Vérification :</p>
+<pre>sudo -u www-data php /var/www/dgi/dgi-backend/artisan schedule:list</pre>
+
+  <div class="callout info">
+    <span class="t">Après approbation d'un compte : 24 heures</span>
+    Le code envoyé à l'agent est valable <strong>24 heures</strong>. Une heure avant l'échéance,
+    il reçoit un rappel par e-mail. Passé le délai, la demande est automatiquement clôturée :
+    le code devient inutilisable, le matricule est libéré et l'agent doit déposer une
+    <strong>nouvelle demande d'inscription</strong>. Les deux tâches correspondantes tournent
+    toutes les cinq minutes — sans crontab, ce rappel et cette clôture n'ont jamais lieu.
+  </div>
+
+  <h3>7.2 Files d'attente (facultatif)</h3>
+  <p>
+    <code>QUEUE_CONNECTION=database</code> est configuré, mais l'application envoie les e-mails de façon
+    synchrone. Aucun worker n'est donc nécessaire. Si vous ajoutez plus tard des tâches mises en file :
+  </p>
+<pre>sudo apt install -y supervisor</pre>
+<pre>[program:dgi-worker]
+process_name=%(program_name)s_%(process_num)02d
+command=php /var/www/dgi/dgi-backend/artisan queue:work --sleep=3 --tries=3 --max-time=3600
+autostart=true
+autorestart=true
+user=www-data
+numprocs=2
+redirect_stderr=true
+stdout_logfile=/var/www/dgi/dgi-backend/storage/logs/worker.log</pre>
+<pre>sudo supervisorctl reread &amp;&amp; sudo supervisorctl update &amp;&amp; sudo supervisorctl status</pre>
+
+  <h3>7.3 Journaux</h3>
+  <table>
+    <thead><tr><th style="width:62mm">Fichier</th><th>Contenu</th></tr></thead>
+    <tbody>
+      <tr><td><code>dgi-backend/storage/logs/laravel-AAAA-MM-JJ.log</code></td><td>Erreurs applicatives, échecs SMTP, imports.</td></tr>
+      <tr><td><code>/var/log/nginx/error.log</code></td><td>Erreurs de configuration, 502, fichiers absents.</td></tr>
+      <tr><td><code>/var/log/nginx/access.log</code></td><td>Trafic, codes HTTP, requêtes lentes.</td></tr>
+      <tr><td><code>journalctl -u php8.3-fpm</code></td><td>Arrêts et erreurs du processus PHP.</td></tr>
+    </tbody>
+  </table>
+
+  <h3>7.4 Sauvegardes</h3>
+  <p>Base applicative et configuration, chaque nuit :</p>
+<pre>sudo mkdir -p /var/backups/dgi
+sudo -u postgres pg_dump dgi_prod | gzip &gt; /var/backups/dgi/dgi_$(date +%F).sql.gz
+sudo cp /var/www/dgi/dgi-backend/.env /var/backups/dgi/env_$(date +%F).bak
+sudo chmod 600 /var/backups/dgi/*</pre>
+
+  <p>Dans la crontab de <code>root</code> :</p>
+<pre>15 2 * * * pg_dump -U postgres dgi_prod | gzip &gt; /var/backups/dgi/dgi_$(date +\%F).sql.gz
+30 2 * * 0 find /var/backups/dgi -name 'dgi_*.sql.gz' -mtime +30 -delete</pre>
+
+  <div class="callout info">
+    <span class="t">Restauration</span>
+<pre style="margin-bottom:0">gunzip -c /var/backups/dgi/dgi_2026-11-17.sql.gz | psql -U dgi -h 127.0.0.1 dgi_prod</pre>
+  </div>
+</section>
+
+<!-- ================================================================= -->
+<!-- 8. RECETTE                                                        -->
+<!-- ================================================================= -->
+<section class="part">
+  <h2><span class="num">8.</span>Procédure de recette</h2>
+  <p class="part-intro">
+    À exécuter après chaque installation et après chaque mise à jour. Chaque ligne se vérifie en moins d'une minute.
+  </p>
+
+  <h3>8.1 Contrôles techniques</h3>
+  <table>
+    <thead><tr><th style="width:64mm">Commande</th><th style="width:30mm">Attendu</th><th>Si échec</th></tr></thead>
+    <tbody>
+      <tr>
+        <td><code>curl -sS -o /dev/null -w "%{http_code}" https://dgi.exemple.mg/up</code></td>
+        <td><code>200</code></td><td>Voir 10.1 et 10.2 (PHP-FPM, permissions).</td>
+      </tr>
+      <tr>
+        <td><code>curl -sS https://dgi.exemple.mg/api/signup-options</code></td>
+        <td>JSON avec <code>centres</code> et <code>fonctions</code></td>
+        <td>Base non migrée ou <code>.env</code> incorrect.</td>
+      </tr>
+      <tr>
+        <td><code>curl -I https://dgi.exemple.mg/</code></td>
+        <td><code>200</code> + en-têtes de sécurité</td>
+        <td>Build absent ou virtual host non rechargé.</td>
+      </tr>
+      <tr>
+        <td><code>sudo -u www-data php artisan about</code></td>
+        <td>Environnement <code>production</code>, cache actif</td>
+        <td>Configuration non figée (<code>optimize</code>).</td>
+      </tr>
+      <tr>
+        <td><code>php -v</code></td>
+        <td><code>8.3.36</code> minimum</td>
+        <td>PHP vulnérable (voir 2.3) : passer à 8.4 via <code>ondrej/php</code>.</td>
+      </tr>
+      <tr>
+        <td><code>composer audit</code></td>
+        <td>« No security vulnerability advisories found »</td>
+        <td>Paquet signalé : <code>composer update</code> puis relancer les tests.</td>
+      </tr>
+      <tr>
+        <td><code>curl -s -H "X-Forwarded-Host: pirate.example" …/api/me</code></td>
+        <td><code>401</code>, aucun lien vers <code>pirate.example</code></td>
+        <td>En-têtes <code>X-Forwarded-*</code> non écrasés (partie 6.1).</td>
+      </tr>
+      <tr>
+        <td><code>sudo -u www-data php artisan schedule:list</code></td>
+        <td>3 tâches, dont <code>dgi:rappeler-otp-approbation</code></td>
+        <td>Cron absent (partie 7.1).</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h3>8.2 Parcours fonctionnel</h3>
+  <ul class="checklist">
+    <li>La page de connexion s'affiche, les logos et la police sont corrects.</li>
+    <li>Connexion avec le compte super administrateur créé en 4.3 : le code à 6 chiffres arrive par e-mail.</li>
+    <li>Le tableau de bord s'ouvre sans erreur dans la console du navigateur.</li>
+    <li>Administration → Centres : la liste s'affiche, la création d'un centre fonctionne.</li>
+    <li>Administration → Utilisateurs : les comptes existent, les rôles sont corrects ; le statut
+        « En ligne / Hors ligne » est cohérent et le bouton « Historique d'activité » (central et
+        super admin) affiche les connexions et les actions enregistrées.</li>
+    <li>Administration → Règles de détection → « Règles personnalisées » : la liste, les filtres et
+        la création d'un brouillon fonctionnent ; « Indicateurs » ouvre la page dédiée (ajout et
+        modification d'un indicateur).</li>
+    <li>Anomalies → « Lancer l'analyse » répond (même sans données, le message doit être explicite).</li>
+    <li>Comparatif des centres (super admin / central) : chiffres et tableau s'affichent.</li>
+    <li>Une fiche contribuable s'ouvre et le PDF se télécharge.</li>
+    <li>Demandes d'inscription : une approbation envoie un code valable 24 h ; un rappel part
+        une heure avant l'échéance, puis la demande est clôturée (section 7.1).</li>
+    <li>Un import CSV de petite taille aboutit (limites de 6.3).</li>
+    <li>Rechargement direct de <code>https://dgi.exemple.mg/admin/centres</code> : la page s'affiche (pas de 404).</li>
+    <li>Après 8 h d'inactivité, l'utilisateur est invité à se reconnecter (comportement attendu).</li>
+  </ul>
+
+  <div class="callout ok">
+    <span class="t">Astuce : tester l'e-mail sans boîte SMTP</span>
+    Pour une recette interne, <code>MAIL_MAILER=log</code> écrit le message complet dans
+    <code>storage/logs/laravel-*.log</code>. Le code OTP y figure :
+<pre style="margin-bottom:0">grep -A2 "code de connexion" storage/logs/laravel-*.log | tail -n 20</pre>
+    <span class="small">À réserver aux tests : en production, configurez un vrai SMTP.</span>
+  </div>
+
+  <h3>8.3 Contrôle de sécurité</h3>
+<pre>curl -I https://dgi.exemple.mg/ | grep -Ei 'x-frame|x-content|strict-transport|content-security'
+curl -sS https://dgi.exemple.mg/api/me      <span class="c"># doit répondre 401, jamais 200</span>
+curl -sS https://dgi.exemple.mg/.env        <span class="c"># doit répondre 404</span></pre>
+</section>
+
+<!-- ================================================================= -->
+<!-- 9. MISE A JOUR                                                    -->
+<!-- ================================================================= -->
+<section class="part">
+  <h2><span class="num">9.</span>Mettre à jour une installation existante</h2>
+  <p class="part-intro">
+    Même séquence à chaque livraison. Comptez quelques minutes ; prévenez les utilisateurs si une
+    migration est incluse.
+  </p>
+
+  <h3>9.1 Sauvegarder avant tout</h3>
+<pre>sudo -u postgres pg_dump dgi_prod | gzip &gt; /var/backups/dgi/avant_maj_$(date +%F_%H%M).sql.gz</pre>
+
+  <h3>9.2 Déployer</h3>
+<pre>cd /var/www/dgi
+git pull origin main
+
+<span class="c"># --- Backend ---------------------------------------------------------</span>
+cd dgi-backend
+composer install --no-dev --optimize-autoloader
+composer audit            <span class="c"># doit ne rien signaler</span>
+php artisan migrate --force
+sudo -u www-data php artisan optimize
+
+<span class="c"># --- Frontend --------------------------------------------------------</span>
+cd ../dgi-frontend
+npm ci
+npm run build
+sudo chmod -R o+rX dist
+
+<span class="c"># --- Rechargement ----------------------------------------------------</span>
+sudo systemctl reload php8.3-fpm
+sudo systemctl reload nginx</pre>
+
+  <div class="callout warn">
+    <span class="t">Si <code>composer install</code> échoue sur ext-oci8</span>
+    Reprenez la commande avec <code>--ignore-platform-req=ext-oci8</code> tant que l'extension n'est pas
+    installée (annexe C). Une dépendance ajoutée sans cette option peut sinon bloquer la mise à jour.
+  </div>
+
+  <h3>9.3 En cas de retour arrière</h3>
+<pre>cd /var/www/dgi
+git log --oneline -5
+git checkout &lt;commit-précédent&gt;
+<span class="c"># puis relancer composer install / npm ci / npm run build</span>
+<span class="c"># et restaurer la base si une migration destructive a eu lieu :</span>
+gunzip -c /var/backups/dgi/avant_maj_XXXX.sql.gz | psql -U dgi -h 127.0.0.1 dgi_prod</pre>
+
+  <div class="callout danger">
+    <span class="t">Ordre à ne pas inverser</span>
+    <strong>Sauvegarde → migration → build → rechargement.</strong> Un build déployé avant la migration
+    peut appeler des routes encore absentes ; une migration sans sauvegarde ne se rattrape pas.
+  </div>
+</section>
+
+<!-- ================================================================= -->
+<!-- 10. DEPANNAGE                                                     -->
+<!-- ================================================================= -->
+<section class="part">
+  <h2><span class="num">10.</span>Dépannage</h2>
+  <p class="part-intro">
+    Les incidents ci-dessous couvrent la quasi-totalité des échecs constatés lors d'un premier déploiement.
+  </p>
+
+  <h3>10.1 Erreurs HTTP</h3>
+  <table>
+    <thead><tr><th style="width:52mm">Symptôme</th><th style="width:54mm">Cause probable</th><th>Correction</th></tr></thead>
+    <tbody>
+      <tr>
+        <td><strong>502 Bad Gateway</strong></td>
+        <td>PHP-FPM arrêté ou socket erroné.</td>
+        <td><code>ls /run/php/</code>, corriger <code>fastcgi_pass</code>, <code>systemctl restart php8.3-fpm</code>.</td>
+      </tr>
+      <tr>
+        <td><strong>500 sur /api/…</strong></td>
+        <td>Permissions, clé absente, erreur SQL.</td>
+        <td><code>tail storage/logs/laravel-*.log</code>, vérifier <code>storage</code> et <code>bootstrap/cache</code>.</td>
+      </tr>
+      <tr>
+        <td><strong>404 sur /admin/... au rechargement</strong></td>
+        <td><code>try_files</code> absent.</td>
+        <td>Ajouter <code>try_files $uri $uri/ /index.html;</code> dans <code>location /</code>.</td>
+      </tr>
+      <tr>
+        <td><strong>Page blanche, assets en 404</strong></td>
+        <td>Build absent ou <code>root</code> mal pointé.</td>
+        <td>Relancer <code>npm run build</code>, vérifier <code>/assets/*.js</code> et les droits de lecture.</td>
+      </tr>
+      <tr>
+        <td><strong>413 Request Entity Too Large</strong></td>
+        <td>Import CSV trop volumineux.</td>
+        <td><code>client_max_body_size</code> (nginx) + <code>upload_max_filesize</code>/<code>post_max_size</code> (PHP).</td>
+      </tr>
+      <tr>
+        <td><strong>Mixed content / requêtes bloquées</strong></td>
+        <td>URL en <code>http://</code> dans la configuration ou le build.</td>
+        <td>Tout passer en <code>https://</code>, reconstruire le front, <code>artisan optimize</code>.</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h3>10.2 Connexion et e-mails</h3>
+  <table>
+    <thead><tr><th style="width:52mm">Symptôme</th><th style="width:54mm">Cause probable</th><th>Correction</th></tr></thead>
+    <tbody>
+      <tr>
+        <td><strong>« Identifiants incorrects »</strong> avec le bon mot de passe</td>
+        <td>Compte incomplet (mot de passe jamais défini) ou désactivé.</td>
+        <td>Recréer via <code>dgi:make-superadmin</code> ; vérifier <code>desactive_le</code>.</td>
+      </tr>
+      <tr>
+        <td><strong>Code OTP jamais reçu</strong></td>
+        <td>SMTP mal configuré, port bloqué, expéditeur non autorisé.</td>
+        <td>Tester <code>MAIL_*</code>, lire le journal (échec explicite), essayer 587 puis 465.</td>
+      </tr>
+      <tr>
+        <td><strong>Liens d'e-mail vers localhost:5173</strong></td>
+        <td><code>FRONTEND_URL</code> non défini et configuration en cache.</td>
+        <td>Définir <code>FRONTEND_URL</code> puis <code>optimize:clear</code> + <code>optimize</code>.</td>
+      </tr>
+      <tr>
+        <td><strong>401 après quelques heures</strong></td>
+        <td>Jeton expiré.</td>
+        <td>Comportement normal (480 min). Ajuster <code>SANCTUM_EXPIRATION</code> si nécessaire.</td>
+      </tr>
+      <tr>
+        <td><strong>Erreur CORS</strong></td>
+        <td>Origine du front absente ou différente (slash, port, http/https).</td>
+        <td>Même origine recommandée ; sinon <code>CORS_ALLOWED_ORIGINS</code> exacte, sans slash final.</td>
+      </tr>
+      <tr>
+        <td><strong>429 « Trop de tentatives »</strong></td>
+        <td>Limitation par IP ou par compte après plusieurs échecs.</td>
+        <td>Attendre 15 minutes ; vérifier <code>TRUSTED_PROXIES</code> pour une IP réelle.</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h3>10.3 Installation et Oracle</h3>
+  <table>
+    <thead><tr><th style="width:52mm">Symptôme</th><th style="width:54mm">Cause probable</th><th>Correction</th></tr></thead>
+    <tbody>
+      <tr>
+        <td><code>ext-oci8</code> manquant à l'installation</td>
+        <td>Dépendance de <code>yajra/laravel-oci8</code>.</td>
+        <td>Installer Oracle Instant Client (annexe C) ou <code>--ignore-platform-req=ext-oci8</code>.</td>
+      </tr>
+      <tr>
+        <td><code>ORA-01804</code> / oci8 ne charge pas</td>
+        <td>Bibliothèques Oracle introuvables par PHP-FPM.</td>
+        <td>Renseigner <code>env[LD_LIBRARY_PATH]</code> et <code>env[TNS_ADMIN]</code> dans le pool FPM, redémarrer.</td>
+      </tr>
+      <tr>
+        <td><code>ORA-12154</code> / <code>ORA-12541</code></td>
+        <td>Alias TNS inconnu ou serveur injoignable.</td>
+        <td>Vérifier <code>tnsping</code>, le pare-feu et les variables <code>SOURCE_DB_*</code>.</td>
+      </tr>
+      <tr>
+        <td>Import source : 502</td>
+        <td>Connexion source en échec (message volontairement générique).</td>
+        <td>Lire le détail dans <code>storage/logs/laravel-*.log</code>.</td>
+      </tr>
+      <tr>
+        <td><code>npm run build</code> : erreur TypeScript</td>
+        <td>Dépendances de développement absentes.</td>
+        <td><code>npm ci --include=dev</code> puis relancer.</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="callout info">
+    <span class="t">Réflexe de diagnostic</span>
+    <code>sudo -u www-data php artisan about</code> donne en un écran l'environnement, les caches,
+    la base et les pilotes réellement chargés. C'est le premier contrôle à faire devant un
+    comportement incohérent.
+  </div>
+</section>
+
+<!-- ================================================================= -->
+<!-- 11. SECURITE                                                      -->
+<!-- ================================================================= -->
+<section class="part">
+  <h2><span class="num">11.</span>Durcissement et bonnes pratiques</h2>
+  <p class="part-intro">
+    L'application manipule des données fiscales nominatives : le minimum ci-dessous n'est pas optionnel.
+  </p>
+
+  <ul class="checklist">
+    <li><code>APP_ENV=production</code> et <code>APP_DEBUG=false</code> ; jamais de trace d'erreur visible.</li>
+    <li><code>.env</code> en <code>640</code>, propriétaire du compte de déploiement, groupe <code>www-data</code> ; absent du dépôt.</li>
+    <li>Base PostgreSQL accessible uniquement en local (<code>listen_addresses = 'localhost'</code>).</li>
+    <li>Compte Oracle source en <strong>lecture seule</strong> ; ne jamais réutiliser un compte applicatif.</li>
+    <li>Pare-feu : seuls 22, 80 et 443 exposés.</li>
+    <li>HTTPS obligatoire, HSTS actif, redirection HTTP → HTTPS.</li>
+    <li>En-têtes <code>X-Frame-Options</code>, <code>nosniff</code>, CSP et <code>Referrer-Policy</code> vérifiés par <code>curl -I</code>.</li>
+    <li>Sauvegardes chiffrées, testées par une restauration réelle au moins une fois.</li>
+    <li>Mots de passe uniques par personne ; aucun compte partagé ; comptes partants désactivés (fonction prévue dans l'application).</li>
+    <li>Journaux conservés 30 jours minimum et surveillés (échecs SMTP, 500, pics de 429).</li>
+    <li><code>fail2ban</code> conseillé sur SSH et sur les erreurs 401/429 répétées de nginx.</li>
+    <li>Mises à jour système mensuelles (<code>unattended-upgrades</code> pour la sécurité).</li>
+    <li>PHP en <strong>8.3.36 minimum</strong> (8.4.27 conseillé) : vérifié à chaque déploiement.</li>
+    <li><code>composer audit</code> sans avis avant chaque mise en ligne.</li>
+    <li>En-têtes <code>X-Forwarded-*</code> écrasés dans nginx ; <code>TRUSTED_PROXIES</code> en liste explicite d'adresses.</li>
+  </ul>
+
+  <div class="callout danger">
+    <span class="t">Ne jamais exposer</span>
+    <code>dgi-backend/.env</code>, <code>dgi-backend/storage/</code>, <code>dgi-backend/vendor/</code>
+    ni le port 5432. La configuration nginx de la partie 6 ne sert que <code>dist/</code> et
+    <code>public/index.php</code> : conservez cette séparation.
+  </div>
+
+  <h3>Veille : les correctifs à ne pas manquer</h3>
+  <table>
+    <thead><tr><th style="width:26mm">Date</th><th>Correctif</th><th style="width:36mm">Version minimale</th></tr></thead>
+    <tbody>
+      <tr>
+        <td>21/10/2026</td>
+        <td><strong>CVE-2026-109618 / CVE-2026-109619</strong> — exécution de code à distance
+            non authentifiée dans PHP (« php2shell », CVSS 9.2, catalogue KEV de la CISA le 26/10)</td>
+        <td>PHP 8.3.36 / 8.4.27</td>
+      </tr>
+      <tr>
+        <td>19/10/2026</td>
+        <td><strong>CVE-2026-114509</strong> — contournement d'authentification du
+            <code>TokenGuard</code> de Laravel (MySQL / MariaDB)</td>
+        <td>Laravel 13.29</td>
+      </tr>
+      <tr>
+        <td>oct. 2026</td>
+        <td><strong>CVE-2026-114508</strong> — destruction de données via <code>include</code> JSON:API</td>
+        <td>Laravel 13.27</td>
+      </tr>
+      <tr>
+        <td>nov. 2026</td>
+        <td><strong>CVE-2026-128083</strong> — injection de sortie dans les processus concurrents</td>
+        <td>Laravel 13.40</td>
+      </tr>
+      <tr>
+        <td>nov. 2026</td>
+        <td><strong>CVE-2026-121619 / 123339 / 118516</strong> — proxys de confiance,
+            en-têtes <code>Forwarded</code> forgés, routage par hôte</td>
+        <td>Symfony 8.1.11</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <p class="small">
+    Cette application n'utilise ni le guard <code>token</code>, ni <code>Concurrency</code>, ni de
+    routes par domaine : ces trois familles ne la concernent pas directement. Les mises à jour
+    restent la seule protection durable. Le <code>composer.lock</code> livré est à jour au
+    17/11/2026 (Laravel 13.42, Symfony 8.1.11) et <code>composer audit</code> ne signale plus
+    aucun avis ; les deux avis <em>moderate</em> restants côté npm (react-router) portent sur des
+    fonctionnalités que ce front n'utilise pas (SSR, redirection pilotée par l'URL).
+  </p>
+
+  <div class="callout info">
+    <span class="t">Document complémentaire</span>
+    <code>docs/securite-deploiement.md</code> détaille la politique CSP et les variables
+    <code>TRUSTED_PROXIES</code> / <code>SANCTUM_EXPIRATION</code>. Le présent guide en reprend
+    l'essentiel pour une installation complète.
+  </div>
+</section>
+
+<!-- ================================================================= -->
+<!-- ANNEXE A                                                          -->
+<!-- ================================================================= -->
+<section class="part">
+  <h2><span class="num">A.</span>Variables d'environnement</h2>
+  <p class="part-intro">Valeurs attendues en production. Toute modification exige <code>artisan optimize</code>.</p>
+
+  <table>
+    <thead><tr><th style="width:52mm">Variable</th><th style="width:52mm">Exemple</th><th>Rôle</th></tr></thead>
+    <tbody>
+      <tr><td><code>APP_ENV</code></td><td><code>production</code></td><td>Active les comportements de production.</td></tr>
+      <tr><td><code>APP_DEBUG</code></td><td><code>false</code></td><td>Masque les traces et secrets.</td></tr>
+      <tr><td><code>APP_URL</code></td><td><code>https://dgi.exemple.mg</code></td><td>URL canonique de l'application.</td></tr>
+      <tr><td><code>FRONTEND_URL</code></td><td><code>https://dgi.exemple.mg</code></td><td>Liens dans les e-mails.</td></tr>
+      <tr><td><code>DB_CONNECTION</code></td><td><code>pgsql</code></td><td>Pilote de la base applicative.</td></tr>
+      <tr><td><code>DB_DATABASE</code> / <code>DB_USERNAME</code> / <code>DB_PASSWORD</code></td><td><code>dgi_prod</code> / <code>dgi</code> / …</td><td>Identifiants de la base applicative.</td></tr>
+      <tr><td><code>SESSION_DRIVER</code></td><td><code>file</code></td><td>Sessions sur disque. L'application est sans état (jetons Sanctum) et
+          <strong>aucune table <code>sessions</code> n'est créée par les migrations</strong> : gardez <code>file</code>.</td></tr>
+      <tr><td><code>SESSION_SECURE_COOKIE</code></td><td><code>true</code></td><td>Cookie uniquement en HTTPS.</td></tr>
+      <tr><td><code>CACHE_STORE</code></td><td><code>database</code></td><td>Cache partagé entre processus.</td></tr>
+      <tr><td><code>QUEUE_CONNECTION</code></td><td><code>database</code></td><td>File d'attente (worker facultatif).</td></tr>
+      <tr><td><code>MAIL_MAILER</code></td><td><code>smtp</code></td><td>Transport des codes OTP.</td></tr>
+      <tr><td><code>MAIL_SCHEME</code></td><td><code>smtp</code> (587) / <code>smtps</code> (465)</td><td>Chiffrement SMTP.</td></tr>
+      <tr><td><code>CORS_ALLOWED_ORIGINS</code></td><td><code>https://dgi.exemple.mg</code></td><td>Origines autorisées (sans slash final).</td></tr>
+      <tr><td><code>SANCTUM_EXPIRATION</code></td><td><code>480</code></td><td>Durée du jeton, en minutes.</td></tr>
+      <tr><td><code>TRUSTED_PROXIES</code></td><td><code>127.0.0.1,::1</code></td><td>Proxys dont les en-têtes <code>X-Forwarded-*</code> sont acceptés.</td></tr>
+      <tr><td><code>LOG_CHANNEL</code></td><td><code>daily</code></td><td>Rotation quotidienne des journaux.</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Sources de données (facultatif)</h3>
+  <table>
+    <thead><tr><th style="width:64mm">Variable</th><th>Rôle</th></tr></thead>
+    <tbody>
+      <tr><td><code>SOURCE_DB_DRIVER</code></td><td><code>oracle</code> ou <code>pgsql</code>.</td></tr>
+      <tr><td><code>SOURCE_DB_HOST</code>, <code>_PORT</code>, <code>_SERVICE_NAME</code></td><td>Connexion Oracle (port 1521).</td></tr>
+      <tr><td><code>SOURCE_DB_USERNAME</code>, <code>_PASSWORD</code></td><td>Compte de lecture.</td></tr>
+      <tr><td><code>SOURCE_DB_SCHEMA</code></td><td>Propriétaire des tables si différent de l'utilisateur.</td></tr>
+      <tr><td><code>SOURCE_DB_TNS</code></td><td>Descripteur TNS ou alias de wallet (prioritaire).</td></tr>
+      <tr><td><code>DGI_SOURCE_CONNECTION</code></td><td>Connexion commune (défaut : <code>source</code>).</td></tr>
+      <tr><td><code>DGI_SOURCE_CONNECTION_&lt;GROUPE&gt;</code></td><td>Une base par groupe : DECLARATIONS, CONTRIBUABLES, CENTRES, AGENTS…</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- ================================================================= -->
+<!-- ANNEXE B                                                          -->
+<!-- ================================================================= -->
+<section class="part">
+  <h2><span class="num">B.</span>Commandes Artisan utiles</h2>
+  <p class="part-intro">À exécuter dans <code>/var/www/dgi/dgi-backend</code>, si possible en tant que <code>www-data</code>.</p>
+
+  <table>
+    <thead><tr><th style="width:86mm">Commande</th><th>Effet</th></tr></thead>
+    <tbody>
+      <tr><td><code>php artisan migrate --force</code></td><td>Applique les migrations en production.</td></tr>
+      <tr><td><code>php artisan migrate:status</code></td><td>Liste les migrations appliquées ou en attente.</td></tr>
+      <tr><td><code>php artisan db:seed --class=FonctionSeeder --force</code></td><td>Crée les quatre fonctions et rôles de base.</td></tr>
+      <tr><td><code>php artisan dgi:make-superadmin email --nom="…"</code></td><td>Crée ou promeut un super administrateur.</td></tr>
+      <tr><td><code>php artisan dgi:importer-centres</code></td><td>Importe les centres officiels depuis la base source.</td></tr>
+      <tr><td><code>php artisan dgi:importer-source --tester</code></td><td>Teste la connexion source et la présence des tables.</td></tr>
+      <tr><td><code>php artisan dgi:importer-source</code></td><td>Importe contribuables, assujettissements et déclarations.</td></tr>
+      <tr><td><code>php artisan dgi:importer-risque</code></td><td>Reconstitue la base d'analyse risque (recoupement, DAU).</td></tr>
+      <tr><td><code>php artisan dgi:detecter-defaillances</code></td><td>Lance la détection ponctuelle des anomalies.</td></tr>
+      <tr><td><code>php artisan sanctum:prune-expired --hours=24</code></td><td>Purge les jetons expirés (planifié quotidiennement).</td></tr>
+      <tr><td><code>php artisan optimize</code> / <code>optimize:clear</code></td><td>Active / vide les caches de production.</td></tr>
+      <tr><td><code>php artisan about</code></td><td>Résumé de l'environnement et des pilotes chargés.</td></tr>
+      <tr><td><code>php artisan config:show dgi</code></td><td>Affiche la configuration des sources.</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Imports depuis les bases sources</h3>
+<pre><span class="c"># 1. Vérifier la connexion</span>
+php artisan dgi:importer-source --tester
+
+<span class="c"># 2. Importer un intervalle et analyser</span>
+php artisan dgi:importer-source --depuis=2025 --jusqua=2026 --analyser
+
+<span class="c"># 3. Base d'analyse risque (règles R1, R2, R3, R5, R6, R7)</span>
+php artisan dgi:importer-risque --depuis=2025 --analyser</pre>
+
+  <p class="small">
+    Les imports peuvent aussi être lancés depuis l'interface (super admin / central / chef de centre),
+    avec un fichier CSV. Les commandes restent utiles pour un traitement initial massif.
+  </p>
+</section>
+
+<!-- ================================================================= -->
+<!-- ANNEXE C                                                          -->
+<!-- ================================================================= -->
+<section class="part">
+  <h2><span class="num">C.</span>Connexion aux bases sources Oracle</h2>
+  <p class="part-intro">
+    Nécessaire uniquement si l'application doit lire les déclarations directement dans Oracle,
+    ou si <code>composer install</code> doit satisfaire <code>ext-oci8</code>.
+  </p>
+
+  <h3>C.1 Client Oracle Instant Client (Linux)</h3>
+<pre>sudo apt install -y libaio1t64 unzip php8.3-dev php-pear build-essential
+
+<span class="c"># Télécharger « Instant Client Basic » (zip x64) depuis oracle.com</span>
+sudo mkdir -p /opt/oracle
+sudo unzip instantclient-basic-linux.x64-23.*.zip -d /opt/oracle
+
+sudo sh -c "echo /opt/oracle/instantclient_23_5 &gt; /etc/ld.so.conf.d/oracle-instantclient.conf"
+sudo ldconfig</pre>
+
+  <p class="small">
+    Sur Ubuntu 24.04, le paquet requis par Instant Client est <code>libaio1t64</code>
+    (<code>libaio1</code> sur les versions antérieures).
+  </p>
+
+  <h3>C.2 Extension PHP oci8</h3>
+<pre>sudo pecl install oci8
+<span class="c"># À la question « ORACLE_HOME », répondre :</span>
+<span class="c"># instantclient,/opt/oracle/instantclient_23_5</span>
+
+echo "extension=oci8.so" | sudo tee /etc/php/8.3/mods-available/oci8.ini
+sudo phpenmod oci8
+php -m | grep oci8
+composer check-platform-reqs | grep oci8</pre>
+
+  <h3>C.3 Déclarer le client à PHP-FPM</h3>
+  <p>Dans <code>/etc/php/8.3/fpm/pool.d/www.conf</code> :</p>
+<pre>env[LD_LIBRARY_PATH] = /opt/oracle/instantclient_23_5
+env[ORACLE_HOME] = /opt/oracle/instantclient_23_5
+env[TNS_ADMIN] = /opt/oracle/network/admin</pre>
+<pre>sudo systemctl restart php8.3-fpm</pre>
+
+  <h3>C.4 Configuration applicative</h3>
+<pre>SOURCE_DB_DRIVER=oracle
+SOURCE_DB_HOST=10.0.0.10
+SOURCE_DB_PORT=1521
+SOURCE_DB_SERVICE_NAME=ORCLPDB1
+SOURCE_DB_DATABASE=ORCLPDB1
+SOURCE_DB_USERNAME=DGI_LECTURE
+SOURCE_DB_PASSWORD="…"
+SOURCE_DB_CHARSET=AL32UTF8
+<span class="c"># ou, si un wallet/TNS est fourni :</span>
+<span class="c"># SOURCE_DB_TNS=dgi_high</span></pre>
+
+  <p>Puis :</p>
+<pre>php artisan config:clear
+php artisan dgi:importer-source --tester</pre>
+
+  <div class="callout info">
+    <span class="t">Déploiement Windows / Herd</span>
+    La procédure détaillée pour Windows (Instant Client, <code>php_oci8_19.dll</code>, PATH, VC++ Redistributable)
+    figure dans <code>dgi-backend/docs/installation-oracle-oci8-windows.md</code>, avec le guide
+    <code>serveur-oracle-local-windows.md</code> pour un serveur XE local.
+  </div>
+</section>
+
+<!-- ================================================================= -->
+<!-- ANNEXE D                                                          -->
+<!-- ================================================================= -->
+<section class="part">
+  <h2><span class="num">D.</span>Tests automatisés</h2>
+  <p class="part-intro">
+    Facultatif en production, indispensable avant de livrer une mise à jour sensible.
+  </p>
+
+  <p>La suite utilise SQLite en mémoire et n'a besoin d'aucune base externe :</p>
+<pre>sudo apt install -y php8.3-sqlite3
+cd /var/www/dgi/dgi-backend
+php artisan test</pre>
+
+  <p>Résultat attendu sur la version de référence de ce guide :</p>
+  <div class="box">
+    <strong>128 tests, 709 assertions, toutes vertes.</strong>
+    Couvre l'authentification, les rôles, les alertes, le tableau de bord, le comparatif des centres,
+    le rappel et la clôture des codes d'activation, le catalogue des indicateurs, le journal
+    d'activités, le statut en ligne des utilisateurs et les imports.
+  </div>
+
+  <p>Vérification du style de code (Laravel Pint), sans modification :</p>
+<pre>vendor/bin/pint --test</pre>
+
+  <p>Contrôle du build frontend :</p>
+<pre>cd /var/www/dgi/dgi-frontend
+npx tsc --noEmit
+npm run build</pre>
+
+  <div class="callout warn">
+    <span class="t">Ne lancez pas les tests sur la base de production</span>
+    <code>php artisan test</code> recrée le schéma. Le fichier <code>phpunit.xml</code> force heureusement
+    SQLite en mémoire, mais ne modifiez pas ces valeurs sur le serveur.
+  </div>
+</section>
+
+<!-- ================================================================= -->
+<!-- ANNEXE E                                                          -->
+<!-- ================================================================= -->
+<section class="part">
+  <h2><span class="num">E.</span>Installation locale pour le développement</h2>
+  <p class="part-intro">
+    Rappel pour un poste de travail, à ne pas confondre avec la mise en production.
+  </p>
+
+  <h3>E.1 Backend</h3>
+<pre>cd dgi-backend
+cp .env.example .env
+php artisan key:generate
+<span class="c"># .env : DB_CONNECTION=pgsql, DB_DATABASE=dgi-test, DB_USERNAME=postgres</span>
+php artisan migrate
+php artisan db:seed --class=FonctionSeeder
+php artisan dgi:make-superadmin vous@exemple.com --nom="Votre nom"
+php artisan serve            <span class="c"># http://127.0.0.1:8000</span></pre>
+
+  <h3>E.2 Frontend</h3>
+<pre>cd dgi-frontend
+npm install
+npm run dev                  <span class="c"># http://localhost:5173</span></pre>
+
+  <p>
+    Vite transmet <code>/api</code> vers <code>http://127.0.0.1:8000</code> (voir
+    <code>vite.config.ts</code>) : aucun CORS n'est nécessaire en local.
+  </p>
+
+  <h3>E.3 Points de vigilance en développement</h3>
+  <ul>
+    <li>Le code OTP est renvoyé dans la réponse API uniquement si <code>APP_DEBUG=true</code> <strong>et</strong>
+        <code>APP_ENV=local</code>. En production, il n'apparaît jamais.</li>
+    <li>Avec <code>MAIL_MAILER=log</code>, le code se lit dans <code>storage/logs/laravel.log</code>.</li>
+    <li>Les comptes de test cités dans la documentation interne (super admin, chef de centre) ne sont pas
+        versionnés : ils se recréent avec les commandes ci-dessus.</li>
+    <li>Ne jamais copier un <code>.env</code> de développement sur le serveur.</li>
+  </ul>
+
+  <div class="footer-note">
+    Guide de déploiement DGI E-Fehy — version 1.2 du 18 novembre 2026.
+    Dépôt : <code>github.com/hagasantatra4336/Projet-hg</code>.
+    Ce document décrit l'état du projet à cette date ; vérifiez <code>git log</code> et les fichiers
+    <code>docs/</code> du dépôt pour toute évolution ultérieure.
+  </div>
+</section>
+
+</body>
+</html>

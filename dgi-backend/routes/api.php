@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Api\ActiviteController;
 use App\Http\Controllers\Api\AnalyseAutoController;
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\CentreController;
@@ -18,6 +19,7 @@ use App\Http\Controllers\Api\ReglePersonnaliseeController;
 use App\Http\Controllers\Api\SourceImportController;
 use App\Http\Controllers\Api\UserController;
 use App\Http\Middleware\EnsureRole;
+use App\Http\Middleware\JournaliserActivite;
 use App\Http\Middleware\RejeterCompteDesactive;
 use Illuminate\Support\Facades\Route;
 
@@ -48,7 +50,7 @@ Route::get('/register/status/{requestId}', [AuthController::class, 'signupStatus
 // L'agent annule sa demande (avant la création du compte)
 Route::post('/register/cancel', [AuthController::class, 'cancelSignup'])->middleware('throttle:10,1,signup-cancel');
 
-// Étape 3 : vérification du code OTP (valable 5 minutes, envoyé après approbation) → setup_token
+// Étape 3 : vérification du code OTP (valable 24 heures, envoyé après approbation) → setup_token
 Route::post('/register/verify-otp', [AuthController::class, 'verifyOtp'])->middleware('throttle:6,1,signup-verify');
 Route::post('/register/resend-otp', [AuthController::class, 'resendOtp'])->middleware('throttle:3,1,signup-resend');
 
@@ -72,7 +74,7 @@ Route::get('/profile/change-status/{requestId}', [ProfileController::class, 'cha
 // ---------------------------------------------------------------------
 //  Routes protégées (jeton Sanctum)
 // ---------------------------------------------------------------------
-Route::middleware(['auth:sanctum', RejeterCompteDesactive::class])->group(function () {
+Route::middleware(['auth:sanctum', RejeterCompteDesactive::class, JournaliserActivite::class])->group(function () {
     Route::post('/logout', [AuthController::class, 'logout']);
     Route::get('/me', [AuthController::class, 'me']);
     Route::get('/notifications', NotificationController::class);
@@ -140,6 +142,9 @@ Route::middleware(['auth:sanctum', RejeterCompteDesactive::class])->group(functi
         Route::post('/regles-personnalisees/{regle}/activer', [ReglePersonnaliseeController::class, 'activer']);
         Route::post('/regles-personnalisees/{regle}/desactiver', [ReglePersonnaliseeController::class, 'desactiver']);
         Route::get('/regles/historique', [RegleController::class, 'historique']);
+
+        // Journal d'activités du système : lecture seule, réservée aux rôles qui supervisent.
+        Route::get('/activites', [ActiviteController::class, 'index']);
     });
 
     // Intégration Oracle : toutes les connexions sources sont en lecture seule.

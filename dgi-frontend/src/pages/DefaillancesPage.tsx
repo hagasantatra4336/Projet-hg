@@ -21,12 +21,24 @@ import {
   ErrorBox,
   Field,
   FormActions,
+  IconButton,
   Modal,
   inputClass,
   primaryButtonClass,
   secondaryButtonClass,
 } from "../components/ui";
-import { IconChevron, IconDownload, IconRefresh, IconSearch, IconSliders, IconUpload } from "../components/icons";
+import {
+  IconChevron,
+  IconDownload,
+  IconEye,
+  IconFile,
+  IconPlay,
+  IconRefresh,
+  IconSearch,
+  IconSliders,
+  IconUpload,
+  IconUserPlus,
+} from "../components/icons";
 import SearchSelect from "../components/SearchSelect";
 import {
   AnomaliesDossierModal,
@@ -629,13 +641,13 @@ export default function DefaillancesPage() {
             disabled={exporting}
             title="Exporter en CSV les dossiers correspondant aux filtres actuels"
           >
-            <IconDownload className="h-4 w-4" /> {exporting ? "Export..." : "Exporter CSV"}
+            <IconUpload className="h-4 w-4" /> {exporting ? "Export..." : "Exporter CSV"}
           </button>
 
           {canManage && (
             <>
               <button type="button" className={`${secondaryButtonClass} inline-flex items-center gap-2`} onClick={openImport}>
-                <IconUpload className="h-4 w-4" /> Importer un CSV
+                <IconDownload className="h-4 w-4" /> Importer un CSV
               </button>
               <button
                 type="button"
@@ -930,7 +942,7 @@ export default function DefaillancesPage() {
                   </button>
                 </th>
                 <th className="px-2 py-2">Statut</th>
-                <th className="sticky right-0 z-10 border-l border-line bg-slate-50 px-2 py-2 text-right">Traiter</th>
+                <th className="sticky right-0 z-10 border-l border-line bg-slate-50 px-2 py-2 text-right">Actions</th>
               </tr>
             </thead>
             <tbody className={loading ? "opacity-50 transition" : "transition"}>
@@ -996,90 +1008,96 @@ export default function DefaillancesPage() {
                       )}
                     </td>
                     <td className="px-2 py-2.5">
-                      <StatutBadge statut={g.statut} />
-                      {g.statut === "traitee" && g.traite_par && (
-                        <p className="mt-0.5 text-xs text-slate-500">
-                          par {g.traite_par}
-                          {g.traite_le ? `, le ${formatDate(g.traite_le)}` : ""}
-                        </p>
-                      )}
-                      {g.statut === "en_traitement" && g.pris_par && (
-                        <p className="mt-0.5 text-xs text-slate-500">
-                          par {g.pris_par_moi ? "vous" : g.pris_par}
-                          {g.pris_le ? `, depuis ${formatDateHeure(g.pris_le)}` : ""}
-                        </p>
-                      )}
+                      <div className="flex items-center gap-1.5 whitespace-nowrap">
+                        <StatutBadge statut={g.statut} />
+                        {g.statut === "traitee" && g.traite_par && (
+                          <span
+                            className="min-w-0 max-w-[150px] truncate text-[10px] leading-4 text-slate-500"
+                            title={`Traité par ${g.traite_par}${g.traite_le ? ` le ${formatDate(g.traite_le)}` : ""}`}
+                          >
+                            par {g.traite_par}
+                            {g.traite_le ? ` · ${formatDate(g.traite_le)}` : ""}
+                          </span>
+                        )}
+                        {g.statut === "en_traitement" && g.pris_par && (
+                          <span
+                            className="min-w-0 max-w-[150px] truncate text-[10px] leading-4 text-slate-500"
+                            title={`Pris par ${g.pris_par_moi ? "vous" : g.pris_par}${g.pris_le ? ` depuis ${formatDateHeure(g.pris_le)}` : ""}`}
+                          >
+                            par {g.pris_par_moi ? "vous" : g.pris_par}
+                            {g.pris_le ? ` · ${formatDateHeure(g.pris_le)}` : ""}
+                          </span>
+                        )}
+                      </div>
                       {g.commentaire && (
-                        <p className="mt-0.5 line-clamp-2 max-w-[160px] break-words text-xs italic text-slate-500" title={g.commentaire}>
+                        <p className="mt-0.5 line-clamp-1 max-w-[180px] break-words text-[10px] italic leading-4 text-slate-500" title={g.commentaire}>
                           {g.commentaire}
                         </p>
                       )}
                     </td>
                     <td className="sticky right-0 z-[1] border-l border-line bg-white px-2 py-2 text-right group-hover:bg-slate-50">
                       {g.statut === "en_traitement" && !g.pris_par_moi ? (
-                        <div className="flex flex-col items-end gap-0.5">
+                        <div className="flex flex-col items-end gap-1.5">
                           <span className="rounded border border-line bg-slate-50 px-2 py-1 text-[12px] font-medium text-slate-500" title={`Dossier pris par ${g.pris_par ?? "un autre utilisateur"}`}>
                             En traitement
                           </span>
-                          <div className="flex items-center gap-2.5">
-                            <button
-                              type="button"
-                              className="text-xs font-medium text-brand-azure underline-offset-2 hover:text-brand-blue hover:underline disabled:opacity-50"
+                          <div className="flex items-center gap-1">
+                            <IconButton
+                              label="Voir le détail des anomalies"
                               disabled={voirId === g.representant_id}
                               onClick={() => void voirDetails(g)}
-                              title="Voir le détail des anomalies de ce dossier"
                             >
-                              {voirId === g.representant_id ? "..." : "Voir"}
-                            </button>
+                              <IconEye className="h-4 w-4" />
+                            </IconButton>
                             {canManage && (
-                              <button
-                                type="button"
-                                className="text-xs font-medium text-brand-azure hover:text-brand-blue hover:underline disabled:opacity-50"
+                              <IconButton
+                                label="Reprendre le dossier"
                                 disabled={priseId === g.representant_id}
                                 onClick={() => setAReprendre(g)}
                               >
-                                Reprendre
-                              </button>
+                                <IconRefresh className="h-4 w-4" />
+                              </IconButton>
                             )}
                           </div>
                         </div>
                       ) : (
-                        <div className="flex flex-col items-end gap-0.5">
-                          <button
-                            type="button"
-                            className={primaryButtonClass + " px-2.5 py-1 text-xs"}
+                        <div className="flex items-center justify-end gap-1">
+                          <IconButton
+                            tone="primary"
+                            label={
+                              g.statut === "en_traitement"
+                                ? "Continuer le traitement"
+                                : g.statut === "a_traiter"
+                                  ? "Traiter le dossier"
+                                  : "Ouvrir le dossier traité"
+                            }
                             disabled={priseId === g.representant_id}
                             onClick={() => void traiter(g)}
                           >
-                            {priseId === g.representant_id
-                              ? "..."
-                              : g.statut === "en_traitement"
-                                ? "Continuer"
-                                : g.statut === "a_traiter"
-                                  ? "Traiter"
-                                  : "Voir le dossier"}
-                          </button>
-                          <div className="flex items-center gap-2.5">
-                            <button
-                              type="button"
-                              className="text-xs font-medium text-brand-azure underline-offset-2 hover:text-brand-blue hover:underline disabled:opacity-50"
-                              disabled={voirId === g.representant_id}
-                              onClick={() => void voirDetails(g)}
-                              title="Voir le détail des anomalies de ce dossier"
-                            >
-                              {voirId === g.representant_id ? "..." : "Voir"}
-                            </button>
-                            {g.statut === "a_traiter" && canManage && (
-                              <button
-                                type="button"
-                                className="text-xs font-medium text-brand-azure underline underline-offset-2 hover:text-brand-blue disabled:opacity-50"
-                                disabled={priseId === g.representant_id}
-                                onClick={() => openAssigner(g)}
-                              >
-                                Assigner
-                              </button>
+                            {priseId === g.representant_id ? (
+                              <IconRefresh className="h-4 w-4 animate-spin" />
+                            ) : g.statut === "a_traiter" || g.statut === "en_traitement" ? (
+                              <IconPlay className="h-4 w-4" />
+                            ) : (
+                              <IconFile className="h-4 w-4" />
                             )}
-                          </div>
+                          </IconButton>
+                          <IconButton
+                            label="Voir le détail des anomalies"
+                            disabled={voirId === g.representant_id}
+                            onClick={() => void voirDetails(g)}
+                          >
+                            <IconEye className="h-4 w-4" />
+                          </IconButton>
+                          {g.statut === "a_traiter" && canManage && (
+                            <IconButton
+                              label="Assigner le dossier à un agent"
+                              disabled={priseId === g.representant_id}
+                              onClick={() => openAssigner(g)}
+                            >
+                              <IconUserPlus className="h-4 w-4" />
+                            </IconButton>
+                          )}
                         </div>
                       )}
                     </td>

@@ -9,6 +9,8 @@ const TITLES: Record<string, string> = {
   "/admin/regles": "Règles de détection",
   "/admin/regles/historique": "Historique des règles",
   "/admin/regles-personnalisees": "Règles personnalisées",
+  "/admin/indicateurs": "Indicateurs",
+  "/admin/activites": "Historique d'activité",
 };
 
 export default function AdminLayout() {

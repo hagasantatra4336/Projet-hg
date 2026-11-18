@@ -1,4 +1,5 @@
 import { useEffect, useState, type FormEvent } from "react";
+import { Link } from "react-router-dom";
 import api, { getErrorMessage } from "../../services/api";
 import { useAuth } from "../../context/AuthContext";
 import { ROLE_LABELS, ROLE_RANK, type AppUser, type Paginated, type Role } from "../../types";
@@ -19,6 +20,7 @@ import {
   secondaryButtonClass,
 } from "../../components/ui";
 import SearchSelect from "../../components/SearchSelect";
+import { formatDateHeure } from "../../components/defaillance";
 
 interface Options {
   centres: { id: number; nom: string }[];
@@ -133,6 +135,7 @@ export default function UsersPage() {
 
   const isAdmin = me.role === "admin";
   const isSuperadmin = me.role === "superadmin";
+  const peutVoirJournal = me.role === "central" || me.role === "superadmin";
   const selectedFonction = options.fonctions.find((f) => String(f.id) === form.fonction_id);
   const needsCentre = selectedFonction?.role === "agent" || selectedFonction?.role === "admin";
 
@@ -259,6 +262,11 @@ export default function UsersPage() {
           </div>
         )}
         <div className="flex-1" />
+        {peutVoirJournal && (
+          <Link to="/admin/activites" className={`${secondaryButtonClass} inline-flex items-center gap-2`}>
+            Historique d'activité
+          </Link>
+        )}
         <button type="button" className={primaryButtonClass} onClick={openNew}>
           + Ajouter un utilisateur
         </button>
@@ -275,20 +283,21 @@ export default function UsersPage() {
               <th className="px-3 py-2">Téléphone</th>
               <th className="px-3 py-2">Centre</th>
               <th className="px-3 py-2">Fonction</th>
+              <th className="px-3 py-2">Statut</th>
               <th className="sticky right-0 z-10 w-[132px] border-l border-line bg-slate-50 px-3 py-2" />
             </tr>
           </thead>
           <tbody className="divide-y divide-line">
             {loading && (
               <tr>
-                <td colSpan={6} className="px-3 py-4 text-center text-slate-500">
+                <td colSpan={7} className="px-3 py-4 text-center text-slate-500">
                   Chargement...
                 </td>
               </tr>
             )}
             {!loading && users.length === 0 && (
               <tr>
-                <td colSpan={6} className="px-3 py-4 text-center text-slate-500">
+                <td colSpan={7} className="px-3 py-4 text-center text-slate-500">
                   Aucun utilisateur.
                 </td>
               </tr>
@@ -321,6 +330,22 @@ export default function UsersPage() {
                   <td className="px-3 py-2">
                     <div className="text-slate-700 mb-1">{u.fonction?.nom ?? "—"}</div>
                     <RoleBadge role={u.role} />
+                  </td>
+                  <td className="px-3 py-2">
+                    <span
+                      className="inline-flex items-center gap-2 whitespace-nowrap text-xs font-medium text-slate-700"
+                      title={
+                        u.derniere_activite_le
+                          ? `Dernière activité : ${formatDateHeure(u.derniere_activite_le)}`
+                          : "Aucune activité enregistrée"
+                      }
+                    >
+                      <span
+                        className={`h-2.5 w-2.5 rounded-full ${u.en_ligne ? "bg-brand-green" : "bg-slate-900"}`}
+                        aria-hidden="true"
+                      />
+                      {u.en_ligne ? "En ligne" : "Hors ligne"}
+                    </span>
                   </td>
                   <td className="sticky right-0 z-[1] border-l border-line bg-white px-3 py-2 text-right whitespace-nowrap">
                     {canManage(me, u) && (

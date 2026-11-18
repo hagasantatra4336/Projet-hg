@@ -20,10 +20,61 @@ server {
 }
 ```
 
-## Variables d'environnement utiles
+## En-têtes `X-Forwarded-*` : les écraser, jamais les relayer
 
-- `TRUSTED_PROXIES` : adresses des proxys dont les en-têtes `X-Forwarded-*` sont acceptés.
-  Par défaut `127.0.0.1,::1` (nginx sur le même hôte). Indispensable pour que les limitations
-  par IP et le HTTPS détecté (`X-Forwarded-Proto`) soient corrects.
+`TRUSTED_PROXIES` fait confiance à `127.0.0.1`, l'adresse de nginx : c'est nécessaire pour que
+les limitations par IP voient la vraie adresse du client. Mais en FastCGI, nginx transmet
+**tous** les en-têtes reçus du navigateur, y compris ceux que le client a forgés. Un attaquant
+qui envoie `X-Forwarded-Host: site-pirate.mg` arrive donc depuis une adresse de confiance :
+Symfony accepte l'en-tête et fabrique des URL (liens d'e-mail, redirections) vers ce domaine.
+C'est le vecteur de **CVE-2026-123339** (`symfony/http-kernel`).
+
+La parade consiste à écraser ces en-têtes dans le bloc `location` qui passe à PHP-FPM :
+
+```nginx
+location ^~ /api/ {
+    include fastcgi_params;
+    fastcgi_pass unix:/run/php/php8.3-fpm.sock;
+    fastcgi_param SCRIPT_FILENAME /var/www/dgi/dgi-backend/public/index.php;
+    fastcgi_param SCRIPT_NAME /index.php;
+
+    # Un client ne doit jamais pouvoir imposer ces valeurs.
+    fastcgi_param HTTP_X_FORWARDED_HOST  $host;
+    fastcgi_param HTTP_X_FORWARDED_PROTO $scheme;
+    fastcgi_param HTTP_X_FORWARDED_FOR   $remote_addr;
+    fastcgi_param HTTP_X_FORWARDED_PORT  $server_port;
+}
+```
+
+Contrôle :
+
+```bash
+curl -sS -H 'X-Forwarded-Host: pirate.example' https://dgi.exemple.mg/api/me -o /dev/null -w '%{http_code}\n'
+# puis, dans storage/logs/laravel.log ou dans un lien reçu par e-mail :
+# l'hôte doit rester celui du site, jamais pirate.example.
+```
+
+Ne mettez **jamais** `private_ranges` dans `TRUSTED_PROXIES` : ce raccourci est affecté par
+**CVE-2026-121619** (adresses IPv4-mappées, 6to4, Teredo et NAT64 acceptées comme proxys).
+Une liste d'adresses explicites est la seule forme recommandée.
+
+## Version de PHP
+
+Le 21/10/2026, deux exécutions de code à distance critiques ont été corrigées :
+**CVE-2026-109618** et **CVE-2026-109619** (« php2shell », CVSS 9.2). Elles sont au catalogue
+KEV de la CISA depuis le 26/10/2026, donc **activement exploitées**.
+
+| Version | État |
+|---|---|
+| 8.5.12, 8.4.27, 8.3.36, 8.2.35 | corrigées |
+| 8.3.6 (dépôt Ubuntu 24.04) | **vulnérable** |
+
+Exiger `php -v` >= 8.3.36 (8.4.27 ou plus conseillé), typiquement via le dépôt `ondrej/php`.
+En mesure d'attente uniquement : `session.upload_progress.enabled=0` dans `php.ini`.
+
+## Dépendances PHP
+
+`composer audit` doit répondre *No security vulnerability advisories found* avant chaque mise
+en ligne. Ce contrôle fait partie de la procédure de mise à jour.
 - `SANCTUM_EXPIRATION` : durée de vie des jetons en minutes (480 par défaut).
 - `SESSION_SECURE_COOKIE=true` et `APP_ENV=production`, `APP_DEBUG=false` en production.

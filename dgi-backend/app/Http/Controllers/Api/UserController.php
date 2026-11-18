@@ -28,7 +28,11 @@ class UserController extends Controller
     public function index(Request $request): JsonResponse
     {
         $me = $request->user();
-        $query = User::with(['centre', 'fonction', 'desactivePar'])->orderBy('nom');
+        $query = User::with(['centre', 'fonction', 'desactivePar'])
+            // Statut en ligne : dernière utilisation du jeton Sanctum (mis à jour à chaque requête).
+            ->withMax('tokens as derniere_activite', 'last_used_at')
+            ->withMax('tokens as derniere_connexion', 'created_at')
+            ->orderBy('nom');
 
         if ($me->role === Role::Admin) {
             // Le chef de centre ne voit que les agents de son centre (il ne gère que ce niveau).
@@ -39,7 +43,7 @@ class UserController extends Controller
         }
 
         if ($request->filled('search')) {
-            $term = '%' . trim((string) $request->input('search')) . '%';
+            $term = '%'.trim((string) $request->input('search')).'%';
 
             // ILIKE : insensible à la casse (PostgreSQL)
             $query->where(function ($q) use ($term) {
@@ -239,7 +243,7 @@ class UserController extends Controller
     {
         if (! $me->role->canAssign($fonction->role)) {
             throw ValidationException::withMessages([
-                'fonction_id' => "Vous ne pouvez pas attribuer cette fonction.",
+                'fonction_id' => 'Vous ne pouvez pas attribuer cette fonction.',
             ]);
         }
     }

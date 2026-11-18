@@ -339,6 +339,9 @@ export default function ReglesPage() {
           <Link to="/admin/regles/historique" className={`${secondaryButtonClass} inline-block`}>
             Historique des règles
           </Link>
+          <Link to="/admin/indicateurs" className={`${secondaryButtonClass} inline-block`}>
+            Indicateurs
+          </Link>
           <Link to="/admin/regles-personnalisees" className={`${primaryButtonClass} inline-block text-center`}>
             Règles personnalisées
           </Link>

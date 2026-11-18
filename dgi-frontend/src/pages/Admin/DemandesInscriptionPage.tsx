@@ -137,7 +137,7 @@ export default function DemandesInscriptionPage() {
   const portee =
     user?.role === "admin"
       ? `Demandes des agents de votre centre${user.centre ? ` (${user.centre.nom})` : ""}.`
-      : "Toutes les demandes. Chaque demande est traitée selon la fonction demandée : agent → chef de centre, chef de centre → administration centrale.";
+      : "";
 
   return (
     <div>

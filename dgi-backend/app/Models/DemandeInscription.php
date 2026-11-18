@@ -44,6 +44,7 @@ class DemandeInscription extends Model
         'otp_attempts',
         'otp_renvois',
         'otp_envoye_le',
+        'rappel_otp_envoye_le',
         'setup_hash',
         'setup_expires_at',
         'expires_at',
@@ -54,6 +55,7 @@ class DemandeInscription extends Model
         return [
             'otp_expires_at' => 'datetime',
             'otp_envoye_le' => 'datetime',
+            'rappel_otp_envoye_le' => 'datetime',
             'setup_expires_at' => 'datetime',
             'traite_le' => 'datetime',
             'expires_at' => 'datetime',
@@ -77,10 +79,21 @@ class DemandeInscription extends Model
         return $this->belongsTo(User::class, 'traite_par');
     }
 
-    /** Statut réel : une demande encore « en_attente » au-delà de sa date limite est expirée. */
+    /**
+     * Statut réel : une demande encore « en_attente » au-delà de sa date limite est expirée,
+     * et une demande approuvée dont le code OTP a expiré sans être saisi l'est également
+     * (l'agent doit déposer une nouvelle demande).
+     */
     public function statutEffectif(): string
     {
         if ($this->statut === self::EN_ATTENTE && $this->expires_at !== null && now()->greaterThan($this->expires_at)) {
+            return self::EXPIREE;
+        }
+
+        if ($this->statut === self::APPROUVEE
+            && $this->otp_hash !== null
+            && $this->otp_expires_at !== null
+            && now()->greaterThan($this->otp_expires_at)) {
             return self::EXPIREE;
         }
 
