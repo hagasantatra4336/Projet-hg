@@ -89,6 +89,20 @@ class AuthController extends Controller
             ],
         ]);
 
+        $centre = Centre::findOrFail($data['centre_id']);
+        $fonction = Fonction::findOrFail($data['fonction_id']);
+        $fonctionCorrespondAuCentre = $centre->type_centre === Centre::TYPE_CENTRAL
+            ? $fonction->role === Role::Central
+            : in_array($fonction->role, [Role::Agent, Role::Admin], true);
+
+        if (! $fonctionCorrespondAuCentre) {
+            throw ValidationException::withMessages([
+                'fonction_id' => $centre->type_centre === Centre::TYPE_CENTRAL
+                    ? "Un service central doit être associé à la fonction Central."
+                    : "Un centre fiscal doit être associé à la fonction Agent ou Chef de centre.",
+            ]);
+        }
+
         if (User::where('email', $data['email'])->exists()) {
             throw ValidationException::withMessages([
                 'email' => 'Cet e-mail est déjà utilisé.',
@@ -130,7 +144,6 @@ class AuthController extends Controller
             }
         }
 
-        $fonction = Fonction::findOrFail($data['fonction_id']);
         $approbation = $this->approbateurs((int) $data['centre_id'], $fonction->role);
 
         if ($approbation['users']->isEmpty()) {
@@ -723,9 +736,10 @@ class AuthController extends Controller
             ->pluck('total', 'centre_id');
 
         return response()->json([
-            'centres' => Centre::proposes()->orderBy('nom')->get(['id', 'nom'])->map(fn (Centre $c) => [
+            'centres' => Centre::proposes()->orderBy('nom')->get(['id', 'nom', 'type_centre'])->map(fn (Centre $c) => [
                 'id' => $c->id,
                 'nom' => $c->nom,
+                'type_centre' => $c->type_centre,
                 'a_chef' => (int) ($chefs[$c->id] ?? 0) > 0,
             ]),
             'fonctions' => Fonction::query()

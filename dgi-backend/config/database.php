@@ -18,8 +18,6 @@ $sourceConnection = [
     'search_path' => env('SOURCE_DB_SCHEMA', 'public'),
     'sslmode' => env('SOURCE_DB_SSLMODE', 'prefer'),
     'service_name' => env('SOURCE_DB_SERVICE_NAME', false),
-    // Descripteur TNS complet ou alias du wallet (prioritaire sur hôte/port/service).
-    // Exemple Oracle Cloud : SOURCE_DB_TNS=dgi_high (alias du tnsnames.ora du wallet).
     'tns' => env('SOURCE_DB_TNS') ?: null,
     // Oracle : propriétaire des tables quand il diffère de l'utilisateur de connexion
     // (métadonnées et requêtes sont alors qualifiées « SCHEMA.TABLE »). Ignoré par pgsql.

@@ -45,6 +45,36 @@ class UserFieldsValidationTest extends TestCase
             ->assertJsonValidationErrors(['im']);
     }
 
+    public function test_inscription_verifie_que_la_fonction_correspond_au_type_de_centre(): void
+    {
+        $centreFiscal = Centre::create(['nom' => 'Centre fiscal', 'type_centre' => '-']);
+        $centreCentral = Centre::create(['nom' => 'Service central', 'type_centre' => Centre::TYPE_CENTRAL]);
+        $fonctionAgent = Fonction::create(['nom' => 'Agent test', 'role' => Role::Agent]);
+        $fonctionCentral = Fonction::create(['nom' => 'Central test', 'role' => Role::Central]);
+
+        $base = [
+            'nom' => 'Nouvel utilisateur',
+            'im' => '123456',
+            'telephone' => '0341234567',
+        ];
+
+        $this->postJson('/api/register', $base + [
+            'email' => 'central-avec-agent@example.test',
+            'centre_id' => $centreCentral->id,
+            'fonction_id' => $fonctionAgent->id,
+        ])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors(['fonction_id']);
+
+        $this->postJson('/api/register', $base + [
+            'email' => 'fiscal-avec-central@example.test',
+            'centre_id' => $centreFiscal->id,
+            'fonction_id' => $fonctionCentral->id,
+        ])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors(['fonction_id']);
+    }
+
     public function test_un_superadmin_peut_creer_un_compte_avec_un_im_de_six_caracteres_et_dix_chiffres(): void
     {
         $centre = Centre::create(['nom' => 'Centre test']);

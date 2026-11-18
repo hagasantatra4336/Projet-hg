@@ -43,11 +43,14 @@ class CentresAffichageTest extends TestCase
         $centralVisible = Centre::create(['nom' => 'SSIF visible', 'type_centre' => 'central', 'affiche' => true]);
         $centralMasque = Centre::create(['nom' => 'SSIF masqué', 'type_centre' => 'central', 'affiche' => false]);
 
-        $noms = collect($this->getJson('/api/signup-options')->assertOk()->json('centres'))->pluck('nom')->all();
+        $response = $this->getJson('/api/signup-options')->assertOk();
+        $noms = collect($response->json('centres'))->pluck('nom')->all();
 
         $this->assertContains($fiscal->nom, $noms);
         $this->assertContains($centralVisible->nom, $noms);
         $this->assertNotContains($centralMasque->nom, $noms);
+        $response->assertJsonFragment(['id' => $fiscal->id, 'type_centre' => '-']);
+        $response->assertJsonFragment(['id' => $centralVisible->id, 'type_centre' => Centre::TYPE_CENTRAL]);
     }
 
     public function test_un_centre_central_masque_ne_peut_pas_etre_choisi_a_l_inscription(): void

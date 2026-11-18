@@ -26,6 +26,7 @@ const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const IM_PATTERN = /^[0-9]{6}$/;
 
 interface SignupCentre extends CentreOption {
+  type_centre: string;
   a_chef?: boolean;
 }
 
@@ -528,8 +529,30 @@ export default function SignupPage() {
 
   const centreChoisi = options.centres.find((c) => String(c.id) === form.centre_id);
   const fonctionChoisie = options.fonctions.find((f) => String(f.id) === form.fonction_id);
+  const centreEstCentral = centreChoisi?.type_centre === "central";
+  const fonctionsDisponibles = options.fonctions.filter((fonction) =>
+    centreEstCentral ? fonction.role === "central" : fonction.role === "agent" || fonction.role === "admin"
+  );
   const refusee = ["refusee", "annulee", "expiree", "introuvable"].includes(statut);
   const imFormatValide = IM_PATTERN.test(form.im);
+
+  function handleCentreChange(value: string) {
+    const centre = options.centres.find((c) => String(c.id) === value);
+    const fonctionsCentre = options.fonctions.filter((fonction) =>
+      centre?.type_centre === "central"
+        ? fonction.role === "central"
+        : fonction.role === "agent" || fonction.role === "admin"
+    );
+    const fonctionActuelle = options.fonctions.find((fonction) => String(fonction.id) === form.fonction_id);
+    const fonctionId = centre?.type_centre === "central"
+      ? String(fonctionsCentre[0]?.id ?? "")
+      : fonctionActuelle && fonctionsCentre.some((fonction) => fonction.id === fonctionActuelle.id)
+        ? form.fonction_id
+        : "";
+
+    setForm({ ...form, centre_id: value, fonction_id: fonctionId });
+    setError("");
+  }
 
   // L'approbateur dépend de la fonction choisie (agent → chef du centre, chef/central → administration centrale).
   const infoApprobation = (() => {
@@ -659,7 +682,7 @@ export default function SignupPage() {
             <CentreSelect
               centres={options.centres}
               value={form.centre_id}
-              onChange={(v) => setForm({ ...form, centre_id: v })}
+              onChange={handleCentreChange}
               className={inputClass}
               placeholder="Centre (rechercher par nom ou adresse)"
               required
@@ -667,19 +690,36 @@ export default function SignupPage() {
           </div>
           <div className="sm:col-span-2">
             <SearchSelect
-              options={options.fonctions.map((f) => ({
+              options={fonctionsDisponibles.map((f) => ({
                 value: String(f.id),
                 label: f.nom,
-                description: ROLE_LABELS[f.role],
+                description: f.role === "admin" ? "Chef de centre" : ROLE_LABELS[f.role],
               }))}
               value={form.fonction_id}
               onChange={(v) => setForm({ ...form, fonction_id: v })}
               className={inputClass}
-              required
-              label="Fonction"
-              placeholder="rechercher parmi la liste"
-              emptyLabel="Aucune fonction trouvée"
+              disabled={!centreChoisi || centreEstCentral}
+              required={!centreEstCentral}
+              label={centreEstCentral ? "Fonction (automatique)" : "Fonction"}
+              placeholder={
+                !centreChoisi
+                  ? "Choisissez d'abord un centre"
+                  : centreEstCentral
+                    ? "Fonction définie automatiquement"
+                    : "Choisir Agent ou Chef de centre"
+              }
+              emptyLabel={centreEstCentral ? "Aucune fonction centrale configurée" : "Aucune fonction disponible"}
             />
+            {centreEstCentral && !form.fonction_id && (
+              <p role="alert" className="mt-1.5 text-xs text-red-600 sm:col-span-2">
+                Aucune fonction « Central » n'est configurée. Contactez l'administration.
+              </p>
+            )}
+            {centreEstCentral && form.fonction_id && (
+              <p className="text-xs text-slate-500 sm:col-span-2">
+                La fonction « Central » est attribuée automatiquement pour un service central.
+              </p>
+            )}
           </div>
           <input
             className={`${inputClass} sm:col-span-2`}
@@ -693,7 +733,7 @@ export default function SignupPage() {
           </p>
 
           <button
-            disabled={loading || checkingEmail || checkingIm || !emailCheck?.disponible || !imCheck?.disponible}
+            disabled={loading || checkingEmail || checkingIm || !emailCheck?.disponible || !imCheck?.disponible || !form.fonction_id}
             type="submit"
             className={`${primaryButtonClass} sm:col-span-2`}
           >
