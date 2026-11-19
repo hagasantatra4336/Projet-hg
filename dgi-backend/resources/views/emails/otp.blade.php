@@ -6,6 +6,8 @@
 </head>
 <body style="margin:0;padding:24px;background:#F8F8F8;font-family:Arial,Helvetica,sans-serif;">
     <div style="max-width:480px;margin:0 auto;background:#ffffff;border-radius:16px;padding:32px;">
+        @include('emails.partials.dgi-header')
+
         <h1 style="margin:0 0 16px;font-size:20px;color:#212E53;">
             @if (($contexte ?? 'inscription') === 'connexion')
                 Code de connexion

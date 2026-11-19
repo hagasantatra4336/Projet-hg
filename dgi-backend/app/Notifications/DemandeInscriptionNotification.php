@@ -3,6 +3,7 @@
 namespace App\Notifications;
 
 use App\Models\DemandeInscription;
+use App\Notifications\Concerns\IncludesDgiEmailLogo;
 use Illuminate\Notifications\Messages\MailMessage;
 use Illuminate\Notifications\Notification;
 
@@ -12,11 +13,12 @@ use Illuminate\Notifications\Notification;
  */
 class DemandeInscriptionNotification extends Notification
 {
+    use IncludesDgiEmailLogo;
+
     public function __construct(
         public DemandeInscription $demande,
         public string $url,
-    ) {
-    }
+    ) {}
 
     /** @return array<int, string> */
     public function via(object $notifiable): array
@@ -26,8 +28,8 @@ class DemandeInscriptionNotification extends Notification
 
     public function toMail(object $notifiable): MailMessage
     {
-        return (new MailMessage)
-            ->subject('Nouvelle demande de compte — ' . $this->demande->nom)
+        return $this->withDgiEmailLogo((new MailMessage)
+            ->subject('Nouvelle demande de compte — '.$this->demande->nom)
             ->view('emails.demande-inscription', [
                 'nom' => $this->demande->nom,
                 'email' => $this->demande->email,
@@ -37,6 +39,6 @@ class DemandeInscriptionNotification extends Notification
                 'fonction' => $this->demande->fonction?->nom,
                 'deposee_le' => $this->demande->created_at?->format('d/m/Y H:i'),
                 'url' => $this->url,
-            ]);
+            ]));
     }
 }

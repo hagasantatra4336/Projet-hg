@@ -2,6 +2,7 @@
 
 namespace App\Notifications;
 
+use App\Notifications\Concerns\IncludesDgiEmailLogo;
 use App\Services\OtpService;
 use Illuminate\Notifications\Messages\MailMessage;
 use Illuminate\Notifications\Notification;
@@ -13,12 +14,13 @@ use Illuminate\Notifications\Notification;
  */
 class RappelOtpApprobationNotification extends Notification
 {
+    use IncludesDgiEmailLogo;
+
     public function __construct(
         public string $nom,
         public int $minutesRestantes,
         public string $url,
-    ) {
-    }
+    ) {}
 
     /** @return array<int, string> */
     public function via(object $notifiable): array
@@ -28,12 +30,12 @@ class RappelOtpApprobationNotification extends Notification
 
     public function toMail(object $notifiable): MailMessage
     {
-        return (new MailMessage)
-            ->subject("Votre code d'activation expire dans " . OtpService::dureeLisible($this->minutesRestantes))
+        return $this->withDgiEmailLogo((new MailMessage)
+            ->subject("Votre code d'activation expire dans ".OtpService::dureeLisible($this->minutesRestantes))
             ->view('emails.otp-rappel', [
                 'nom' => $this->nom,
                 'minutes' => $this->minutesRestantes,
                 'url' => $this->url,
-            ]);
+            ]));
     }
 }

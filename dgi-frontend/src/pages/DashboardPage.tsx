@@ -182,6 +182,7 @@ interface Kpi {
   value: number | string | null;
   note: string;
   tone: KpiTone;
+  compactValue?: boolean;
 }
 
 function KpiCard({ kpi, delay }: { kpi: Kpi; delay: number }) {
@@ -193,7 +194,11 @@ function KpiCard({ kpi, delay }: { kpi: Kpi; delay: number }) {
       className={`dash-rise relative overflow-hidden rounded-2xl border p-4 transition duration-300 hover:-translate-y-1 hover:shadow-lg ${tone.card}`}
     >
       <p className={`text-xs font-medium ${tone.label}`}>{kpi.label}</p>
-      <p className={`mt-2 truncate text-2xl font-semibold tabular-nums sm:text-3xl ${tone.valeur}`}>
+      <p
+        className={`mt-2 font-semibold ${
+          kpi.compactValue ? "break-words text-sm leading-snug sm:text-base" : "truncate text-2xl tabular-nums sm:text-3xl"
+        } ${tone.valeur}`}
+      >
         <StatValue value={kpi.value} />
       </p>
       <p className={`mt-1 text-xs ${tone.note}`}>{kpi.note}</p>
@@ -602,6 +607,7 @@ export default function DashboardPage() {
         value: user?.centre?.nom ?? "—",
         note: "votre périmètre de traitement",
         tone: "azure",
+        compactValue: true,
       });
     } else if (totaux.centres !== null) {
       kpis.push({
@@ -790,7 +796,13 @@ export default function DashboardPage() {
                 className="rounded-xl border border-line p-3 transition duration-200 hover:-translate-y-0.5 hover:border-brand-blue hover:shadow-md"
               >
                 <dt className="text-slate-500">{k}</dt>
-                <dd className="mt-1 break-words text-base font-medium text-brand-blue">{v || "—"}</dd>
+                <dd
+                  className={`mt-1 break-words font-medium text-brand-blue ${
+                    k === "Centre" ? "text-sm leading-snug sm:text-base" : "text-base"
+                  }`}
+                >
+                  {v || "—"}
+                </dd>
               </div>
             ))}
           </dl>

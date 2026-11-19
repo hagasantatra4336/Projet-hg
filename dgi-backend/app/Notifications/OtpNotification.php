@@ -2,6 +2,7 @@
 
 namespace App\Notifications;
 
+use App\Notifications\Concerns\IncludesDgiEmailLogo;
 use Illuminate\Notifications\Messages\MailMessage;
 use Illuminate\Notifications\Notification;
 
@@ -20,13 +21,14 @@ use Illuminate\Notifications\Notification;
  */
 class OtpNotification extends Notification
 {
+    use IncludesDgiEmailLogo;
+
     public function __construct(
         public string $nom,
         public string $code,
         public int $minutes = 5,
         public string $contexte = 'inscription', // 'inscription', 'approbation' ou 'connexion'
-    ) {
-    }
+    ) {}
 
     /** @return array<int, string> */
     public function via(object $notifiable): array
@@ -42,13 +44,13 @@ class OtpNotification extends Notification
             default => 'Votre code de vérification DGI',
         };
 
-        return (new MailMessage)
+        return $this->withDgiEmailLogo((new MailMessage)
             ->subject($sujet)
             ->view('emails.otp', [
                 'nom' => $this->nom,
                 'code' => $this->code,
                 'minutes' => $this->minutes,
                 'contexte' => $this->contexte,
-            ]);
+            ]));
     }
 }

@@ -1352,7 +1352,7 @@ export default function DefaillancesPage() {
               </div>
             )}
 
-            <div className="rounded-xl border border-line bg-slate-50/70 p-3.5">
+            {/*<div className="rounded-xl border border-line bg-slate-50/70 p-3.5">
               <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">Exemples par critère de risque</p>
               <dl className="mt-2 grid gap-x-6 gap-y-1.5 sm:grid-cols-2">
                 {EXEMPLES_CRITERES.map((x) => (
@@ -1362,7 +1362,7 @@ export default function DefaillancesPage() {
                   </div>
                 ))}
               </dl>
-            </div>
+            </div>*/}
 
             <ErrorBox message={analyseError} />
 
