@@ -36,7 +36,7 @@ class DashboardController extends Controller
     private const NB_RECENTS = 6;
 
     /** Nombre d'opérations personnelles affichées. */
-    private const NB_HISTORIQUE = 10;
+    private const NB_HISTORIQUE = 4;
 
     public function __invoke(Request $request): JsonResponse
     {

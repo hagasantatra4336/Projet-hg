@@ -15,7 +15,7 @@ use Illuminate\Support\Facades\Schema;
  *
  * ATTENTION : les déclarations et alertes déjà enregistrées (jeu de test précédent) sont SUPPRIMÉES,
  * car elles ne sont pas convertibles. Les contribuables, centres et utilisateurs sont conservés.
- * Rechargez ensuite les données : db:seed --class=DeclarationDemoSeeder, import CSV ou import depuis la base source.
+ * Rechargez ensuite les données : db:seed --class=DeclarationDemoSeeder ou import depuis la base source.
  */
 return new class extends Migration
 {

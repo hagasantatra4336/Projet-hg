@@ -27,7 +27,7 @@ class BaisseCaDetector
     /**
      * @return array{date: string, analyses: int, crees: int, mis_a_jour: int, regularisees: int}
      */
-    public function analyser(DateTimeInterface $date, ?int $centreId = null, ?int $fenetre = null, ?int $anneeMin = null, ?int $anneeMax = null): array
+    public function analyser(DateTimeInterface $date, ?int $centreId = null, ?int $fenetre = null, ?int $anneeMin = null, ?int $anneeMax = null, ?int $contribuableId = null): array
     {
         $cfg = config('anomalies.baisse_ca');
         if ($fenetre !== null) {
@@ -63,6 +63,11 @@ class BaisseCaDetector
             $query->where('contribuables.centre_id', $centreId);
         }
 
+        // Analyse ciblée : seules les déclarations du contribuable choisi sont comparées.
+        if ($contribuableId !== null) {
+            $query->where('declarations.contribuable_id', $contribuableId);
+        }
+
         $lignes = [];
         foreach ($query->cursor() as $row) {
             // [AJOUT] Période non échue (échéance de paiement + 48 h non atteinte) : le CA peut encore
@@ -85,7 +90,7 @@ class BaisseCaDetector
         $stats = ['date' => $date->format('Y-m-d'), 'analyses' => count($lignes), 'crees' => 0, 'mis_a_jour' => 0, 'regularisees' => 0];
         $trouvees = self::detecter($lignes, $cfg);
 
-        DB::transaction(function () use ($trouvees, $anneeMin, $anneeMax, $centreId, $date, &$stats) {
+        DB::transaction(function () use ($trouvees, $anneeMin, $anneeMax, $centreId, $contribuableId, $date, &$stats) {
             $actuelles = [];
 
             foreach ($trouvees as $t) {
@@ -130,6 +135,7 @@ class BaisseCaDetector
                 ->where('regle', Alerte::REGLE_BAISSE_CA)
                 ->where('statut', Alerte::A_TRAITER)
                 ->whereBetween('annee_fiscale', [$anneeMin, $anneeMax])
+                ->when($contribuableId !== null, fn ($q) => $q->where('contribuable_id', $contribuableId))
                 ->when($centreId !== null, fn ($q) => $q->whereHas(
                     'contribuable',
                     fn ($c) => $c->where('centre_id', $centreId)

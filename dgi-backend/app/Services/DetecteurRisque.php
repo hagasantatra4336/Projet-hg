@@ -20,7 +20,7 @@ class DetecteurRisque
     private const NOMS_MOIS = ['janvier', 'février', 'mars', 'avril', 'mai', 'juin', 'juillet', 'août', 'septembre', 'octobre', 'novembre', 'décembre'];
 
     /** @return array{analyses: int, crees: int, mis_a_jour: int, regularisees: int, par_regle: array<string, int>, inactives: array<int, string>} */
-    public function analyser(DateTimeInterface $date, ?int $centreId = null, ?int $fenetre = null, ?int $anneeMin = null, ?int $anneeMax = null): array
+    public function analyser(DateTimeInterface $date, ?int $centreId = null, ?int $fenetre = null, ?int $anneeMin = null, ?int $anneeMax = null, ?int $contribuableId = null): array
     {
         $stats = ['analyses' => 0, 'crees' => 0, 'mis_a_jour' => 0, 'regularisees' => 0, 'par_regle' => [], 'inactives' => []];
 
@@ -54,11 +54,11 @@ class DetecteurRisque
         $trouvees = [];
         $evalues = []; // contribuables dont les données ont été examinées
 
-        foreach ($this->groupes($anneeMin - 2, $anneeMax, $centreId) as $contribuableId => $g) {
-            $evalues[$contribuableId] = true;
+        foreach ($this->groupes($anneeMin - 2, $anneeMax, $centreId, $contribuableId) as $id => $g) {
+            $evalues[$id] = true;
             $stats['analyses']++;
             foreach (self::evaluer($g, $cfgs, $anneeMin, $anneeMax, $anneesDau) as $t) {
-                $t['contribuable_id'] = $contribuableId;
+                $t['contribuable_id'] = $id;
                 $trouvees[] = $t;
             }
         }
@@ -125,7 +125,7 @@ class DetecteurRisque
      *
      * @return \Generator<int, array<string, mixed>>
      */
-    private function groupes(int $anneeMin, int $anneeMax, ?int $centreId): \Generator
+    private function groupes(int $anneeMin, int $anneeMax, ?int $centreId, ?int $contribuableId = null): \Generator
     {
         $query = BaseRisque::query()
             ->join('contribuables', 'contribuables.id', '=', 'base_risque.contribuable_id')
@@ -135,6 +135,11 @@ class DetecteurRisque
 
         if ($centreId !== null) {
             $query->where('contribuables.centre_id', $centreId);
+        }
+
+        // Analyse ciblée : seul le contribuable choisi est évalué.
+        if ($contribuableId !== null) {
+            $query->where('base_risque.contribuable_id', $contribuableId);
         }
 
         $courant = null;

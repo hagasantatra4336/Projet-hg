@@ -15,7 +15,7 @@ interface StatusResponse {
   message: string | null;
 }
 
-const POLL_MS = 3000;
+const POLL_MS = 1500;
 
 function formatCountdown(seconds: number): string {
   const m = Math.floor(seconds / 60);
@@ -155,9 +155,9 @@ export default function ProfileWaitingPage() {
           />
           <h2 className="mb-2 text-lg font-semibold text-brand-blue">En attente de votre validation</h2>
           <p className="text-sm text-slate-600">
-            Un e-mail a été envoyé à <span className="font-semibold text-brand-blue">{request.email}</span>. Ouvrez-le
-            (Gmail ou autre) sur cet ordinateur ou sur votre smartphone, cliquez sur le lien, puis sur « Confirmer les
-            modifications ».
+            Le lien de confirmation est en cours d'envoi à{" "}
+            <span className="font-semibold text-brand-blue">{request.email}</span>. Dès sa réception, ouvrez-le (Gmail
+            ou autre), cliquez sur le lien, puis sur « Confirmer les modifications ».
           </p>
           <p className="mt-3 text-sm text-slate-600">
             À modifier : <span className="font-semibold text-brand-blue">{request.champs.join(", ")}</span>

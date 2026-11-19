@@ -8,7 +8,7 @@ return new class extends Migration
 {
     public function up(): void
     {
-        // Contribuables (données de test anonymisées ou importées en CSV)
+        // Contribuables (données de test anonymisées ou importées depuis la base source)
         Schema::create('contribuables', function (Blueprint $table) {
             $table->id();
             $table->string('nif', 30)->unique(); // Numéro d'Identification Fiscale

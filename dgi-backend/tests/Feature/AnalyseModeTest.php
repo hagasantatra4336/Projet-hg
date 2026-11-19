@@ -193,4 +193,143 @@ class AnalyseModeTest extends TestCase
             ->assertStatus(422)
             ->assertJsonValidationErrors('annee_debut');
     }
+
+    public function test_une_analyse_ciblee_ne_touche_que_le_contribuable_choisi(): void
+    {
+        $cible = Contribuable::create(['nif' => '9100000001', 'nom' => 'Cible choisie', 'etat' => 1]);
+        $autre = Contribuable::create(['nif' => '9100000002', 'nom' => 'Autre dossier', 'etat' => 1]);
+
+        foreach ([$cible, $autre] as $c) {
+            Assujettissement::create([
+                'contribuable_id' => $c->id,
+                'type_impot' => 'TVA',
+                'annee_fiscale' => 2024,
+                'periodicite' => 1,
+                'actif' => true,
+                'exonere' => false,
+            ]);
+        }
+
+        // Alerte déjà ouverte sur l'autre dossier : elle ne doit pas être régularisée par l'analyse ciblée.
+        $alerteAutre = Alerte::create([
+            'contribuable_id' => $autre->id,
+            'regle' => Alerte::REGLE_DEFAILLANCE,
+            'type_impot' => 'TVA',
+            'annee_fiscale' => 2024,
+            'mois' => 0,
+            'periodes_manquees' => 3,
+            'periodes_declarees' => 0,
+            'niveau' => 'moyen',
+            'motif' => 'Défaut de dépôt existant.',
+            'statut' => Alerte::A_TRAITER,
+        ]);
+
+        $this->postJson('/api/defaillances/analyser', [
+            'mode' => 'manuelle',
+            'annee_debut' => 2024,
+            'annee_fin' => 2024,
+            'contribuable_id' => $cible->id,
+        ])->assertOk()
+            ->assertJsonPath('contribuable.id', $cible->id)
+            ->assertJsonPath('contribuable.nif', '9100000001');
+
+        $this->assertTrue(Alerte::where('contribuable_id', $cible->id)
+            ->where('regle', Alerte::REGLE_DEFAILLANCE)->where('annee_fiscale', 2024)->exists());
+        $this->assertSame(0, Alerte::where('contribuable_id', $autre->id)->where('regle', '!=', 'defaillance')->count());
+        $this->assertSame(Alerte::A_TRAITER, $alerteAutre->fresh()->statut);
+    }
+
+    public function test_un_admin_ne_peut_pas_cibler_un_contribuable_d_un_autre_centre(): void
+    {
+        $autreCentre = Centre::create(['nom' => 'Centre voisin']);
+        $ailleurs = Contribuable::create([
+            'nif' => '9100000003',
+            'nom' => 'Hors périmètre',
+            'etat' => 1,
+            'centre_id' => $autreCentre->id,
+        ]);
+
+        $fonctionAdmin = Fonction::create(['nom' => 'Chef de centre analyse', 'role' => Role::Admin]);
+        $admin = User::create([
+            'nom' => 'Chef de centre',
+            'email' => 'chef.analyse@example.invalid',
+            'password' => 'motdepasse123',
+            'centre_id' => Centre::where('nom', 'Centre analyse')->value('id'),
+            'fonction_id' => $fonctionAdmin->id,
+            'email_verified_at' => now(),
+        ]);
+
+        Sanctum::actingAs($admin);
+
+        $this->postJson('/api/defaillances/analyser', [
+            'mode' => 'manuelle',
+            'annee_debut' => 2024,
+            'annee_fin' => 2024,
+            'contribuable_id' => $ailleurs->id,
+        ])->assertStatus(403);
+
+        $this->assertSame(0, Alerte::where('contribuable_id', $ailleurs->id)->count());
+    }
+
+    public function test_la_recherche_de_contribuables_se_fait_par_nom_ou_nif(): void
+    {
+        $centre = Centre::where('nom', 'Centre analyse')->firstOrFail();
+        $c = Contribuable::create([
+            'nif' => '9100000004',
+            'nom' => 'Société Cible Recherche',
+            'etat' => 1,
+            'centre_id' => $centre->id,
+        ]);
+        Contribuable::create([
+            'nif' => '9100000005',
+            'nom' => 'Autre Société',
+            'etat' => 1,
+            'centre_id' => $centre->id,
+        ]);
+
+        $parNom = $this->getJson('/api/contribuables/recherche?search=cible recherche')->assertOk();
+        $this->assertCount(1, $parNom->json());
+        $this->assertSame($c->id, $parNom->json('0.id'));
+        $this->assertSame('9100000004', $parNom->json('0.nif'));
+
+        $parNif = $this->getJson('/api/contribuables/recherche?search=9100000004')->assertOk();
+        $this->assertCount(1, $parNif->json());
+        $this->assertSame($c->id, $parNif->json('0.id'));
+    }
+
+    public function test_la_recherche_de_contribuables_est_limitee_au_centre_de_l_admin(): void
+    {
+        $centre = Centre::where('nom', 'Centre analyse')->firstOrFail();
+        $autreCentre = Centre::create(['nom' => 'Centre recherche voisin']);
+
+        Contribuable::create([
+            'nif' => '9100000006',
+            'nom' => 'Dossier du centre',
+            'etat' => 1,
+            'centre_id' => $centre->id,
+        ]);
+        Contribuable::create([
+            'nif' => '9100000007',
+            'nom' => 'Dossier ailleurs',
+            'etat' => 1,
+            'centre_id' => $autreCentre->id,
+        ]);
+
+        $fonctionAdmin = Fonction::create(['nom' => 'Chef recherche', 'role' => Role::Admin]);
+        $admin = User::create([
+            'nom' => 'Chef recherche',
+            'email' => 'chef.recherche@example.invalid',
+            'password' => 'motdepasse123',
+            'centre_id' => $centre->id,
+            'fonction_id' => $fonctionAdmin->id,
+            'email_verified_at' => now(),
+        ]);
+
+        Sanctum::actingAs($admin);
+
+        $res = $this->getJson('/api/contribuables/recherche')->assertOk();
+
+        $this->assertCount(1, $res->json());
+        $this->assertSame('9100000006', $res->json('0.nif'));
+    }
 }

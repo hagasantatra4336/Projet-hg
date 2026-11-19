@@ -230,7 +230,6 @@ export default function ProfilePage() {
     <div className="mx-auto w-full max-w-5xl">
       {/* Titre aligné à gauche, sur toute la largeur */}
       <div className="mb-4 border-b border-line pb-4">
-        <span className="mb-2 block h-1.5 w-8 rounded-full bg-brand-gold" />
         <h1 className="text-2xl font-semibold tracking-tight text-brand-blue">Mon profil</h1>
         <p className="mt-1 text-sm text-slate-500">Vos informations, vos identifiants et votre mot de passe.</p>
       </div>
@@ -379,7 +378,7 @@ export default function ProfilePage() {
             )}
           </Section>
 
-          <FormActions className="rounded-xl px-6 py-4">
+          <FormActions className="px-6 py-4">
             <button type="submit" disabled={loading} className={primaryButtonClass}>
               Enregistrer les modifications
             </button>

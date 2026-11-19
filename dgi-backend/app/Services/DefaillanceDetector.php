@@ -14,7 +14,7 @@ class DefaillanceDetector
     /**
      * @return array{date: string, analyses: int, crees: int, mis_a_jour: int, regularisees: int}
      */
-    public function analyser(DateTimeInterface $date, ?int $centreId = null, ?int $fenetre = null, ?int $anneeMin = null, ?int $anneeMax = null): array
+    public function analyser(DateTimeInterface $date, ?int $centreId = null, ?int $fenetre = null, ?int $anneeMin = null, ?int $anneeMax = null, ?int $contribuableId = null): array
     {
         $cfg = config('anomalies.defaillance');
         if ($fenetre !== null) {
@@ -29,6 +29,10 @@ class DefaillanceDetector
         $q = DB::table('contribuables')->select('id', 'date_cessation', 'date_radiation');
         if ($centreId !== null) {
             $q->where('centre_id', $centreId);
+        }
+        // Analyse ciblée : un seul contribuable est examiné (les autres dossiers ne sont pas touchés).
+        if ($contribuableId !== null) {
+            $q->where('id', $contribuableId);
         }
         foreach ($q->cursor() as $c) {
             $fins = array_filter([$c->date_cessation, $c->date_radiation]);
@@ -90,7 +94,7 @@ class DefaillanceDetector
         $stats = ['date' => $aujourdhui, 'analyses' => count($paires), 'crees' => 0, 'mis_a_jour' => 0, 'regularisees' => 0];
 
         // Écriture : création / mise à jour des alertes, puis régularisation de celles qui ne tiennent plus
-        DB::transaction(function () use ($trouvees, $anneeMin, $anneeMax, $centreId, $date, &$stats) {
+        DB::transaction(function () use ($trouvees, $anneeMin, $anneeMax, $centreId, $contribuableId, $date, &$stats) {
             $actuelles = [];
 
             foreach ($trouvees as $t) {
@@ -135,6 +139,7 @@ class DefaillanceDetector
                 ->where('regle', Alerte::REGLE_DEFAILLANCE)
                 ->where('statut', Alerte::A_TRAITER)
                 ->whereBetween('annee_fiscale', [$anneeMin, $anneeMax])
+                ->when($contribuableId !== null, fn ($q) => $q->where('contribuable_id', $contribuableId))
                 ->when($centreId !== null, fn ($q) => $q->whereHas(
                     'contribuable',
                     fn ($c) => $c->where('centre_id', $centreId)

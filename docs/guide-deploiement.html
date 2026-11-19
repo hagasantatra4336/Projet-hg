@@ -368,7 +368,7 @@
 
   <div class="callout info">
     <span class="t">Sans bases sources, l'application démarre quand même</span>
-    Le socle (connexion, utilisateurs, centres saisis à la main, imports CSV) fonctionne sans Oracle.
+    Le socle (connexion, utilisateurs, centres saisis à la main) fonctionne sans Oracle.
     Les sources ne deviennent nécessaires que pour l'import massif et les règles de recoupement.
   </div>
 </section>
@@ -797,7 +797,7 @@ sudo find /var/www/dgi/dgi-frontend/dist -type d -exec chmod 755 {} \;</pre>
     index index.html;
     charset utf-8;
 
-    <span class="c"># Imports CSV et pièces jointes</span>
+    <span class="c"># Téléversements et pièces jointes</span>
     client_max_body_size 32m;
 
     <span class="c"># --- API Laravel ------------------------------------------------</span>
@@ -1066,12 +1066,13 @@ sudo chmod 600 /var/backups/dgi/*</pre>
     <li>Administration → Règles de détection → « Règles personnalisées » : la liste, les filtres et
         la création d'un brouillon fonctionnent ; « Indicateurs » ouvre la page dédiée (ajout et
         modification d'un indicateur).</li>
-    <li>Anomalies → « Lancer l'analyse » répond (même sans données, le message doit être explicite).</li>
+    <li>Anomalies → « Lancer l'analyse » répond (même sans données, le message doit être explicite) ; en mode
+        manuel, on peut cibler un contribuable précis en le recherchant par son nom ou son NIF (facultatif).</li>
     <li>Comparatif des centres (super admin / central) : chiffres et tableau s'affichent.</li>
     <li>Une fiche contribuable s'ouvre et le PDF se télécharge.</li>
     <li>Demandes d'inscription : une approbation envoie un code valable 24 h ; un rappel part
         une heure avant l'échéance, puis la demande est clôturée (section 7.1).</li>
-    <li>Un import CSV de petite taille aboutit (limites de 6.3).</li>
+    <li>Un import depuis la base source aboutit (limites de 6.3).</li>
     <li>Rechargement direct de <code>https://dgi.exemple.mg/admin/centres</code> : la page s'affiche (pas de 404).</li>
     <li>Après 8 h d'inactivité, l'utilisateur est invité à se reconnecter (comportement attendu).</li>
   </ul>
@@ -1180,7 +1181,7 @@ gunzip -c /var/backups/dgi/avant_maj_XXXX.sql.gz | psql -U dgi -h 127.0.0.1 dgi_
       </tr>
       <tr>
         <td><strong>413 Request Entity Too Large</strong></td>
-        <td>Import CSV trop volumineux.</td>
+        <td>Pièce jointe trop volumineuse.</td>
         <td><code>client_max_body_size</code> (nginx) + <code>upload_max_filesize</code>/<code>post_max_size</code> (PHP).</td>
       </tr>
       <tr>
@@ -1436,8 +1437,8 @@ php artisan dgi:importer-source --depuis=2025 --jusqua=2026 --analyser
 php artisan dgi:importer-risque --depuis=2025 --analyser</pre>
 
   <p class="small">
-    Les imports peuvent aussi être lancés depuis l'interface (super admin / central / chef de centre),
-    avec un fichier CSV. Les commandes restent utiles pour un traitement initial massif.
+    Les imports depuis la base source peuvent aussi être lancés depuis l'interface (super admin / central / chef de centre).
+    Les commandes restent utiles pour un traitement initial massif.
   </p>
 </section>
 

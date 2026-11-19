@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api;
 
+use App\Enums\Role;
 use App\Http\Controllers\Controller;
 use App\Models\Contribuable;
 use App\Services\FicheContribuable;
@@ -21,6 +22,51 @@ class ContribuableController extends Controller
 {
     public function __construct(private readonly FicheContribuable $fiche)
     {
+    }
+
+    /**
+     * Recherche d'un contribuable par nom ou par NIF, pour l'analyse ciblée.
+     *
+     * Un admin (ou un agent) ne voit que les contribuables de son centre ; central et superadmin
+     * voient tous les centres. La liste est limitée pour rester légère à la saisie.
+     */
+    public function rechercher(Request $request): JsonResponse
+    {
+        $me = $request->user();
+        abort_if($me->role === null, 403, "Votre compte n'a pas de fonction attribuée.");
+
+        $data = $request->validate([
+            'search' => ['nullable', 'string', 'max:120'],
+            'centre_id' => ['nullable', 'integer', 'exists:centres,id'],
+        ]);
+
+        $query = Contribuable::query()->with('centre:id,nom');
+
+        if (in_array($me->role, [Role::Agent, Role::Admin], true)) {
+            abort_if($me->centre_id === null, 403, "Votre compte n'est rattaché à aucun centre.");
+            $query->where('centre_id', $me->centre_id);
+        } elseif (! empty($data['centre_id'])) {
+            $query->where('centre_id', (int) $data['centre_id']);
+        }
+
+        $terme = mb_strtolower(trim((string) ($data['search'] ?? '')));
+        if ($terme !== '') {
+            // LOWER + LIKE : insensible à la casse, quel que soit le SGBD.
+            $query->where(fn ($q) => $q
+                ->whereRaw('LOWER(nom) LIKE ?', ['%'.$terme.'%'])
+                ->orWhereRaw('LOWER(nif) LIKE ?', ['%'.$terme.'%']));
+        }
+
+        return response()->json(
+            $query->orderBy('nom')->limit(20)->get(['id', 'nif', 'nom', 'centre_id'])
+                ->map(fn (Contribuable $c) => [
+                    'id' => $c->id,
+                    'nif' => $c->nif,
+                    'nom' => $c->nom,
+                    'centre' => $c->centre?->nom,
+                ])
+                ->values()
+        );
     }
 
     public function show(Request $request, Contribuable $contribuable): JsonResponse

@@ -155,7 +155,6 @@ class JournaliserActivite
             ['methodes' => ['POST'], 'motif' => '#^defaillances/[^/]+/liberer$#', 'categorie' => $metier, 'action' => 'liberation_dossier', 'description' => 'Libération d’un dossier'],
             ['methodes' => ['POST'], 'motif' => '#^defaillances/[^/]+/assigner$#', 'categorie' => $metier, 'action' => 'affectation_dossier', 'description' => 'Affectation d’un dossier à un agent'],
             ['methodes' => ['PATCH'], 'motif' => '#^defaillances/[^/]+$#', 'categorie' => $metier, 'action' => 'traitement_alerte', 'description' => 'Traitement d’une alerte de défaillance'],
-            ['methodes' => ['POST'], 'motif' => '#^declarations/import$#', 'categorie' => $metier, 'action' => 'import_declarations', 'description' => 'Import de déclarations'],
             ['methodes' => ['POST'], 'motif' => '#^source/centres/import$#', 'categorie' => $metier, 'action' => 'import_centres_source', 'description' => 'Import des centres depuis la source Oracle'],
             ['methodes' => ['POST'], 'motif' => '#^source/import$#', 'categorie' => $metier, 'action' => 'import_source', 'description' => 'Import depuis la source Oracle'],
             ['methodes' => ['PATCH'], 'motif' => '#^contribuables/[^/]+/contact$#', 'categorie' => $metier, 'action' => 'modification_contact', 'description' => 'Mise à jour des coordonnées d’un contribuable'],

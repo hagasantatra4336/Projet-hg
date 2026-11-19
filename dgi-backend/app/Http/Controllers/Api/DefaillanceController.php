@@ -6,6 +6,7 @@ use App\Enums\Role;
 use App\Http\Controllers\Controller;
 use App\Models\Alerte;
 use App\Models\BaseRisque;
+use App\Models\Contribuable;
 use App\Models\DossierHistorique;
 use App\Models\User;
 use App\Services\AnomalieAnalyseur;
@@ -976,9 +977,11 @@ class DefaillanceController extends Controller
             'date' => ['nullable', 'date_format:Y-m-d'],
             'annee_debut' => ['nullable', 'required_with:annee_fin', 'integer', 'min:1990', 'max:'.(int) now()->format('Y')],
             'annee_fin' => ['nullable', 'required_with:annee_debut', 'integer', 'min:1990', 'max:'.(int) now()->format('Y')],
+            'contribuable_id' => ['nullable', 'integer', 'exists:contribuables,id'],
         ], [], [
             'annee_debut' => "année de début",
             'annee_fin' => "année de fin",
+            'contribuable_id' => "contribuable ciblé",
         ]);
 
         $mode = $data['mode'] ?? (isset($data['annee_debut']) ? 'manuelle' : 'automatique');
@@ -1026,13 +1029,40 @@ class DefaillanceController extends Controller
             $centreId = $me->centre_id;
         }
 
+        // Analyse ciblée facultative : le contribuable choisi doit rester dans le périmètre de l'admin.
+        $contribuable = null;
+        if (! empty($data['contribuable_id'])) {
+            $contribuable = Contribuable::findOrFail((int) $data['contribuable_id']);
+
+            if ($centreId !== null) {
+                abort_if(
+                    (int) $contribuable->centre_id !== (int) $centreId,
+                    403,
+                    "Ce contribuable n'appartient pas à votre centre."
+                );
+            }
+        }
+
         // En mode manuel, les détecteurs sont bornés aux exercices demandés : aucune alerte des autres années.
-        $stats = app(AnomalieAnalyseur::class)->analyser($date, $centreId, $fenetre, $anneeDebut, $anneeFin);
+        // Quand un contribuable est ciblé, seul son dossier est examiné et régularisé.
+        $stats = app(AnomalieAnalyseur::class)->analyser(
+            $date,
+            $centreId,
+            $fenetre,
+            $anneeDebut,
+            $anneeFin,
+            $contribuable?->id
+        );
 
         return response()->json($stats + [
             'mode' => $mode,
             'annee_debut' => $anneeDebut,
             'annee_fin' => $anneeFin,
+            'contribuable' => $contribuable !== null ? [
+                'id' => $contribuable->id,
+                'nom' => $contribuable->nom,
+                'nif' => $contribuable->nif,
+            ] : null,
             'message' => sprintf(
                 "Analyse terminée : %d nouvelle(s) alerte(s) (%d défaillance(s), %d baisse(s) du chiffre d'affaires), %d mise(s) à jour, %d régularisée(s).",
                 $stats['crees'],
@@ -1043,6 +1073,9 @@ class DefaillanceController extends Controller
             ).($mode === 'manuelle'
                 ? sprintf(' Analyse manuelle : années %d à %d (réglages de fenêtre ignorés pour ce passage).', $anneeDebut, $anneeFin)
                 : ' Analyse automatique : date du jour et fenêtre d\'exercices enregistrée pour chaque règle.')
+            .($contribuable !== null
+                ? sprintf(' Analyse ciblée sur %s (NIF %s).', $contribuable->nom, $contribuable->nif)
+                : '')
             .($stats['desactivees'] !== [] ? ' Règle(s) désactivée(s) dans les réglages : '.implode(', ', $stats['desactivees']).'.' : ''),
         ]);
     }

@@ -139,6 +139,24 @@ class DashboardTest extends TestCase
         $this->assertCount(1, $res->json('historique'));
     }
 
+    public function test_mon_historique_ne_retourne_que_les_quatre_dernieres_actions(): void
+    {
+        $alerte = $this->alerte('7777777777', $this->centre->id);
+        foreach (range(1, 6) as $index) {
+            $this->journal($alerte, $this->agent, DossierHistorique::PRISE);
+        }
+
+        Sanctum::actingAs($this->agent);
+
+        $res = $this->getJson('/api/dashboard')->assertOk();
+
+        $this->assertCount(4, $res->json('historique'));
+        $this->assertSame(
+            DossierHistorique::query()->latest('id')->value('id'),
+            $res->json('historique.0.id')
+        );
+    }
+
     public function test_un_chef_de_centre_est_limite_a_son_centre(): void
     {
         $autre = Centre::create(['nom' => 'Centre lointain']);

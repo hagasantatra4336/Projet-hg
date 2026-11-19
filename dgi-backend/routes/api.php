@@ -8,7 +8,6 @@ use App\Http\Controllers\Api\CentreController;
 use App\Http\Controllers\Api\ComparatifCentresController;
 use App\Http\Controllers\Api\ContribuableController;
 use App\Http\Controllers\Api\DashboardController;
-use App\Http\Controllers\Api\DeclarationImportController;
 use App\Http\Controllers\Api\DefaillanceController;
 use App\Http\Controllers\Api\DemandeInscriptionController;
 use App\Http\Controllers\Api\FonctionController;
@@ -104,6 +103,10 @@ Route::middleware(['auth:sanctum', RejeterCompteDesactive::class, JournaliserAct
     Route::get('/defaillances/{alerte}/agents', [DefaillanceController::class, 'agentsAssignables']);
     Route::post('/defaillances/{alerte}/assigner', [DefaillanceController::class, 'assigner']);
     Route::get('/defaillances/{alerte}/dossier', [DefaillanceController::class, 'dossier']);
+    // Recherche d'un contribuable par nom ou par NIF (analyse ciblée) : superadmin, central, admin.
+    Route::get('/contribuables/recherche', [ContribuableController::class, 'rechercher'])
+        ->middleware(EnsureRole::class.':superadmin,central,admin')
+        ->middleware('throttle:60,1,contribuable-search');
     // Fiche d'un contribuable (informations, coordonnées, alertes, historique, synthèse, observations) :
     // même filtrage par centre. Le PDF reprend exactement les mêmes données.
     Route::get('/contribuables/{contribuable}', [ContribuableController::class, 'show']);
@@ -117,10 +120,9 @@ Route::middleware(['auth:sanctum', RejeterCompteDesactive::class, JournaliserAct
     // Analyse automatique : appelée par le front toutes les 5 min tant qu'une session est ouverte, quel que soit le rôle
     Route::post('/defaillances/auto', AnalyseAutoController::class)->middleware('throttle:100,1,defaillances-auto');
 
-    // Lancer l'analyse et importer des déclarations (CSV) : superadmin, central, admin (admin = son centre)
+    // Lancer l'analyse : superadmin, central, admin (admin = son centre)
     Route::middleware(EnsureRole::class.':superadmin,central,admin')->group(function () {
         Route::post('/defaillances/analyser', [DefaillanceController::class, 'analyser'])->middleware('throttle:10,1,analyser');
-        Route::post('/declarations/import', [DeclarationImportController::class, 'store'])->middleware('throttle:10,1,import');
     });
 
     // Règles de détection : réglages modifiables depuis l'application (central, superadmin)

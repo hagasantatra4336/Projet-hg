@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type ChangeEvent, type FormEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import api, { getErrorMessage } from "../services/api";
 import { useAuth } from "../context/AuthContext";
@@ -19,7 +19,6 @@ import {
 import {
   ConfirmDialog,
   ErrorBox,
-  Field,
   FormActions,
   IconButton,
   Modal,
@@ -30,7 +29,6 @@ import {
 import {
   IconChevron,
   IconClock,
-  IconDownload,
   IconEdit,
   IconEye,
   IconFile,
@@ -78,13 +76,16 @@ interface Filters {
   age_min: string;
 }
 
-interface ImportResult {
-  message: string;
-  erreurs: string[];
-}
-
 /** Automatique : date du jour et fenêtre d'exercices enregistrée pour chaque règle. Manuelle : année ou intervalle ciblé. */
 type ModeAnalyse = "automatique" | "manuelle";
+
+/** Contribuable proposé dans la recherche de l'analyse ciblée. */
+interface ContribuableCible {
+  id: number;
+  nif: string;
+  nom: string;
+  centre: string | null;
+}
 
 /** Années proposées au lancement manuel : l'année en cours et les cinq précédentes (maximum de la fenêtre). */
 const ANNEES_ANALYSE: number[] = Array.from({ length: 6 }, (_, i) => new Date().getFullYear() - i);
@@ -216,12 +217,12 @@ export default function DefaillancesPage() {
   const [analyseRunning, setAnalyseRunning] = useState<boolean>(false);
   const [analyseError, setAnalyseError] = useState<string>("");
 
-  // Import CSV
-  const [importOpen, setImportOpen] = useState<boolean>(false);
-  const [file, setFile] = useState<File | null>(null);
-  const [importing, setImporting] = useState<boolean>(false);
-  const [importError, setImportError] = useState<string>("");
-  const [importResult, setImportResult] = useState<ImportResult | null>(null);
+  // Analyse ciblée facultative : contribuable choisi par nom ou par NIF
+  const [contribuableId, setContribuableId] = useState<string>("");
+  const [contribuableCible, setContribuableCible] = useState<ContribuableCible | null>(null);
+  const [contribuablesTrouves, setContribuablesTrouves] = useState<ContribuableCible[]>([]);
+  const [contribuablesLoading, setContribuablesLoading] = useState<boolean>(false);
+  const [contribuablesError, setContribuablesError] = useState<string>("");
 
   // Export CSV
   const [exporting, setExporting] = useState<boolean>(false);
@@ -449,6 +450,57 @@ export default function DefaillancesPage() {
 
   // ---- Analyse ----
 
+  /** Recherche distante des contribuables : nom ou NIF, périmètre de l'utilisateur imposé par l'API. */
+  const chercherContribuables = useCallback(async (q: string) => {
+    setContribuablesLoading(true);
+    setContribuablesError("");
+
+    try {
+      const res = await api.get<ContribuableCible[]>("/contribuables/recherche", {
+        params: { search: q || undefined },
+      });
+      setContribuablesTrouves(res.data);
+    } catch (err) {
+      setContribuablesError(getErrorMessage(err, "Recherche des contribuables impossible."));
+    } finally {
+      setContribuablesLoading(false);
+    }
+  }, []);
+
+  // Le contribuable déjà choisi reste proposé même si la nouvelle recherche ne le renvoie pas.
+  const optionsContribuable = useMemo(() => {
+    const base = contribuablesTrouves.map((c) => ({
+      value: String(c.id),
+      label: c.nom,
+      description: `NIF ${c.nif}${c.centre ? ` · ${c.centre}` : ""}`,
+    }));
+
+    if (contribuableCible && !base.some((o) => o.value === String(contribuableCible.id))) {
+      base.unshift({
+        value: String(contribuableCible.id),
+        label: contribuableCible.nom,
+        description: `NIF ${contribuableCible.nif}${contribuableCible.centre ? ` · ${contribuableCible.centre}` : ""}`,
+      });
+    }
+
+    return base;
+  }, [contribuablesTrouves, contribuableCible]);
+
+  function choisirContribuable(value: string) {
+    setContribuableId(value);
+
+    if (value === "") {
+      setContribuableCible(null);
+      return;
+    }
+
+    const choisi =
+      contribuablesTrouves.find((c) => String(c.id) === value) ??
+      (contribuableCible && String(contribuableCible.id) === value ? contribuableCible : null);
+
+    setContribuableCible(choisi);
+  }
+
   /** L'analyse automatique suit les réglages ; la manuelle exige une année (ou un intervalle) valide. */
   const analyseValide =
     modeAnalyse === "automatique" ||
@@ -474,7 +526,10 @@ export default function DefaillancesPage() {
 
     try {
       if (modeAnalyse === "automatique") {
-        await api.post("/defaillances/analyser", { mode: "automatique" });
+        await api.post("/defaillances/analyser", {
+          mode: "automatique",
+          contribuable_id: contribuableCible?.id,
+        });
         // Date du jour et fenêtre de chaque règle : aucun filtre d'exercice.
         setFilters((f) => ({
           ...f,
@@ -492,7 +547,12 @@ export default function DefaillancesPage() {
         const debut = Number(anneeDebut);
         const fin = cible === "annee" ? debut : Number(anneeFin);
 
-        await api.post("/defaillances/analyser", { mode: "manuelle", annee_debut: debut, annee_fin: fin });
+        await api.post("/defaillances/analyser", {
+          mode: "manuelle",
+          annee_debut: debut,
+          annee_fin: fin,
+          contribuable_id: contribuableCible?.id,
+        });
         // Le tableau ne montre que les exercices analysés : une année précise, ou l'intervalle choisi.
         setFilters((f) => ({
           ...f,
@@ -508,6 +568,11 @@ export default function DefaillancesPage() {
         }));
       }
       setPage(1);
+      // Analyse ciblée : le tableau ne montre que le dossier du contribuable choisi.
+      if (contribuableCible) {
+        setSearchInput(contribuableCible.nif);
+        setSearch(contribuableCible.nif);
+      }
       setAnalyseOpen(false); // les résultats s'affichent directement dans le tableau des anomalies
       reload();
       window.dispatchEvent(new Event("notifications:maj"));
@@ -516,58 +581,6 @@ export default function DefaillancesPage() {
     } finally {
       setAnalyseRunning(false);
     }
-  }
-
-  // ---- Import CSV ----
-
-  function openImport() {
-    setFile(null);
-    setImportError("");
-    setImportResult(null);
-    setImportOpen(true);
-  }
-
-  async function handleImport(e: FormEvent) {
-    e.preventDefault();
-    if (!file) {
-      setImportError("Choisissez un fichier CSV.");
-      return;
-    }
-    setImporting(true);
-    setImportError("");
-    setImportResult(null);
-
-    try {
-      const body = new FormData();
-      body.append("fichier", file);
-      const res = await api.post<ImportResult>("/declarations/import", body, {
-        headers: { "Content-Type": "multipart/form-data" },
-      });
-      setImportResult(res.data);
-      reload();
-      window.dispatchEvent(new Event("notifications:maj"));
-    } catch (err) {
-      setImportError(getErrorMessage(err, "Import impossible."));
-    } finally {
-      setImporting(false);
-    }
-  }
-
-  function downloadTemplate() {
-    const centre = user?.centre?.nom ?? "Nom du centre";
-    const lignes = [
-      "nif;nom;centre;type_impot;annee_fiscale;mois;chiffre_affaires;date_limite;date_depot",
-      `0000000001;Contribuable exemple;${centre};TVA;2025;7;85000000;2025-08-15;2025-08-12`,
-      `0000000001;Contribuable exemple;${centre};TVA;2025;8;88000000;2025-09-15;2025-09-10`,
-      `0000000001;Contribuable exemple;${centre};IR;2024;;1020000000;2025-05-31;2025-05-20`,
-    ];
-    const blob = new Blob(["\uFEFF" + lignes.join("\n")], { type: "text/csv;charset=utf-8" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = "modele-declarations.csv";
-    a.click();
-    URL.revokeObjectURL(url);
   }
 
   // ---- Export CSV de la liste filtrée ----
@@ -651,21 +664,16 @@ export default function DefaillancesPage() {
           </button>
 
           {canManage && (
-            <>
-              <button type="button" className={`${secondaryButtonClass} inline-flex items-center gap-2`} onClick={openImport}>
-                <IconDownload className="h-4 w-4" /> Importer un CSV
-              </button>
-              <button
-                type="button"
-                className={`${primaryButtonClass} inline-flex items-center gap-2`}
-                onClick={() => {
-                  setAnalyseError("");
-                  setAnalyseOpen(true);
-                }}
-              >
-                <IconRefresh className="h-4 w-4" /> Lancer l'analyse
-              </button>
-            </>
+            <button
+              type="button"
+              className={`${primaryButtonClass} inline-flex items-center gap-2`}
+              onClick={() => {
+                setAnalyseError("");
+                setAnalyseOpen(true);
+              }}
+            >
+              <IconRefresh className="h-4 w-4" /> Lancer l'analyse
+            </button>
           )}
         </div>
       </div>
@@ -1116,7 +1124,7 @@ export default function DefaillancesPage() {
                     {estAgent
                       ? "Aucun dossier ne vous est assigné. Votre chef de centre peut vous en confier un."
                       : canManage
-                        ? "Aucune alerte. Importez des déclarations puis lancez l'analyse."
+                        ? "Aucune alerte. Lancez l'analyse pour détecter les défaillances."
                         : "Aucune anomalie pour votre centre."}
                   </td>
                 </tr>
@@ -1182,7 +1190,8 @@ export default function DefaillancesPage() {
               Choisissez une analyse <strong>manuelle</strong> pour cibler une année ou un intervalle d'années, ou une
               analyse <strong>automatique</strong> (date du jour et fenêtre d'exercices enregistrée pour chaque règle).
               Chaque contribuable concerné forme un seul dossier, quel que soit le nombre d'anomalies ; en manuel, le
-              tableau n'affiche que les exercices analysés.
+              tableau n'affiche que les exercices analysés. Vous pouvez aussi limiter l'analyse à un seul contribuable,
+              retrouvé par son nom ou son NIF.
               {role ==="admin"? " L'analyse porte sur votre centre." : " L'analyse porte sur tous les centres."}
             </p>
 
@@ -1236,6 +1245,30 @@ export default function DefaillancesPage() {
                 
               </div>
             </fieldset>
+
+            <div className="rounded-xl border border-line bg-white p-3.5">
+              <label className="mb-1 block text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+                Contribuable ciblé (facultatif)
+              </label>
+              <SearchSelect
+                options={optionsContribuable}
+                value={contribuableId}
+                onChange={choisirContribuable}
+                onSearch={chercherContribuables}
+                loading={contribuablesLoading}
+                className={inputClass}
+                placeholder="Nom ou NIF..."
+                clearLabel="Tous les contribuables (aucune cible)"
+                emptyLabel="Aucun contribuable trouvé"
+                label="Rechercher un contribuable par nom ou par NIF"
+              />
+              <p className="mt-1.5 text-xs leading-snug text-slate-500">
+                {contribuableCible
+                  ? `Seul le dossier de ${contribuableCible.nom} (NIF ${contribuableCible.nif}) sera analysé.`
+                  : "Laissez vide pour analyser tous les contribuables du périmètre."}
+              </p>
+              <ErrorBox message={contribuablesError} />
+            </div>
 
             {modeAnalyse === "manuelle" && (
             <div className="rounded-xl border border-line bg-slate-50/70 p-3.5">
@@ -1339,60 +1372,6 @@ export default function DefaillancesPage() {
               </button>
               <button type="submit" className={primaryButtonClass} disabled={analyseRunning || !analyseValide}>
                 {analyseRunning ? "Analyse en cours..." : "Lancer l'analyse"}
-              </button>
-            </FormActions>
-          </form>
-        </Modal>
-      )}
-
-      {/* Import CSV */}
-      {importOpen && (
-        <Modal title="Importer des déclarations (CSV)" onClose={() => setImportOpen(false)}>
-          <form onSubmit={handleImport} className="space-y-4">
-            <p className="text-sm text-slate-600">
-              Colonnes :{" "}
-              <code className="text-xs">
-                nif ; nom ; centre ; type_impot ; annee_fiscale ; mois ; chiffre_affaires ; date_limite ; date_depot
-              </code>
-              . Le <strong>mois</strong> (1 à 12) est vide pour une déclaration annuelle (IR, IS). Le chiffre d'affaires et la date
-              limite servent à détecter les anomalies. Impôts : TVA, IR, IS, IRSA. Une déclaration déjà présente est mise à jour.
-              Pour charger aussi les assujettissements et l'état des contribuables, utilisez l'import depuis la base source.
-            </p>
-            <button type="button" onClick={downloadTemplate} className="text-sm font-medium text-brand-azure underline hover:text-brand-blue">
-              Télécharger un modèle CSV
-            </button>
-
-            <ErrorBox message={importError} />
-
-            {importResult && (
-              <div className="rounded-lg border border-brand-green/60 bg-leaf-50 px-3 py-2 text-sm text-brand-blue">
-                <p className="font-medium">{importResult.message}</p>
-                {importResult.erreurs.length > 0 && (
-                  <ul className="mt-2 list-disc space-y-0.5 pl-5 text-xs text-slate-700">
-                    {importResult.erreurs.map((m) => (
-                      <li key={m}>{m}</li>
-                    ))}
-                  </ul>
-                )}
-                <p className="mt-2 text-xs">Lancez ensuite l'analyse pour détecter les défaillances.</p>
-              </div>
-            )}
-
-            <Field label="Fichier CSV" required hint="Format CSV séparé par des points-virgules, 5 Mo maximum.">
-              <input
-                type="file"
-                accept=".csv,.txt,text/csv"
-                className={inputClass}
-                onChange={(e: ChangeEvent<HTMLInputElement>) => setFile(e.target.files?.[0] ?? null)}
-              />
-            </Field>
-
-            <FormActions>
-              <button type="button" className={secondaryButtonClass} onClick={() => setImportOpen(false)}>
-                Fermer
-              </button>
-              <button type="submit" className={primaryButtonClass} disabled={importing || !file}>
-                {importing ? "Import en cours..." : "Importer"}
               </button>
             </FormActions>
           </form>

@@ -38,17 +38,18 @@ class AnomalieAnalyseur
      *                          uniquement (null = réglage enregistré de chaque règle, 1 par défaut).
      * @param int|null $anneeMin Première année analysée (analyse manuelle, borne incluse) ; null = fenêtre.
      * @param int|null $anneeMax Dernière année analysée (analyse manuelle, borne incluse) ; null = fenêtre.
+     * @param int|null $contribuableId Contribuable ciblé (analyse manuelle d'un seul dossier) ; null = tous.
      * @return array<string, mixed>
      */
-    public function analyser(?DateTimeInterface $date = null, ?int $centreId = null, ?int $fenetre = null, ?int $anneeMin = null, ?int $anneeMax = null): array
+    public function analyser(?DateTimeInterface $date = null, ?int $centreId = null, ?int $fenetre = null, ?int $anneeMin = null, ?int $anneeMax = null, ?int $contribuableId = null): array
     {
         $date ??= self::aujourdhui();
 
-        $d = $this->defaillances->analyser($date, $centreId, $fenetre, $anneeMin, $anneeMax);
-        $c = $this->baissesCa->analyser($date, $centreId, $fenetre, $anneeMin, $anneeMax);
+        $d = $this->defaillances->analyser($date, $centreId, $fenetre, $anneeMin, $anneeMax, $contribuableId);
+        $c = $this->baissesCa->analyser($date, $centreId, $fenetre, $anneeMin, $anneeMax, $contribuableId);
 
         // Critères de risque R1, R2, R3, R5, R6, R7 (base d'analyse risque). Une base vide n'a aucun effet.
-        $risque = $this->risque->analyser($date, $centreId, $fenetre, $anneeMin, $anneeMax);
+        $risque = $this->risque->analyser($date, $centreId, $fenetre, $anneeMin, $anneeMax, $contribuableId);
 
         // Règles personnalisées ACTIVES (brouillons et règles désactivées sont ignorés). Une règle en erreur
         // (colonne supprimée, indicateur désactivé...) ne bloque ni les autres règles ni l'analyse.
@@ -59,7 +60,7 @@ class AnomalieAnalyseur
                 continue;
             }
             try {
-                $resultat = $this->personnalisees->analyser($regle, $date, $centreId, fenetre: $fenetre, anneeMin: $anneeMin, anneeMax: $anneeMax);
+                $resultat = $this->personnalisees->analyser($regle, $date, $centreId, fenetre: $fenetre, anneeMin: $anneeMin, anneeMax: $anneeMax, contribuableId: $contribuableId);
             } catch (Throwable $e) {
                 report($e);
                 $detailPerso[$regle->code] = ['erreur' => $e->getMessage()];

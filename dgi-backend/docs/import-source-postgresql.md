@@ -107,7 +107,7 @@ Points à connaître :
 - `service_name` vide ⇒ la valeur de `DATABASE` est prise comme **SID**. Pour un service, renseignez
   `SOURCE_*_DB_SERVICE_NAME`.
 - **Granularité** : IR et TVA sont dans le même groupe, donc dans la même base.
-- `dgi:source-test-db`, `dgi:source-test-data`, `dgi:source-importer-csv`, `dgi:source-anomalies-demo`
+- `dgi:source-test-db`, `dgi:source-test-data`, `dgi:source-anomalies-demo`
   écrivent dans la base de chaque groupe ; la première refuse de tourner si les groupes sont séparés
   (elle crée toutes les tables de test dans une seule base).
 - Vérification : `php artisan dgi:importer-source --tester` affiche, pour chaque table, la connexion et

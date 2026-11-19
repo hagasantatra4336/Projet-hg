@@ -7,7 +7,7 @@ use Illuminate\Notifications\Notification;
 
 /**
  * E-mail de confirmation d'une modification du profil (lien à usage unique, SANS code OTP).
- * Volontairement sans "implements ShouldQueue" : l'e-mail part immédiatement.
+ * Envoyé après la réponse HTTP pour ne pas faire attendre l'utilisateur pendant l'envoi SMTP.
  */
 class ProfileChangeNotification extends Notification
 {

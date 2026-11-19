@@ -22,6 +22,13 @@ interface Props {
   clearLabel?: string;
   /** Texte affiché quand la recherche ne trouve rien. */
   emptyLabel?: string;
+  /**
+   * Recherche côté serveur : reçoit le texte saisi après un court délai. Fourni, le filtrage
+   * local est désactivé (la liste `options` est déjà le résultat de la recherche).
+   */
+  onSearch?: (query: string) => void;
+  /** Affiche « Chargement... » dans la liste pendant une recherche distante. */
+  loading?: boolean;
 }
 
 /** Recherche tolérante : « yaounde » trouve « Yaoundé », « ecole » trouve « École ». */
@@ -44,6 +51,8 @@ export default function SearchSelect({
   label = "Rechercher",
   clearLabel,
   emptyLabel = "Aucun résultat",
+  onSearch,
+  loading = false,
 }: Props) {
   const [open, setOpen] = useState<boolean>(false);
   const [query, setQuery] = useState<string>("");
@@ -56,10 +65,19 @@ export default function SearchSelect({
   const selected = options.find((o) => o.value === value) ?? null;
 
   const results = useMemo(() => {
+    // Recherche distante : le serveur a déjà filtré, la liste est utilisée telle quelle.
+    if (onSearch) return options;
     const q = norm(query.trim());
     if (!q) return options;
     return options.filter((o) => norm(`${o.label} ${o.description ?? ""}`).includes(q));
-  }, [options, query]);
+  }, [onSearch, options, query]);
+
+  // Recherche distante : un court délai évite une requête à chaque frappe.
+  useEffect(() => {
+    if (!onSearch || !open) return;
+    const t = window.setTimeout(() => onSearch(query.trim()), 250);
+    return () => window.clearTimeout(t);
+  }, [onSearch, open, query]);
 
   // L'option « Tous / Aucun » n'apparaît que lorsque la recherche est vide
   const entries: SearchSelectOption[] = useMemo(
@@ -210,7 +228,9 @@ export default function SearchSelect({
           role="listbox"
           className="absolute z-30 mt-1 max-h-60 w-full overflow-auto rounded-lg border border-line bg-white py-1 shadow-lg"
         >
-          {entries.length === 0 && <li className="px-3 py-2 text-sm text-slate-500">{emptyLabel}</li>}
+          {results.length === 0 && (
+            <li className="px-3 py-2 text-sm text-slate-500">{loading ? "Chargement..." : emptyLabel}</li>
+          )}
           {entries.map((o, i) => (
             <li
               key={o.value === "" ? "__all__" : o.value}

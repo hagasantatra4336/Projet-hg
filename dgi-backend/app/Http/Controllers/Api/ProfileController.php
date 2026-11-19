@@ -154,23 +154,28 @@ class ProfileController extends Controller
             Log::warning('MAIL_MAILER=' . config('mail.default') . " : l'e-mail de confirmation n'est PAS réellement envoyé (voir storage/logs/laravel.log).");
         }
 
-        try {
-            $user->notify(new ProfileChangeNotification((string) $user->nom, $champs, $url, self::TTL_MINUTES));
-        } catch (Throwable $e) {
-            Cache::forget($this->changeKey($hash));
-            Cache::forget($pointerKey);
-            Cache::forget(self::REQUEST_PREFIX . $requestId);
-            Log::error('Envoi du mail de confirmation impossible : ' . $e->getMessage());
+        app()->terminating(function () use ($user, $champs, $url, $requestId, $hash, $pointerKey): void {
+            $changeKey = $this->changeKey($hash);
+            if (! Cache::has($changeKey)) {
+                return;
+            }
 
-            return response()->json([
-                'message' => config('app.debug')
-                    ? "Envoi de l'e-mail impossible : " . $e->getMessage()
-                    : "Impossible d'envoyer l'e-mail pour le moment.",
-            ], 500);
-        }
+            try {
+                $user->notify(new ProfileChangeNotification((string) $user->nom, $champs, $url, self::TTL_MINUTES));
+            } catch (Throwable $e) {
+                Cache::forget($changeKey);
+                if (Cache::get($pointerKey) === $hash) {
+                    Cache::forget($pointerKey);
+                }
+
+                $message = "L'e-mail de confirmation n'a pas pu être envoyé. Vérifiez la configuration SMTP ou réessayez.";
+                $this->marquerDemande($requestId, 'failed', ['message' => $message]);
+                Log::error('Envoi du mail de confirmation impossible : '.$e->getMessage());
+            }
+        });
 
         $response = [
-            'message' => 'Un e-mail de confirmation vient de vous être envoyé.',
+            'message' => "La demande est enregistrée. L'e-mail de confirmation est en cours d'envoi.",
             'email' => $user->email,
             'request_id' => $requestId,
             'champs' => $champs,
